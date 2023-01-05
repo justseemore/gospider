@@ -162,12 +162,11 @@ func NewWebSock(preCtx context.Context, ws, href, proxy string, getProxy func() 
 	}
 	reqOption.DisCookie = true
 	reqCli, err := requests.NewClient(preCtx, reqOption)
-	reqCli.RedirectNum = -1
 	if err != nil {
 		return nil, err
 	}
+	reqCli.RedirectNum = -1
 	reqCli.DisDecode = true
-
 	response, err := reqCli.Request(preCtx, "get", ws, requests.RequestOption{DisProxy: true})
 	if err != nil {
 		return nil, err

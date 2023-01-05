@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -24,8 +25,9 @@ import (
 
 	"gitee.com/baixudong/gospider/tools"
 
-	xtls "github.com/refraction-networking/utls"
+	utls "github.com/refraction-networking/utls"
 	"github.com/tidwall/gjson"
+	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
 	"golang.org/x/net/publicsuffix"
 	"nhooyr.io/websocket"
@@ -130,6 +132,7 @@ type RequestOption struct {
 	DisRead       bool                                      //关闭默认读取请求体
 	DisUnZip      bool                                      //变比自动解压
 	Err           error                                     //请求过程中的error
+	Http2         bool                                      //开启http2 transport
 	converUrl     string
 	contentType   string
 }
@@ -142,6 +145,7 @@ type Client struct {
 	BeforCallBack func(*RequestOption)                      //请求前回调的方法
 	AfterCallBack func(*RequestOption, *Response) *Response //请求后回调的方法
 	Timeout       int64                                     //请求超时时间
+	Http2         bool                                      //开启http2 transport
 
 	Headers map[string]string //请求头
 	Bar     bool              //是否开启bar
@@ -151,6 +155,9 @@ type Client struct {
 
 	client        *http.Client
 	baseTransport *http.Transport
+
+	client2        *http.Client
+	baseTransport2 *http2.Transport
 
 	ctx context.Context
 	cnl context.CancelFunc
@@ -347,10 +354,14 @@ func (obj *dialClient) dialTlsContext(ctx context.Context, network string, addr 
 		return conn, err
 	}
 	if obj.ja3 {
-		tlsConn := xtls.UClient(conn, &xtls.Config{InsecureSkipVerify: true}, xtls.HelloChrome_106_Shuffle)
+		log.Print("ja3")
+		tlsConn := utls.UClient(conn, &utls.Config{InsecureSkipVerify: true}, utls.HelloChrome_Auto)
 		return tlsConn, tlsConn.HandshakeContext(ctx)
 	}
 	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true}), err
+}
+func (obj *dialClient) dialTlsContext2(ctx context.Context, network string, addr string, cfg *tls.Config) (net.Conn, error) {
+	return obj.dialTlsContext(ctx, network, addr)
 }
 func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reader, error) {
 	switch value := val.(type) {
@@ -573,44 +584,10 @@ func (obj *RequestOption) optionInit() error {
 	return obj.newCookies()
 }
 
-func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client, error) {
-	if preCtx == nil {
-		preCtx = context.TODO()
-	}
-	ctx, cnl := context.WithCancel(preCtx)
-	var session_option ClientOption
-	//初始化参数
-	if len(client_optinos) > 0 {
-		session_option = client_optinos[0]
-	}
-	if session_option.IdleConnTimeout == 0 {
-		session_option.IdleConnTimeout = 20
-	}
-	if session_option.KeepAlive == 0 {
-		session_option.KeepAlive = 10
-	}
-	if session_option.TLSHandshakeTimeout == 0 {
-		session_option.TLSHandshakeTimeout = 8
-	}
-	if session_option.ResponseHeaderTimeout == 0 {
-		session_option.ResponseHeaderTimeout = 8
-	}
-	if session_option.DnsCacheTime == 0 {
-		session_option.DnsCacheTime = 60 * 30
-	}
-	var client http.Client
-	var jar *cookiejar.Jar
+func newDail(ctx context.Context, session_option ClientOption) (*dialClient, error) {
 	var err error
-	//创建cookiesjar
-	if !session_option.DisCookie {
-		if jar, err = cookiejar.New(nil); err != nil {
-			cnl()
-			return nil, err
-		}
-		client.Jar = jar
-	}
-	//创建自定义dial
 	dialCli := &dialClient{
+		dialer:     &net.Dialer{Timeout: time.Second * 8},
 		ctx:        ctx,
 		ja3:        session_option.Ja3,
 		dnsTimeout: session_option.DnsCacheTime,
@@ -618,27 +595,35 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 	}
 	if session_option.Proxy != "" {
 		if dialCli.proxy, err = verifyProxy(session_option.Proxy); err != nil {
-			cnl()
-			return nil, err
+			return dialCli, err
 		}
 	}
-	dialCli.dialer = &net.Dialer{}
-	//创建dialer
 	if session_option.LocalAddr != "" {
 		if !strings.Contains(session_option.LocalAddr, ":") {
 			session_option.LocalAddr += ":0"
 		}
 		if dialCli.dialer.LocalAddr, err = net.ResolveTCPAddr("tcp", session_option.LocalAddr); err != nil {
-			cnl()
-			return nil, err
+			return dialCli, err
 		}
 	}
 	if session_option.KeepAlive != 0 {
 		dialCli.dialer.KeepAlive = time.Duration(session_option.KeepAlive) * time.Second //keepalive保活检测定时
 	}
-	dialCli.dialer.Timeout = time.Second * 8
-	//创建transport
-	baseTransport := http.Transport{
+	return dialCli, err
+}
+func newHttp2Transport(ctx context.Context, session_option ClientOption, dialCli *dialClient) *http2.Transport {
+	return &http2.Transport{
+		DisableCompression: session_option.DisCompression,
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+		DialTLSContext:     dialCli.dialTlsContext2,
+		AllowHTTP:          true,
+		ReadIdleTimeout:    time.Duration(session_option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
+		PingTimeout:        time.Second * time.Duration(session_option.TLSHandshakeTimeout),
+		WriteByteTimeout:   time.Second * time.Duration(session_option.ResponseHeaderTimeout),
+	}
+}
+func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli *dialClient) http.Transport {
+	return http.Transport{
 		MaxIdleConns:        655350,
 		MaxConnsPerHost:     655350,
 		MaxIdleConnsPerHost: 655350,
@@ -651,37 +636,97 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		DisableCompression:    session_option.DisCompression,
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		IdleConnTimeout:       time.Duration(session_option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
-	}
-	if !session_option.DisHttp2 {
-		baseTransport.ForceAttemptHTTP2 = true
-	}
-	baseTransport.DialContext = dialCli.dialContext
-	baseTransport.DialTLSContext = dialCli.dialTlsContext
 
-	baseTransport.Proxy = func(r *http.Request) (*url.URL, error) {
-		ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
-		ctxData.url = r.URL
-		if session_option.Ja3 {
-			return nil, nil
-		}
-		if ctxData.proxy != nil && ctxData.proxy.User != nil {
-			ctxData.proxyUser, ctxData.proxy.User = ctxData.proxy.User, nil
-		}
-		return ctxData.proxy, nil
+		ForceAttemptHTTP2: !session_option.DisHttp2,
+
+		DialContext:    dialCli.dialContext,
+		DialTLSContext: dialCli.dialTlsContext,
+		Proxy: func(r *http.Request) (*url.URL, error) {
+			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
+			ctxData.url = r.URL
+			if session_option.Ja3 {
+				return nil, nil
+			}
+			if ctxData.proxy != nil && ctxData.proxy.User != nil {
+				ctxData.proxyUser, ctxData.proxy.User = ctxData.proxy.User, nil
+			}
+			return ctxData.proxy, nil
+		},
 	}
-	mainTransport := baseTransport.Clone()
-	client.Transport = mainTransport
-	//重定向函数
-	checkRedirect := func(req *http.Request, via []*http.Request) error {
-		ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
-		if ctxData.redirectNum == 0 || ctxData.redirectNum >= len(via) {
-			ctxData.url = req.URL
-			return nil
-		}
-		return http.ErrUseLastResponse
+}
+
+func cloneTransport(t *http2.Transport) *http2.Transport {
+	return &http2.Transport{
+		DisableCompression: t.DisableCompression,
+		TLSClientConfig:    t.TLSClientConfig,
+		DialTLSContext:     t.DialTLSContext,
+		AllowHTTP:          t.AllowHTTP,
+		ReadIdleTimeout:    t.ReadIdleTimeout, //空闲连接在连接池中的超时时间
+		PingTimeout:        t.PingTimeout,
+		WriteByteTimeout:   t.WriteByteTimeout,
 	}
+}
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
+	if ctxData.redirectNum == 0 || ctxData.redirectNum >= len(via) {
+		ctxData.url = req.URL
+		return nil
+	}
+	return http.ErrUseLastResponse
+}
+func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client, error) {
+	if preCtx == nil {
+		preCtx = context.TODO()
+	}
+	ctx, cnl := context.WithCancel(preCtx)
+	var session_option ClientOption
+	//初始化参数
+	if len(client_optinos) > 0 {
+		session_option = client_optinos[0]
+	}
+	if session_option.IdleConnTimeout == 0 {
+		session_option.IdleConnTimeout = 30
+	}
+	if session_option.KeepAlive == 0 {
+		session_option.KeepAlive = 10
+	}
+	if session_option.TLSHandshakeTimeout == 0 {
+		session_option.TLSHandshakeTimeout = 10
+	}
+	if session_option.ResponseHeaderTimeout == 0 {
+		session_option.ResponseHeaderTimeout = 30
+	}
+	if session_option.DnsCacheTime == 0 {
+		session_option.DnsCacheTime = 60 * 30
+	}
+	dialClient, err := newDail(ctx, session_option)
+	if err != nil {
+		cnl()
+		return nil, err
+	}
+	var client http.Client
+	var client2 http.Client
+	//创建cookiesjar
+	var jar *cookiejar.Jar
+	if !session_option.DisCookie {
+		if jar, err = cookiejar.New(nil); err != nil {
+			cnl()
+			return nil, err
+		}
+	}
+	baseTransport := newHttpTransport(ctx, session_option, dialClient)
+	baseTransport2 := newHttp2Transport(ctx, session_option, dialClient)
+
+	client.Transport = baseTransport.Clone()
+	client2.Transport = cloneTransport(baseTransport2)
+
+	client.Jar = jar
+	client2.Jar = jar
+
 	client.CheckRedirect = checkRedirect
-	return &Client{ctx: ctx, cnl: cnl, client: &client, baseTransport: &baseTransport, disAlive: session_option.DisAlive, disCookie: session_option.DisCookie}, nil
+	client2.CheckRedirect = checkRedirect
+
+	return &Client{ctx: ctx, cnl: cnl, client: &client, baseTransport: &baseTransport, client2: &client2, baseTransport2: baseTransport2, disAlive: session_option.DisAlive, disCookie: session_option.DisCookie}, nil
 }
 
 func (obj *Client) newRequestOption(option *RequestOption) {
@@ -724,6 +769,9 @@ func (obj *Client) newRequestOption(option *RequestOption) {
 	}
 	if !option.DisUnZip {
 		option.DisUnZip = obj.DisUnZip
+	}
+	if !option.Http2 {
+		option.Http2 = obj.Http2
 	}
 }
 
@@ -802,9 +850,12 @@ func (obj *Client) newResponse(r *http.Response, request_option RequestOption) (
 }
 func (obj *Client) getClient(request_option RequestOption) *http.Client {
 	if request_option.DisAlive || request_option.DisCookie {
-		temp_client := obj.clone(request_option.DisAlive, request_option.DisCookie)
+		temp_client := obj.clone(request_option)
 		return temp_client
 	} else {
+		if request_option.Http2 {
+			return obj.client2
+		}
 		return obj.client
 	}
 }
@@ -859,6 +910,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		cancel()
 		return nil, tools.WrapError(errFatal, err)
 	}
+	ctxData.url = reqs.URL
 	//判断ws
 	if reqs.URL.Scheme == "ws" || reqs.URL.Scheme == "wss" {
 		isWs = true
@@ -891,7 +943,9 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			reqs.AddCookie(vv)
 		}
 	}
-	reqs.Close = request_option.DisAlive
+	if !request_option.Http2 {
+		reqs.Close = request_option.DisAlive
+	}
 	//开始发送请求
 	var r *http.Response
 	var r2 *websocket.Conn
@@ -929,17 +983,25 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	return response, err
 }
 
-func (obj *Client) clone(disAlive, disCookie bool) *http.Client {
+func (obj *Client) clone(request_option RequestOption) *http.Client {
 	cli := &http.Client{
 		CheckRedirect: obj.client.CheckRedirect,
 	}
-	if !disCookie && obj.client.Jar != nil {
+	if !request_option.DisCookie && obj.client.Jar != nil {
 		cli.Jar = obj.client.Jar
 	}
-	if !disAlive {
-		cli.Transport = obj.client.Transport
+	if request_option.Http2 {
+		if !request_option.DisAlive {
+			cli.Transport = obj.client2.Transport
+		} else {
+			cli.Transport = cloneTransport(obj.baseTransport2)
+		}
 	} else {
-		cli.Transport = obj.baseTransport.Clone()
+		if !request_option.DisAlive {
+			cli.Transport = obj.client.Transport
+		} else {
+			cli.Transport = obj.baseTransport.Clone()
+		}
 	}
 	return cli
 }
