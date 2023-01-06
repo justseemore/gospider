@@ -669,6 +669,7 @@ func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli 
 		IdleConnTimeout:       time.Duration(session_option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
 		DialContext:           dialCli.dialContext,
 		DialTLSContext:        dialCli.dialTlsContext,
+		ForceAttemptHTTP2:     true,
 		Proxy: func(r *http.Request) (*url.URL, error) {
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
 			ctxData.url = r.URL
