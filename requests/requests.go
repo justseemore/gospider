@@ -298,7 +298,7 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 	if reqData.disProxy {
 		return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 	} else if reqData.proxy != nil {
-		if !reqData.ja3 {
+		if !reqData.ja3 && !reqData.h2 {
 			rawConn, err := obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 			if err != nil {
 				return rawConn, err
