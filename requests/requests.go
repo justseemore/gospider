@@ -59,6 +59,7 @@ type reqCtxData struct {
 	redirectNum int
 	disProxy    bool
 	h2          bool
+	ja3         bool
 }
 type File struct {
 	Key     string //字段的key
@@ -123,6 +124,7 @@ type RequestOption struct {
 	DisDecode     bool                                      //关闭自动解码
 	Bar           bool                                      //是否开启bar
 	DisProxy      bool                                      //是否关闭代理
+	Ja3           bool                                      //是否开启ja3
 	TryNum        int64                                     //重试次数
 	CurTryNum     int64                                     //当前尝试次数
 	BeforCallBack func(*RequestOption)                      //请求之前回调
@@ -146,6 +148,7 @@ type Client struct {
 	AfterCallBack func(*RequestOption, *Response) *Response //请求后回调的方法
 	Timeout       int64                                     //请求超时时间
 	Http2         bool                                      //开启http2 transport
+	Ja3           bool                                      //开启ja3
 
 	Headers map[string]string //请求头
 	Bar     bool              //是否开启bar
@@ -174,7 +177,6 @@ type ClientOption struct {
 	IdleConnTimeout       int64  //空闲连接在连接池中的超时时间,default:30
 	KeepAlive             int64  //keepalive保活检测定时,default:15
 	DnsCacheTime          int64  //dns解析缓存时间60*30
-	Ja3                   bool   //是否启用ja3
 }
 
 type Response struct {
@@ -193,7 +195,6 @@ type dialClient struct {
 	dialer     *net.Dialer
 	dnsIpData  sync.Map
 	dnsTimeout int64
-	ja3        bool
 }
 type msgClient struct {
 	time int64
@@ -297,7 +298,7 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 	if reqData.disProxy {
 		return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 	} else if reqData.proxy != nil {
-		if !obj.ja3 {
+		if !reqData.ja3 {
 			rawConn, err := obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 			if err != nil {
 				return rawConn, err
@@ -353,19 +354,20 @@ func (obj *dialClient) dialTlsContext(ctx context.Context, network string, addr 
 	if err != nil {
 		return nil, err
 	}
+	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
 	colonPos := strings.LastIndex(addr, ":")
 	if colonPos == -1 {
 		colonPos = len(addr)
 	}
 	serverName := addr[:colonPos]
-	if obj.ja3 {
+	if reqData.ja3 {
 		tlsConn := utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: serverName}, utls.HelloCustom)
 		spec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
 		if err != nil {
 			conn.Close()
 			return nil, err
 		}
-		if !ctx.Value(keyPrincipalID).(*reqCtxData).h2 {
+		if !reqData.h2 {
 			for i := 0; i < len(spec.Extensions); i++ {
 				if extension, ok := spec.Extensions[i].(*utls.ALPNExtension); ok {
 					alns := []string{}
@@ -619,7 +621,6 @@ func newDail(ctx context.Context, session_option ClientOption) (*dialClient, err
 	dialCli := &dialClient{
 		dialer:     &net.Dialer{Timeout: time.Second * time.Duration(session_option.TLSHandshakeTimeout)},
 		ctx:        ctx,
-		ja3:        session_option.Ja3,
 		dnsTimeout: session_option.DnsCacheTime,
 		getProxy:   session_option.GetProxy,
 	}
@@ -671,7 +672,7 @@ func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli 
 		Proxy: func(r *http.Request) (*url.URL, error) {
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
 			ctxData.url = r.URL
-			if session_option.Ja3 {
+			if ctxData.ja3 {
 				return nil, nil
 			}
 			if ctxData.proxy != nil && ctxData.proxy.User != nil {
@@ -800,6 +801,9 @@ func (obj *Client) newRequestOption(option *RequestOption) {
 	if !option.Http2 {
 		option.Http2 = obj.Http2
 	}
+	if !option.Ja3 {
+		option.Ja3 = obj.Ja3
+	}
 }
 
 func (obj *Client) Request(preCtx context.Context, method string, href string, options ...RequestOption) (*Response, error) {
@@ -909,6 +913,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	ctxData := new(reqCtxData)
 	ctxData.disProxy = request_option.DisProxy
 	ctxData.h2 = request_option.Http2
+	ctxData.ja3 = request_option.Ja3
 	if request_option.Proxy != "" { //代理相关构造
 		tempProxy, err := verifyProxy(request_option.Proxy)
 		if err != nil {
