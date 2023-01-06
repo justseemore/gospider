@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -59,6 +58,7 @@ type reqCtxData struct {
 	url         *url.URL
 	redirectNum int
 	disProxy    bool
+	h2          bool
 }
 type File struct {
 	Key     string //字段的key
@@ -170,7 +170,6 @@ type ClientOption struct {
 	DisCookie             bool   //关闭cookies管理
 	DisAlive              bool   //关闭长连接
 	DisCompression        bool   //关闭请求头中的压缩功能
-	DisHttp2              bool   //关闭http2
 	LocalAddr             string //本地网卡出口ip
 	IdleConnTimeout       int64  //空闲连接在连接池中的超时时间,default:20
 	KeepAlive             int64  //keepalive保活检测定时,default:10
@@ -354,9 +353,34 @@ func (obj *dialClient) dialTlsContext(ctx context.Context, network string, addr 
 		return conn, err
 	}
 	if obj.ja3 {
-		log.Print("ja3")
-		tlsConn := utls.UClient(conn, &utls.Config{InsecureSkipVerify: true}, utls.HelloChrome_Auto)
-		return tlsConn, tlsConn.HandshakeContext(ctx)
+		tlsConn := utls.UClient(conn, &utls.Config{InsecureSkipVerify: true}, utls.HelloCustom)
+		spec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		if !ctx.Value(keyPrincipalID).(*reqCtxData).h2 {
+			for i := 0; i < len(spec.Extensions); i++ {
+				if extension, ok := spec.Extensions[i].(*utls.ALPNExtension); ok {
+					alns := []string{}
+					for _, aln := range extension.AlpnProtocols {
+						if aln != "h2" {
+							alns = append(alns, aln)
+						}
+					}
+					extension.AlpnProtocols = alns
+				}
+			}
+		}
+		if err = tlsConn.ApplyPreset(&spec); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		if err = tlsConn.HandshakeContext(ctx); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		return tlsConn, err
 	}
 	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true}), err
 }
@@ -636,11 +660,8 @@ func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli 
 		DisableCompression:    session_option.DisCompression,
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		IdleConnTimeout:       time.Duration(session_option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
-
-		ForceAttemptHTTP2: !session_option.DisHttp2,
-
-		DialContext:    dialCli.dialContext,
-		DialTLSContext: dialCli.dialTlsContext,
+		DialContext:           dialCli.dialContext,
+		DialTLSContext:        dialCli.dialTlsContext,
 		Proxy: func(r *http.Request) (*url.URL, error) {
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
 			ctxData.url = r.URL
@@ -881,6 +902,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	//构造ctxData
 	ctxData := new(reqCtxData)
 	ctxData.disProxy = request_option.DisProxy
+	ctxData.h2 = request_option.Http2
 	if request_option.Proxy != "" { //代理相关构造
 		tempProxy, err := verifyProxy(request_option.Proxy)
 		if err != nil {
