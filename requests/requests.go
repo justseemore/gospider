@@ -643,14 +643,13 @@ func newDail(ctx context.Context, session_option ClientOption) (*dialClient, err
 }
 func newHttp2Transport(ctx context.Context, session_option ClientOption, dialCli *dialClient) *http2.Transport {
 	return &http2.Transport{
-		DisableCompression:        session_option.DisCompression,
-		TLSClientConfig:           &tls.Config{InsecureSkipVerify: true},
-		DialTLSContext:            dialCli.dialTlsContext2,
-		AllowHTTP:                 true,
-		ReadIdleTimeout:           time.Duration(session_option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
-		PingTimeout:               time.Second * time.Duration(session_option.TLSHandshakeTimeout),
-		WriteByteTimeout:          time.Second * time.Duration(session_option.ResponseHeaderTimeout),
-		MaxDecoderHeaderTableSize: 40890,
+		DisableCompression: session_option.DisCompression,
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+		DialTLSContext:     dialCli.dialTlsContext2,
+		AllowHTTP:          true,
+		ReadIdleTimeout:    time.Duration(session_option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
+		PingTimeout:        time.Second * time.Duration(session_option.TLSHandshakeTimeout),
+		WriteByteTimeout:   time.Second * time.Duration(session_option.ResponseHeaderTimeout),
 	}
 }
 func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli *dialClient) http.Transport {
