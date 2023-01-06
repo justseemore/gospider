@@ -165,14 +165,14 @@ type Client struct {
 type ClientOption struct {
 	GetProxy              func(ctx context.Context, url *url.URL) (string, error)
 	Proxy                 string
-	TLSHandshakeTimeout   int64  //tls 超时时间,default:8
-	ResponseHeaderTimeout int64  //第一个response headers 接收超时时间,default:8
+	TLSHandshakeTimeout   int64  //tls 超时时间,default:15
+	ResponseHeaderTimeout int64  //第一个response headers 接收超时时间,default:30
 	DisCookie             bool   //关闭cookies管理
 	DisAlive              bool   //关闭长连接
 	DisCompression        bool   //关闭请求头中的压缩功能
 	LocalAddr             string //本地网卡出口ip
-	IdleConnTimeout       int64  //空闲连接在连接池中的超时时间,default:20
-	KeepAlive             int64  //keepalive保活检测定时,default:10
+	IdleConnTimeout       int64  //空闲连接在连接池中的超时时间,default:30
+	KeepAlive             int64  //keepalive保活检测定时,default:15
 	DnsCacheTime          int64  //dns解析缓存时间60*30
 	Ja3                   bool   //是否启用ja3
 }
@@ -617,7 +617,7 @@ func (obj *RequestOption) optionInit() error {
 func newDail(ctx context.Context, session_option ClientOption) (*dialClient, error) {
 	var err error
 	dialCli := &dialClient{
-		dialer:     &net.Dialer{Timeout: time.Second * 8},
+		dialer:     &net.Dialer{Timeout: time.Second * time.Duration(session_option.TLSHandshakeTimeout)},
 		ctx:        ctx,
 		ja3:        session_option.Ja3,
 		dnsTimeout: session_option.DnsCacheTime,
@@ -647,7 +647,7 @@ func newHttp2Transport(ctx context.Context, session_option ClientOption, dialCli
 		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
 		DialTLSContext:     dialCli.dialTlsContext2,
 		AllowHTTP:          true,
-		ReadIdleTimeout:    time.Duration(session_option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
+		ReadIdleTimeout:    time.Duration(session_option.IdleConnTimeout) * time.Second, //检测连接是否健康的间隔时间
 		PingTimeout:        time.Second * time.Duration(session_option.TLSHandshakeTimeout),
 		WriteByteTimeout:   time.Second * time.Duration(session_option.ResponseHeaderTimeout),
 	}
@@ -715,10 +715,10 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		session_option.IdleConnTimeout = 30
 	}
 	if session_option.KeepAlive == 0 {
-		session_option.KeepAlive = 10
+		session_option.KeepAlive = 15
 	}
 	if session_option.TLSHandshakeTimeout == 0 {
-		session_option.TLSHandshakeTimeout = 10
+		session_option.TLSHandshakeTimeout = 15
 	}
 	if session_option.ResponseHeaderTimeout == 0 {
 		session_option.ResponseHeaderTimeout = 30
