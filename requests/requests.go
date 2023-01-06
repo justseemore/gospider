@@ -347,13 +347,19 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 	}
 	return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 }
+
 func (obj *dialClient) dialTlsContext(ctx context.Context, network string, addr string) (net.Conn, error) {
 	conn, err := obj.dialContext(ctx, network, addr)
 	if err != nil {
-		return conn, err
+		return nil, err
 	}
+	colonPos := strings.LastIndex(addr, ":")
+	if colonPos == -1 {
+		colonPos = len(addr)
+	}
+	serverName := addr[:colonPos]
 	if obj.ja3 {
-		tlsConn := utls.UClient(conn, &utls.Config{InsecureSkipVerify: true}, utls.HelloCustom)
+		tlsConn := utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: serverName}, utls.HelloCustom)
 		spec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
 		if err != nil {
 			conn.Close()
@@ -382,7 +388,7 @@ func (obj *dialClient) dialTlsContext(ctx context.Context, network string, addr 
 		}
 		return tlsConn, err
 	}
-	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true}), err
+	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: serverName}), err
 }
 func (obj *dialClient) dialTlsContext2(ctx context.Context, network string, addr string, cfg *tls.Config) (net.Conn, error) {
 	return obj.dialTlsContext(ctx, network, addr)
@@ -637,13 +643,14 @@ func newDail(ctx context.Context, session_option ClientOption) (*dialClient, err
 }
 func newHttp2Transport(ctx context.Context, session_option ClientOption, dialCli *dialClient) *http2.Transport {
 	return &http2.Transport{
-		DisableCompression: session_option.DisCompression,
-		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
-		DialTLSContext:     dialCli.dialTlsContext2,
-		AllowHTTP:          true,
-		ReadIdleTimeout:    time.Duration(session_option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
-		PingTimeout:        time.Second * time.Duration(session_option.TLSHandshakeTimeout),
-		WriteByteTimeout:   time.Second * time.Duration(session_option.ResponseHeaderTimeout),
+		DisableCompression:        session_option.DisCompression,
+		TLSClientConfig:           &tls.Config{InsecureSkipVerify: true},
+		DialTLSContext:            dialCli.dialTlsContext2,
+		AllowHTTP:                 true,
+		ReadIdleTimeout:           time.Duration(session_option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
+		PingTimeout:               time.Second * time.Duration(session_option.TLSHandshakeTimeout),
+		WriteByteTimeout:          time.Second * time.Duration(session_option.ResponseHeaderTimeout),
+		MaxDecoderHeaderTableSize: 40890,
 	}
 }
 func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli *dialClient) http.Transport {
