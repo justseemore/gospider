@@ -1210,7 +1210,9 @@ func (obj *Response) Close() error {
 	if obj.WebSocket != nil {
 		obj.WebSocket.Close(websocket.StatusInternalError, "close")
 	}
-	io.Copy(io.Discard, obj.Response.Body)
-	err := obj.Response.Body.Close()
-	return err
+	if obj.Response.Body != nil {
+		io.Copy(io.Discard, obj.Response.Body)
+		return obj.Response.Body.Close()
+	}
+	return nil
 }
