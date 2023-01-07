@@ -104,8 +104,8 @@ func (obj *httpConn) SetWriteDeadline(t time.Time) error {
 }
 
 type RequestOption struct {
-	Method        string
-	Url           string //基础url
+	Method        string //method
+	Url           string //url
 	Host          string //host
 	Proxy         string //代理,http,socks5
 	Timeout       int64  //请求超时时间
@@ -819,8 +819,12 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 		option = options[0]
 	}
 	var err error
-	option.Method = method
-	option.Url = href
+	if option.Method == "" {
+		option.Method = method
+	}
+	if option.Url == "" {
+		option.Url = href
+	}
 	if option.Body != nil {
 		option.TryNum = 0
 	}
@@ -1202,6 +1206,9 @@ func (obj *Response) read(bar bool) error { //读取body,对body 解压，解码
 func (obj *Response) Close() error {
 	if obj.cnl != nil {
 		defer obj.cnl()
+	}
+	if obj.WebSocket != nil {
+		obj.WebSocket.Close(websocket.StatusInternalError, "close")
 	}
 	io.Copy(io.Discard, obj.Response.Body)
 	err := obj.Response.Body.Close()
