@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
@@ -669,4 +670,47 @@ func DelSliceIndex[T any](val []T, indexs ...int) []T {
 }
 func WrapError(err error, val ...any) error {
 	return fmt.Errorf("%w,%s", err, fmt.Sprint(val...))
+}
+
+func CopyWitchContext(preCtx context.Context, writer io.Writer, reader io.Reader, timeOut int64) error {
+	if preCtx == nil {
+		preCtx = context.TODO()
+	}
+	ctx, cnl := context.WithCancel(preCtx)
+	var endErr error
+	t := time.Now().Unix()
+	go func() {
+		defer cnl()
+		maxSize := 1024
+		con := make([]byte, maxSize)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				size, err := io.ReadFull(reader, con)
+				t = time.Now().Unix()
+				if err != nil {
+					endErr = err
+					return
+				}
+				if _, endErr = writer.Write(con[:size]); endErr != nil {
+					return
+				}
+				if size < maxSize {
+					return
+				}
+			}
+		}
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return endErr
+		case <-time.After(time.Second * time.Duration(timeOut)):
+			if time.Now().Unix()-t >= timeOut {
+				return endErr
+			}
+		}
+	}
 }

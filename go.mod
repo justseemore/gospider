@@ -8,8 +8,11 @@ require (
 	github.com/gin-gonic/gin v1.8.2
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-sql-driver/mysql v1.7.0
+	github.com/golang/protobuf v1.5.2
+	github.com/google/go-cmp v0.5.9
 	github.com/jackc/pgx/v5 v5.2.0
 	github.com/json-iterator/go v1.1.12
+	github.com/klauspost/compress v1.15.14
 	github.com/pkg/sftp v1.13.5
 	github.com/refraction-networking/utls v1.2.0
 	github.com/tidwall/gjson v1.14.4
@@ -22,7 +25,6 @@ require (
 	golang.org/x/exp v0.0.0-20221230185412-738e83a70c30
 	golang.org/x/net v0.4.0
 	golang.org/x/text v0.5.0
-	nhooyr.io/websocket v1.8.7
 )
 
 require (
@@ -33,13 +35,10 @@ require (
 	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/go-playground/validator/v10 v10.11.1 // indirect
 	github.com/goccy/go-json v0.10.0 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/puddle/v2 v2.1.2 // indirect
-	github.com/klauspost/compress v1.15.14 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/leodido/go-urn v1.2.1 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect

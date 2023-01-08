@@ -47,7 +47,7 @@ import (
     "log"
 
     "gitee.com/baixudong/gospider/requests"
-    "nhooyr.io/websocket"
+    "gitee.com/baixudong/gospider/websocket"
 )
 
 func main() {

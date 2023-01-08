@@ -21,6 +21,7 @@ import (
 
 	"gitee.com/baixudong/gospider/bar"
 	"gitee.com/baixudong/gospider/bs4"
+	"gitee.com/baixudong/gospider/websocket"
 
 	"gitee.com/baixudong/gospider/tools"
 
@@ -29,7 +30,6 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
 	"golang.org/x/net/publicsuffix"
-	"nhooyr.io/websocket"
 )
 
 var UserAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36`
@@ -873,8 +873,8 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	return resp, errors.New("max try num")
 }
 
-func (obj *Client) newResponse(r *http.Response, request_option RequestOption) (*Response, error) {
-	response := &Response{Response: r}
+func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request_option RequestOption) (*Response, error) {
+	response := &Response{Response: r, cnl: cnl}
 	if request_option.DisRead { //是否预读
 		return response, nil
 	}
@@ -950,8 +950,13 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	}
 	ctxData.url = reqs.URL
 	//判断ws
-	if reqs.URL.Scheme == "ws" || reqs.URL.Scheme == "wss" {
+	switch reqs.URL.Scheme {
+	case "ws":
 		isWs = true
+		reqs.URL.Scheme = "http"
+	case "wss":
+		isWs = true
+		reqs.URL.Scheme = "https"
 	}
 	//添加headers
 	var headOk bool
@@ -986,34 +991,41 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	}
 	//开始发送请求
 	var r *http.Response
-	var r2 *websocket.Conn
 	var response *Response
 	var err2 error
+	var wsOption *websocket.GospiderOption
 	if isWs {
-		r2, r, err = websocket.Dial(reqCtx, href, &websocket.DialOptions{
-			HTTPClient: obj.getClient(request_option),
-			HTTPHeader: reqs.Header,
-		})
-	} else {
-		r, err = obj.getClient(request_option).Do(reqs)
+		if wsOption, err = websocket.GospiderNewOption(reqs.Header); err != nil {
+			cancel()
+			return nil, tools.WrapError(errFatal, err.Error())
+		}
+
 	}
+	r, err = obj.getClient(request_option).Do(reqs)
 	if r != nil {
-		if isWs && r.StatusCode == 101 {
-			request_option.DisRead = true
+		if isWs {
+			if r.StatusCode == 101 {
+				request_option.DisRead = true
+			} else if err == nil {
+				err = errors.New("statusCode not 101")
+			}
 		}
 		r.Close = request_option.DisAlive
-		if response, err2 = obj.newResponse(r, request_option); err2 != nil { //创建 response
-			cancel()
+		if response, err2 = obj.newResponse(r, cancel, request_option); err2 != nil { //创建 response
 			return response, err2
 		}
-		response.WebSocket = r2
-		if request_option.DisRead {
-			response.cnl = cancel
-		} else {
-			cancel()
+		if isWs && r.StatusCode == 101 {
+			if response.WebSocket, err2 = websocket.GospiderNewConn(r, wsOption); err2 != nil { //创建 websocket
+				if err = response.Close(); err != nil {
+					return response, tools.WrapError(err, err2)
+				}
+				return response, err2
+			}
 		}
 		if err != nil {
-			cancel()
+			if err2 = response.Close(); err2 != nil {
+				return response, tools.WrapError(err, err2)
+			}
 		}
 	} else {
 		cancel()
