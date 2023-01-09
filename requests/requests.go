@@ -21,7 +21,6 @@ import (
 
 	"gitee.com/baixudong/gospider/bar"
 	"gitee.com/baixudong/gospider/bs4"
-	"gitee.com/baixudong/gospider/websocket"
 
 	"gitee.com/baixudong/gospider/tools"
 
@@ -30,6 +29,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
 	"golang.org/x/net/publicsuffix"
+	"nhooyr.io/websocket"
 )
 
 var UserAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36`
@@ -135,6 +135,8 @@ type RequestOption struct {
 	DisUnZip      bool                                      //变比自动解压
 	Err           error                                     //请求过程中的error
 	Http2         bool                                      //开启http2 transport
+	WsOption      websocket.DialOptions                     //websocket headers
+	wsOption      *wsOption
 	converUrl     string
 	contentType   string
 }
@@ -908,11 +910,10 @@ func verifyProxy(proxyUrl string) (*url.URL, error) {
 	}
 }
 
-func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOption) (*Response, error) {
+func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOption) (response *Response, err error) {
 	method := strings.ToUpper(request_option.Method)
 	href := request_option.converUrl
 	var reqs *http.Request
-	var err error
 	var isWs bool
 	//构造ctxData
 	ctxData := new(reqCtxData)
@@ -922,7 +923,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	if request_option.Proxy != "" { //代理相关构造
 		tempProxy, err := verifyProxy(request_option.Proxy)
 		if err != nil {
-			return nil, tools.WrapError(errFatal, err)
+			return response, tools.WrapError(errFatal, err)
 		}
 		ctxData.proxy = tempProxy
 	}
@@ -937,7 +938,14 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	} else {
 		reqCtx, cancel = context.WithCancel(reqCtx)
 	}
-
+	defer func() {
+		if err != nil {
+			cancel()
+			if response != nil {
+				response.Close()
+			}
+		}
+	}()
 	//创建request
 	if request_option.Body != nil {
 		reqs, err = http.NewRequestWithContext(reqCtx, method, href, request_option.Body)
@@ -945,8 +953,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		reqs, err = http.NewRequestWithContext(reqCtx, method, href, nil)
 	}
 	if err != nil {
-		cancel()
-		return nil, tools.WrapError(errFatal, err)
+		return response, tools.WrapError(errFatal, err)
 	}
 	ctxData.url = reqs.URL
 	//判断ws
@@ -961,8 +968,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	//添加headers
 	var headOk bool
 	if reqs.Header, headOk = request_option.Headers.(http.Header); !headOk {
-		cancel()
-		return nil, tools.WrapError(errFatal, "headers 转换错误")
+		return response, tools.WrapError(errFatal, "headers 转换错误")
 	}
 
 	if !isWs && reqs.Header.Get("Content-type") == "" && request_option.contentType != "" {
@@ -979,8 +985,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	if request_option.Cookies != nil {
 		cooks, cookOk := request_option.Cookies.([]*http.Cookie)
 		if !cookOk {
-			cancel()
-			return nil, tools.WrapError(errFatal, "cookies 转换错误")
+			return response, tools.WrapError(errFatal, "cookies 转换错误")
 		}
 		for _, vv := range cooks {
 			reqs.AddCookie(vv)
@@ -991,15 +996,11 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	}
 	//开始发送请求
 	var r *http.Response
-	var response *Response
 	var err2 error
-	var wsOption *websocket.GospiderOption
 	if isWs {
-		if wsOption, err = websocket.GospiderNewOption(reqs.Header); err != nil {
-			cancel()
-			return nil, tools.WrapError(errFatal, err.Error())
+		if err = setWsHeaders(reqs.Header, &request_option); err != nil {
+			return response, tools.WrapError(errFatal, err.Error())
 		}
-
 	}
 	r, err = obj.getClient(request_option).Do(reqs)
 	if r != nil {
@@ -1015,20 +1016,10 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			return response, err2
 		}
 		if isWs && r.StatusCode == 101 {
-			if response.WebSocket, err2 = websocket.GospiderNewConn(r, wsOption); err2 != nil { //创建 websocket
-				if err = response.Close(); err != nil {
-					return response, tools.WrapError(err, err2)
-				}
+			if response.WebSocket, err2 = newWsConn(r, &request_option); err2 != nil { //创建 websocket
 				return response, err2
 			}
 		}
-		if err != nil {
-			if err2 = response.Close(); err2 != nil {
-				return response, tools.WrapError(err, err2)
-			}
-		}
-	} else {
-		cancel()
 	}
 	return response, err
 }

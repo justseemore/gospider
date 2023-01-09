@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/baixudong/gospider/websocket"
-	"gitee.com/baixudong/gospider/websocket/wsjson"
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/requests"
