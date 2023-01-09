@@ -39,6 +39,10 @@ func GospiderNewOption(headers http.Header) (*GospiderOption, error) {
 }
 
 func GospiderNewConn(resp *http.Response, option *GospiderOption) (*Conn, error) {
+	var err error
+	if option.copts, err = verifyServerExtensions(option.copts, resp.Header); err != nil {
+		return nil, err
+	}
 	rwc, ok := resp.Body.(io.ReadWriteCloser)
 	if !ok {
 		return nil, fmt.Errorf("response body is not a io.ReadWriteCloser")
