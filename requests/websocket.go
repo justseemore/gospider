@@ -16,6 +16,7 @@ type compressionOptions struct {
 	clientNoContextTakeover bool
 	serverNoContextTakeover bool
 }
+
 type connConfig struct {
 	subprotocol    string
 	rwc            io.ReadWriteCloser
@@ -42,47 +43,48 @@ func secWebSocketKey(rr io.Reader) (string, error)
 //go:linkname verifyServerExtensions nhooyr.io/websocket.verifyServerExtensions
 func verifyServerExtensions(copts *compressionOptions, h http.Header) (*compressionOptions, error)
 
-//go:linkname optsHook nhooyr.io/websocket.(*CompressionMode).opts
-func optsHook(val *websocket.CompressionMode) *compressionOptions
+func optsHook(m websocket.CompressionMode) *compressionOptions {
+	return &compressionOptions{
+		clientNoContextTakeover: m == websocket.CompressionNoContextTakeover,
+		serverNoContextTakeover: m == websocket.CompressionNoContextTakeover,
+	}
+}
 
 //go:linkname setHeaderHook nhooyr.io/websocket.(*compressionOptions).setHeader
 func setHeaderHook(val *compressionOptions, h http.Header)
 
-type wsOption struct {
-	opts  *websocket.DialOptions
-	copts *compressionOptions
+type WsOption struct {
+	Subprotocols         []string                  // Subprotocols lists the WebSocket subprotocols to negotiate with the server.
+	CompressionMode      websocket.CompressionMode // CompressionMode controls the compression mode.
+	CompressionThreshold int                       // CompressionThreshold controls the minimum size of a message before compression is applied ,Defaults to 512 bytes for CompressionNoContextTakeover and 128 bytes for CompressionContextTakeover.
 }
 
 func setWsHeaders(headers http.Header, option *RequestOption) error {
-	option.WsOption.HTTPHeader = headers
 	secWebSocketKey, err := secWebSocketKey(nil)
 	if err != nil {
 		return fmt.Errorf("failed to generate Sec-WebSocket-Key: %w", err)
 	}
 	var copts *compressionOptions
 	if option.WsOption.CompressionMode != websocket.CompressionDisabled {
-		copts = optsHook(&option.WsOption.CompressionMode)
+		copts = optsHook(option.WsOption.CompressionMode)
 	}
-	option.WsOption.HTTPHeader.Set("Connection", "Upgrade")
-	option.WsOption.HTTPHeader.Set("Upgrade", "websocket")
-	option.WsOption.HTTPHeader.Set("Sec-WebSocket-Version", "13")
-	option.WsOption.HTTPHeader.Set("Sec-WebSocket-Key", secWebSocketKey)
+	headers.Set("Connection", "Upgrade")
+	headers.Set("Upgrade", "websocket")
+	headers.Set("Sec-WebSocket-Version", "13")
+	headers.Set("Sec-WebSocket-Key", secWebSocketKey)
 	if len(option.WsOption.Subprotocols) > 0 {
-		option.WsOption.HTTPHeader.Set("Sec-WebSocket-Protocol", strings.Join(option.WsOption.Subprotocols, ","))
+		headers.Set("Sec-WebSocket-Protocol", strings.Join(option.WsOption.Subprotocols, ","))
 	}
 	if copts != nil {
-		setHeaderHook(copts, option.WsOption.HTTPHeader)
+		setHeaderHook(copts, headers)
 	}
-	option.wsOption = &wsOption{
-		opts:  &option.WsOption,
-		copts: copts,
-	}
+	option.compressionOptions = copts
 	return nil
 }
 
 func newWsConn(resp *http.Response, option *RequestOption) (*websocket.Conn, error) {
 	var err error
-	if option.wsOption.copts, err = verifyServerExtensions(option.wsOption.copts, resp.Header); err != nil {
+	if option.compressionOptions, err = verifyServerExtensions(option.compressionOptions, resp.Header); err != nil {
 		return nil, err
 	}
 	rwc, ok := resp.Body.(io.ReadWriteCloser)
@@ -93,8 +95,8 @@ func newWsConn(resp *http.Response, option *RequestOption) (*websocket.Conn, err
 		subprotocol:    resp.Header.Get("Sec-WebSocket-Protocol"),
 		rwc:            rwc,
 		client:         true,
-		copts:          option.wsOption.copts,
-		flateThreshold: option.wsOption.opts.CompressionThreshold,
+		copts:          option.compressionOptions,
+		flateThreshold: option.WsOption.CompressionThreshold,
 		br:             getBufioReader(rwc),
 		bw:             getBufioWriter(rwc),
 	}), nil
