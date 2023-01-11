@@ -475,6 +475,7 @@ func (obj *Page) TouchUp(ctx context.Context) error {
 	return err
 }
 
+// 设置移动设备的属性
 func (obj *Page) SetDevice(ctx context.Context, device cdp.Device) error {
 	if err := obj.SetUserAgent(ctx, device.UserAgent); err != nil {
 		return err
@@ -490,10 +491,13 @@ func (obj *Page) SetUserAgent(ctx context.Context, userAgent string) error {
 	return err
 }
 
+// 设置设备指标
 func (obj *Page) SetDeviceMetrics(ctx context.Context, device cdp.Device) error {
 	_, err := obj.webSock.EmulationSetDeviceMetricsOverride(ctx, device)
 	return err
 }
+
+// 设置设备是否支持触摸
 func (obj *Page) SetTouch(ctx context.Context, hasTouch bool) error {
 	_, err := obj.webSock.EmulationSetTouchEmulationEnabled(ctx, hasTouch)
 	return err

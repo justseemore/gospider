@@ -36,8 +36,8 @@ func delTempDir(dir string) {
 	}
 }
 
-// go build -ldflags="-H windowsgui" -o chrome/browserCmd.exe main.go
-// go build -o chrome/browserCmd main.go
+// go build -ldflags="-H windowsgui" -o browser/browserCmd.exe main.go
+// go build -o browser/browserCmd main.go
 func BrowserCmdMain() {
 	preCtx := context.Background()
 	ctx, cnl := context.WithCancel(preCtx)
