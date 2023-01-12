@@ -42,8 +42,11 @@ func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request
 func (obj *Response) Response() *http.Response {
 	return obj.response
 }
-func (obj *Response) WebSocket() *websocket.Conn {
+func (obj *Response) WebSocketConn() *websocket.Conn {
 	return obj.webSocketConn
+}
+func (obj *Response) WebSocketBody() io.ReadWriteCloser {
+	return obj.webSocketBody
 }
 func (obj *Response) Location() (*url.URL, error) {
 	return obj.response.Location()
