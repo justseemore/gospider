@@ -87,7 +87,7 @@ func (obj *dialClient) getSocksProxyConn(ctx context.Context, proxyData *url.URL
 	if err != nil {
 		return nil, err
 	}
-	return dial.Dial("tcp", obj.addrToIp(addr))
+	return dial.Dial("tcp", addr)
 }
 func (obj *dialClient) getHttpProxyConn(ctx context.Context, proxyData *url.URL) (net.Conn, error) {
 	rawConn, err := obj.getHttpConn(ctx, proxyData)
@@ -104,10 +104,10 @@ func (obj *dialClient) getHttpProxyConn(ctx context.Context, proxyData *url.URL)
 func (obj *dialClient) getHttpConn(ctx context.Context, proxyData *url.URL) (net.Conn, error) {
 	return obj.dialer.DialContext(ctx, "tcp", net.JoinHostPort(proxyData.Hostname(), proxyData.Port()))
 }
-func Http2httpsConn(ctx context.Context, proxyData *url.URL, addr string, conn net.Conn) error {
+func Http2httpsConn(ctx context.Context, proxyData *url.URL, addr string, host string, conn net.Conn) error {
 	var err error
 	hdr := make(http.Header)
-	hdr.Add("User-Agent", UserAgent)
+	hdr.Set("User-Agent", UserAgent)
 	if proxyData.User != nil {
 		if password, ok := proxyData.User.Password(); ok {
 			hdr.Set("Proxy-Authorization", "Basic "+tools.Base64Encode(proxyData.User.Username()+":"+password))
@@ -120,7 +120,7 @@ func Http2httpsConn(ctx context.Context, proxyData *url.URL, addr string, conn n
 		connectReq := &http.Request{
 			Method: http.MethodConnect,
 			URL:    &url.URL{Opaque: addr},
-			Host:   addr,
+			Host:   host,
 			Header: hdr,
 		}
 		if err = connectReq.Write(conn); err != nil {
@@ -153,7 +153,7 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 	if reqData.disProxy {
 		return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 	} else if reqData.proxy != nil {
-		if !reqData.ja3 && !reqData.h2 {
+		if !reqData.ja3 && !reqData.h2 { //ja3 必须https 才能设置，http2 的transport 没有proxy 方法
 			rawConn, err := obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 			if err != nil {
 				return rawConn, err
@@ -182,7 +182,7 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 	if reqData.proxy != nil {
 		switch reqData.proxy.Scheme {
 		case "socks5":
-			return obj.getSocksProxyConn(ctx, reqData.proxy, addr)
+			return obj.getSocksProxyConn(ctx, reqData.proxy, obj.addrToIp(addr))
 		case "http":
 			switch reqData.url.Scheme {
 			case "http":
@@ -192,7 +192,7 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 				if err != nil {
 					return conn, err
 				}
-				if err = Http2httpsConn(ctx, reqData.proxy, addr, conn); err != nil {
+				if err = Http2httpsConn(ctx, reqData.proxy, obj.addrToIp(addr), addr, conn); err != nil {
 					conn.Close()
 				}
 				return conn, err

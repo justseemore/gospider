@@ -498,7 +498,7 @@ func (obj *Client) sockes5Handle(ctx context.Context, client net.Conn, clientRea
 			}
 			httpsByte = httpsBytes[0]
 			if httpsByte == 22 {
-				if err = requests.Http2httpsConn(ctx, ipUrl, serverAddr, server); err != nil {
+				if err = requests.Http2httpsConn(ctx, ipUrl, serverAddr, serverAddr, server); err != nil {
 					return err
 				}
 			} else {
