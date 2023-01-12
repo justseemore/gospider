@@ -83,14 +83,14 @@ func setWsHeaders(headers http.Header, option *RequestOption) error {
 	return nil
 }
 
-func newWsConn(resp *http.Response, option *RequestOption) (*websocket.Conn, io.ReadWriteCloser, error) {
+func newWsConn(resp *http.Response, option *RequestOption) (*websocket.Conn, error) {
 	var err error
 	if option.compressionOptions, err = verifyServerExtensions(option.compressionOptions, resp.Header); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	rwc, ok := resp.Body.(io.ReadWriteCloser)
 	if !ok {
-		return nil, nil, fmt.Errorf("response body is not a io.ReadWriteCloser")
+		return nil, fmt.Errorf("response body is not a io.ReadWriteCloser")
 	}
 	return newConn(connConfig{
 		subprotocol:    resp.Header.Get("Sec-WebSocket-Protocol"),
@@ -100,7 +100,7 @@ func newWsConn(resp *http.Response, option *RequestOption) (*websocket.Conn, io.
 		flateThreshold: option.WsOption.CompressionThreshold,
 		br:             getBufioReader(rwc),
 		bw:             getBufioWriter(rwc),
-	}), rwc, nil
+	}), nil
 }
 
 func (obj *Response) WsRead(ctx context.Context) (websocket.MessageType, []byte, error) {

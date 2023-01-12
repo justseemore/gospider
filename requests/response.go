@@ -20,7 +20,6 @@ import (
 type Response struct {
 	response      *http.Response
 	webSocketConn *websocket.Conn
-	webSocketBody io.ReadWriteCloser
 	cnl           context.CancelFunc
 	content       []byte
 	encoding      string
@@ -44,9 +43,6 @@ func (obj *Response) Response() *http.Response {
 }
 func (obj *Response) WebSocketConn() *websocket.Conn {
 	return obj.webSocketConn
-}
-func (obj *Response) WebSocketBody() io.ReadWriteCloser {
-	return obj.webSocketBody
 }
 func (obj *Response) Location() (*url.URL, error) {
 	return obj.response.Location()
@@ -175,9 +171,6 @@ func (obj *Response) Close() error {
 	}
 	if obj.webSocketConn != nil {
 		obj.webSocketConn.Close(websocket.StatusInternalError, "close")
-	}
-	if obj.webSocketBody != nil {
-		obj.webSocketBody.Close()
 	}
 	if obj.response.Body != nil {
 		io.Copy(io.Discard, obj.response.Body)
