@@ -546,7 +546,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			return response, err2
 		}
 		if isWs && r.StatusCode == 101 {
-			if response.WebSocket, err2 = newWsConn(r, &request_option); err2 != nil { //创建 websocket
+			if response.webSocket, err2 = newWsConn(r, &request_option); err2 != nil { //创建 websocket
 				return response, err2
 			}
 		}

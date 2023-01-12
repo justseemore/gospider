@@ -18,8 +18,8 @@ import (
 )
 
 type Response struct {
-	Response  *http.Response
-	WebSocket *websocket.Conn
+	response  *http.Response
+	webSocket *websocket.Conn
 	cnl       context.CancelFunc
 	content   []byte
 	encoding  string
@@ -28,7 +28,7 @@ type Response struct {
 }
 
 func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request_option RequestOption) (*Response, error) {
-	response := &Response{Response: r, cnl: cnl}
+	response := &Response{response: r, cnl: cnl}
 	if request_option.DisRead { //是否预读
 		return response, nil
 	}
@@ -38,29 +38,41 @@ func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request
 	response.disDecode = request_option.DisDecode      //是否解码
 	return response, response.read(request_option.Bar) //读取内容
 }
+func (obj *Response) Response() *http.Response {
+	return obj.response
+}
+func (obj *Response) WebSocket() *websocket.Conn {
+	return obj.webSocket
+}
 func (obj *Response) Location() (*url.URL, error) {
-	return obj.Response.Location()
+	return obj.response.Location()
 }
 func (obj *Response) Cookies() []*http.Cookie {
-	if obj.Response == nil {
+	if obj.response == nil {
 		return []*http.Cookie{}
 	}
-	return obj.Response.Cookies()
+	return obj.response.Cookies()
 }
 func (obj *Response) StatusCode() int {
-	if obj.Response == nil {
+	if obj.response == nil {
 		return 0
 	}
-	return obj.Response.StatusCode
+	return obj.response.StatusCode
+}
+func (obj *Response) Status() string {
+	if obj.response == nil {
+		return ""
+	}
+	return obj.response.Status
 }
 func (obj *Response) Url() *url.URL {
-	if obj.Response == nil {
+	if obj.response == nil {
 		return nil
 	}
-	return obj.Response.Request.URL
+	return obj.response.Request.URL
 }
 func (obj *Response) Headers() http.Header {
-	return obj.Response.Header
+	return obj.response.Header
 }
 
 func (obj *Response) Text(val ...string) string {
@@ -95,13 +107,13 @@ func (obj *Response) Html() *bs4.Client {
 	return bs4.NewClient(obj.Text(), obj.Url().String())
 }
 func (obj *Response) ContentType() string {
-	return obj.Response.Header.Get("Content-Type")
+	return obj.response.Header.Get("Content-Type")
 }
 func (obj *Response) ContentEncoding() string {
-	return obj.Response.Header.Get("Content-Encoding")
+	return obj.response.Header.Get("Content-Encoding")
 }
 func (obj *Response) ContentLength() int64 {
-	return obj.Response.ContentLength
+	return obj.response.ContentLength
 }
 
 type barBody struct {
@@ -116,10 +128,10 @@ func (obj *barBody) Write(con []byte) (int, error) {
 }
 func (obj *Response) barRead() (*bytes.Buffer, error) {
 	barData := &barBody{
-		bar:  bar.NewClient(obj.Response.ContentLength),
+		bar:  bar.NewClient(obj.response.ContentLength),
 		body: bytes.NewBuffer(nil),
 	}
-	_, err := io.Copy(barData, obj.Response.Body)
+	_, err := io.Copy(barData, obj.response.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +149,7 @@ func (obj *Response) read(bar bool) error { //读取body,对body 解压，解码
 		bBody, err = obj.barRead()
 	} else {
 		bBody = bytes.NewBuffer(nil)
-		_, err = io.Copy(bBody, obj.Response.Body)
+		_, err = io.Copy(bBody, obj.response.Body)
 	}
 	if err != nil {
 		return errors.New("io.Copy error: " + err.Error())
@@ -157,12 +169,12 @@ func (obj *Response) Close() error {
 	if obj.cnl != nil {
 		defer obj.cnl()
 	}
-	if obj.WebSocket != nil {
-		obj.WebSocket.Close(websocket.StatusInternalError, "close")
+	if obj.webSocket != nil {
+		obj.webSocket.Close(websocket.StatusInternalError, "close")
 	}
-	if obj.Response.Body != nil {
-		io.Copy(io.Discard, obj.Response.Body)
-		return obj.Response.Body.Close()
+	if obj.response.Body != nil {
+		io.Copy(io.Discard, obj.response.Body)
+		return obj.response.Body.Close()
 	}
 	return nil
 }

@@ -109,7 +109,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	fulData.StatusCode = rs.StatusCode()
 	fulData.Body = rs.Text()
 	fulData.Headers = headers
-	fulData.ResponsePhrase = rs.Response.Status
+	fulData.ResponsePhrase = rs.Status()
 	obj.webSock.db.put(routeKey, fulData, 60*60)
 	// log.Print(rs.Url(), "==", resourceType)
 	return fulData, nil

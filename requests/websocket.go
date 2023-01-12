@@ -2,6 +2,8 @@ package requests
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -100,4 +102,16 @@ func newWsConn(resp *http.Response, option *RequestOption) (*websocket.Conn, err
 		br:             getBufioReader(rwc),
 		bw:             getBufioWriter(rwc),
 	}), nil
+}
+
+func (obj *Response) WsRead(ctx context.Context) (websocket.MessageType, []byte, error) {
+	for {
+		msgType, msgCon, msgErr := obj.webSocket.Read(ctx)
+		if !errors.Is(msgErr, io.EOF) {
+			return msgType, msgCon, msgErr
+		}
+	}
+}
+func (obj *Response) WsWrite(ctx context.Context, typ websocket.MessageType, p []byte) error {
+	return obj.webSocket.Write(ctx, typ, p)
 }

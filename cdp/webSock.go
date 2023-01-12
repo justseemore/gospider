@@ -171,9 +171,9 @@ func NewWebSock(preCtx context.Context, ws, href, proxy string, getProxy func() 
 	if err != nil {
 		return nil, err
 	}
-	response.WebSocket.SetReadLimit(1024 * 1024 * 1024) //1G
+	response.WebSocket().SetReadLimit(1024 * 1024 * 1024) //1G
 	cli := &WebSock{
-		conn:       response.WebSocket,
+		conn:       response.WebSocket(),
 		db:         db,
 		reqCli:     reqCli,
 		filterKeys: kinds.NewSet[[16]byte](),
