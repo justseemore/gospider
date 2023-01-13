@@ -87,7 +87,7 @@ type RequestOption struct {
 	DisUnZip      bool                                      //变比自动解压
 	Err           error                                     //请求过程中的error
 	Http2         bool                                      //开启http2 transport
-	WsOption      websocket.WsOption                        //websocket option
+	WsOption      websocket.Option                          //websocket option
 	converUrl     string
 	contentType   string
 }

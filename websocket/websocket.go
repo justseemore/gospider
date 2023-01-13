@@ -57,18 +57,18 @@ func acceptCompression(r *http.Request, w http.ResponseWriter, mode websocket.Co
 func verifyServerExtensions(copts *compressionOptions, h http.Header) (*compressionOptions, error)
 
 type Conn struct {
-	rwc   io.ReadWriteCloser
-	conn  *websocket.Conn
-	copts *compressionOptions
+	rwc    io.ReadWriteCloser
+	conn   *websocket.Conn
+	option *Option
 }
-type WsOption struct {
+type Option struct {
 	Subprotocols         []string        // Subprotocols lists the WebSocket subprotocols to negotiate with the server.
 	CompressionMode      CompressionMode // CompressionMode controls the compression mode.
 	CompressionThreshold int             // CompressionThreshold controls the minimum size of a message before compression is applied ,Defaults to 512 bytes for CompressionNoContextTakeover and 128 bytes for CompressionContextTakeover.
 	CompressionOptions   *compressionOptions
 }
+
 type MessageType = websocket.MessageType
-type AcceptOptions = websocket.AcceptOptions
 type CompressionMode = websocket.CompressionMode
 
 const (
@@ -93,7 +93,7 @@ func optsHook(m CompressionMode) *compressionOptions {
 //go:linkname setHeaderHook nhooyr.io/websocket.(*compressionOptions).setHeader
 func setHeaderHook(val *compressionOptions, h http.Header)
 
-func SetClientHeaders(headers http.Header, option *WsOption) error {
+func SetClientHeaders(headers http.Header, option *Option) error {
 	secWebSocketKey, err := secWebSocketKey(nil)
 	if err != nil {
 		return fmt.Errorf("failed to generate Sec-WebSocket-Key: %w", err)
@@ -113,7 +113,7 @@ func SetClientHeaders(headers http.Header, option *WsOption) error {
 	}
 	return nil
 }
-func NewClientConn(resp *http.Response, option *WsOption) (*Conn, error) {
+func NewClientConn(resp *http.Response, option *Option) (*Conn, error) {
 	var err error
 	if option.CompressionOptions, err = verifyServerExtensions(option.CompressionOptions, resp.Header); err != nil {
 		return nil, err
@@ -123,8 +123,8 @@ func NewClientConn(resp *http.Response, option *WsOption) (*Conn, error) {
 		return nil, fmt.Errorf("response body is not a io.ReadWriteCloser")
 	}
 	return &Conn{
-		rwc:   rwc,
-		copts: option.CompressionOptions,
+		rwc:    rwc,
+		option: option,
 		conn: newConn(connConfig{
 			subprotocol:    resp.Header.Get("Sec-WebSocket-Protocol"),
 			rwc:            rwc,
@@ -137,9 +137,9 @@ func NewClientConn(resp *http.Response, option *WsOption) (*Conn, error) {
 	}, nil
 }
 
-func NewServerConn(w http.ResponseWriter, r *http.Request, opts *AcceptOptions) (_ *Conn, err error) {
+func NewServerConn(w http.ResponseWriter, r *http.Request, opts *Option) (_ *Conn, err error) {
 	if opts == nil {
-		opts = &AcceptOptions{}
+		opts = &Option{}
 	}
 	hj, ok := w.(http.Hijacker)
 	if !ok {
@@ -157,11 +157,12 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, opts *AcceptOptions) 
 		w.Header().Set("Sec-WebSocket-Protocol", subproto)
 	}
 
-	copts, err := acceptCompression(r, w, opts.CompressionMode)
-	if err != nil {
-		return nil, err
+	if opts.CompressionOptions == nil {
+		opts.CompressionOptions, err = acceptCompression(r, w, opts.CompressionMode)
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	w.WriteHeader(http.StatusSwitchingProtocols)
 	// See https://github.com/nhooyr/websocket/issues/166
 	if ginWriter, ok := w.(interface {
@@ -180,13 +181,13 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, opts *AcceptOptions) 
 	brw.Reader.Reset(io.MultiReader(bytes.NewReader(b), netConn))
 
 	return &Conn{
-		rwc:   netConn,
-		copts: copts,
+		rwc:    netConn,
+		option: opts,
 		conn: newConn(connConfig{
 			subprotocol:    w.Header().Get("Sec-WebSocket-Protocol"),
 			rwc:            netConn,
 			client:         false,
-			copts:          copts,
+			copts:          opts.CompressionOptions,
 			flateThreshold: opts.CompressionThreshold,
 
 			br: brw.Reader,
@@ -206,8 +207,8 @@ func (obj *Conn) Conn() *websocket.Conn {
 func (obj *Conn) Rwc() io.ReadWriteCloser {
 	return obj.rwc
 }
-func (obj *Conn) Copts() *compressionOptions {
-	return obj.copts
+func (obj *Conn) Option() *Option {
+	return obj.option
 }
 
 func (obj *Conn) ReadJson(ctx context.Context, v interface{}) error {
