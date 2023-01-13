@@ -57,8 +57,6 @@ func acceptCompression(r *http.Request, w http.ResponseWriter, mode websocket.Co
 func verifyServerExtensions(copts *compressionOptions, h http.Header) (*compressionOptions, error)
 
 type Conn struct {
-	br   *bufio.Reader
-	bw   *bufio.Writer
 	rwc  io.ReadWriteCloser
 	conn *websocket.Conn
 }
@@ -127,8 +125,6 @@ func NewClientConn(resp *http.Response, option *ClientOption) (*Conn, error) {
 	bw := getBufioWriter(rwc)
 	return &Conn{
 		rwc: rwc,
-		br:  br,
-		bw:  bw,
 		conn: newConn(connConfig{
 			subprotocol:    resp.Header.Get("Sec-WebSocket-Protocol"),
 			rwc:            rwc,
@@ -185,8 +181,6 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, opts *AcceptOptions) 
 
 	return &Conn{
 		rwc: netConn,
-		br:  brw.Reader,
-		bw:  brw.Writer,
 		conn: newConn(connConfig{
 			subprotocol:    w.Header().Get("Sec-WebSocket-Protocol"),
 			rwc:            netConn,
@@ -218,10 +212,10 @@ func (obj *Conn) WriteJson(ctx context.Context, v interface{}) error {
 	return wsjson.Write(ctx, obj.conn, v)
 }
 func (obj *Conn) Read(p []byte) (n int, err error) {
-	return obj.br.Read(p)
+	return obj.rwc.Read(p)
 }
 func (obj *Conn) Write(p []byte) (n int, err error) {
-	return obj.bw.Write(p)
+	return obj.rwc.Write(p)
 }
 
 func (obj *Conn) ReadMsg(ctx context.Context) (MessageType, []byte, error) {
