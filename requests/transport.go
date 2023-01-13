@@ -44,7 +44,7 @@ func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli 
 			if ctxData.ja3 {
 				return nil, nil
 			}
-			if ctxData.url.Scheme == "http" && ctxData.proxy != nil && ctxData.proxy.User != nil {
+			if ctxData.proxy != nil && ctxData.proxy.User != nil && ctxData.url.Scheme == "http" {
 				ctxData.proxyUser, ctxData.proxy.User = ctxData.proxy.User, nil
 			}
 			return ctxData.proxy, nil
