@@ -59,7 +59,7 @@ func verifyServerExtensions(copts *compressionOptions, h http.Header) (*compress
 type Conn struct {
 	rwc    io.ReadWriteCloser
 	conn   *websocket.Conn
-	option *Option
+	option Option
 }
 type Option struct {
 	Subprotocols         []string        // Subprotocols lists the WebSocket subprotocols to negotiate with the server.
@@ -113,7 +113,13 @@ func SetClientHeaders(headers http.Header, option *Option) error {
 	}
 	return nil
 }
-func NewClientConn(resp *http.Response, option *Option) (*Conn, error) {
+func NewClientConn(resp *http.Response, options ...Option) (*Conn, error) {
+	var option *Option
+	if len(options) > 0 {
+		option = &options[0]
+	} else {
+		option = new(Option)
+	}
 	var err error
 	if option.CompressionOptions, err = verifyServerExtensions(option.CompressionOptions, resp.Header); err != nil {
 		return nil, err
@@ -124,7 +130,7 @@ func NewClientConn(resp *http.Response, option *Option) (*Conn, error) {
 	}
 	return &Conn{
 		rwc:    rwc,
-		option: option,
+		option: *option,
 		conn: newConn(connConfig{
 			subprotocol:    resp.Header.Get("Sec-WebSocket-Protocol"),
 			rwc:            rwc,
@@ -137,9 +143,12 @@ func NewClientConn(resp *http.Response, option *Option) (*Conn, error) {
 	}, nil
 }
 
-func NewServerConn(w http.ResponseWriter, r *http.Request, option *Option) (_ *Conn, err error) {
-	if option == nil {
-		option = &Option{}
+func NewServerConn(w http.ResponseWriter, r *http.Request, options ...Option) (_ *Conn, err error) {
+	var option *Option
+	if len(options) > 0 {
+		option = &options[0]
+	} else {
+		option = new(Option)
 	}
 	hj, ok := w.(http.Hijacker)
 	if !ok {
@@ -179,7 +188,7 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, option *Option) (_ *C
 
 	return &Conn{
 		rwc:    netConn,
-		option: option,
+		option: *option,
 		conn: newConn(connConfig{
 			subprotocol:    w.Header().Get("Sec-WebSocket-Protocol"),
 			rwc:            netConn,
@@ -204,7 +213,7 @@ func (obj *Conn) Conn() *websocket.Conn {
 func (obj *Conn) Rwc() io.ReadWriteCloser {
 	return obj.rwc
 }
-func (obj *Conn) Option() *Option {
+func (obj *Conn) Option() Option {
 	return obj.option
 }
 
