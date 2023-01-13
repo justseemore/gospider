@@ -78,12 +78,16 @@ const (
 	MessageText websocket.MessageType = websocket.MessageText
 	// MessageBinary is for binary messages like protobufs.
 	MessageBinary websocket.MessageType = websocket.MessageBinary
+
+	CompressionContextTakeover   CompressionMode = websocket.CompressionContextTakeover
+	CompressionDisabled          CompressionMode = websocket.CompressionDisabled
+	CompressionNoContextTakeover CompressionMode = websocket.CompressionNoContextTakeover
 )
 
 func optsHook(m CompressionMode) *compressionOptions {
 	return &compressionOptions{
-		clientNoContextTakeover: m == websocket.CompressionNoContextTakeover,
-		serverNoContextTakeover: m == websocket.CompressionNoContextTakeover,
+		clientNoContextTakeover: m == CompressionNoContextTakeover,
+		serverNoContextTakeover: m == CompressionNoContextTakeover,
 	}
 }
 
@@ -95,7 +99,7 @@ func SetClientHeaders(headers http.Header, option *ClientOption) error {
 	if err != nil {
 		return fmt.Errorf("failed to generate Sec-WebSocket-Key: %w", err)
 	}
-	if option.CompressionMode != websocket.CompressionDisabled {
+	if option.CompressionMode != CompressionDisabled {
 		option.CompressionOptions = optsHook(option.CompressionMode)
 	}
 	headers.Set("Connection", "Upgrade")
