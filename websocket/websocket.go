@@ -240,3 +240,6 @@ func (obj *Conn) Close(reason string) error {
 	defer obj.rwc.Close()
 	return obj.conn.Close(websocket.StatusInternalError, reason)
 }
+func (obj *Conn) Ping(ctx context.Context) error {
+	return obj.conn.Ping(ctx)
+}
