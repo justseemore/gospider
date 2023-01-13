@@ -43,33 +43,33 @@ func main() {
 package main
 
 import (
-    "context"
-    "log"
+	"context"
+	"log"
 
-    "gitee.com/baixudong/gospider/requests"
-    "gitee.com/baixudong/gospider/websocket"
+	"gitee.com/baixudong/gospider/requests"
+	"nhooyr.io/websocket"
 )
 
 func main() {
-    reqCli, err := requests.NewClient(nil) //创建请求客户端
-    if err != nil {
-        log.Panic(err)
-    }
-    response, err := reqCli.Request(nil, "get", "ws://82.157.123.54:9010/ajaxchattest", requests.RequestOption{Headers: map[string]string{
-        "Origin": "http://coolaf.com",
-    }}) //发送websocket请求
-    if err != nil {
-        log.Panic(err)
-    }
-    defer response.Close()
-    if err = response.WebSocket.Write(context.TODO(), websocket.MessageText, []byte("测试")); err != nil { //发送txt 消息
-        log.Panic(err)
-    }
-    msgType, con, err := response.WebSocket.Read(context.TODO()) //接收消息
-    if err != nil {
-        log.Panic(err)
-    }
-    log.Print(msgType)     //消息类型
-    log.Print(string(con)) //消息内容
+	reqCli, err := requests.NewClient(nil) //创建请求客户端
+	if err != nil {
+		log.Panic(err)
+	}
+	response, err := reqCli.Request(nil, "get", "ws://82.157.123.54:9010/ajaxchattest", requests.RequestOption{Headers: map[string]string{
+		"Origin": "http://coolaf.com",
+	}}) //发送websocket请求
+	if err != nil {
+		log.Panic(err)
+	}
+	defer response.Close()
+	if err = response.WsWrite(context.TODO(), websocket.MessageText, []byte("测试")); err != nil { //发送txt 消息
+		log.Panic(err)
+	}
+	msgType, con, err := response.WsRead(context.TODO()) //接收消息
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Print(msgType)     //消息类型
+	log.Print(string(con)) //消息内容
 }
 ```

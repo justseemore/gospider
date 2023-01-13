@@ -8,12 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
-
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/thread"
+	"gitee.com/baixudong/gospider/websocket"
 
 	"go.uber.org/atomic"
 )
@@ -139,7 +137,7 @@ func (obj *WebSock) recvMain() error {
 			return obj.ctx.Err()
 		default:
 			rd := RecvData{}
-			if err := wsjson.Read(obj.ctx, obj.conn, &rd); err != nil {
+			if err := obj.conn.ReadJson(obj.ctx, &rd); err != nil {
 				return err
 			}
 			if rd.Id == 0 {
@@ -171,9 +169,9 @@ func NewWebSock(preCtx context.Context, ws, href, proxy string, getProxy func() 
 	if err != nil {
 		return nil, err
 	}
-	response.WebSocketConn().SetReadLimit(1024 * 1024 * 1024) //1G
+	response.WebSocket().SetReadLimit(1024 * 1024 * 1024) //1G
 	cli := &WebSock{
-		conn:       response.WebSocketConn(),
+		conn:       response.WebSocket(),
 		db:         db,
 		reqCli:     reqCli,
 		filterKeys: kinds.NewSet[[16]byte](),
@@ -186,7 +184,7 @@ func NewWebSock(preCtx context.Context, ws, href, proxy string, getProxy func() 
 func (obj *WebSock) Close() error {
 	obj.cnl()
 	obj.reqCli.Close()
-	return obj.conn.Close(websocket.StatusInternalError, "close")
+	return obj.conn.Close("close")
 }
 
 func (obj *WebSock) regId(preCtx context.Context, ids ...int64) *event {
@@ -222,7 +220,7 @@ func (obj *WebSock) send(ctx context.Context, cmd commend) (RecvData, error) {
 		cmd.Id = obj.id.Add(1)
 		idEvent := obj.regId(ctx, cmd.Id)
 		defer idEvent.Cnl()
-		if err := wsjson.Write(ctx, obj.conn, cmd); err != nil {
+		if err := obj.conn.WriteJson(ctx, cmd); err != nil {
 			return RecvData{}, err
 		}
 		select {

@@ -13,18 +13,18 @@ import (
 	"gitee.com/baixudong/gospider/bar"
 	"gitee.com/baixudong/gospider/bs4"
 	"gitee.com/baixudong/gospider/tools"
+	"gitee.com/baixudong/gospider/websocket"
 	"github.com/tidwall/gjson"
-	"nhooyr.io/websocket"
 )
 
 type Response struct {
-	response      *http.Response
-	webSocketConn *websocket.Conn
-	cnl           context.CancelFunc
-	content       []byte
-	encoding      string
-	disDecode     bool
-	disUnzip      bool
+	response  *http.Response
+	webSocket *websocket.Conn
+	cnl       context.CancelFunc
+	content   []byte
+	encoding  string
+	disDecode bool
+	disUnzip  bool
 }
 
 func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request_option RequestOption) (*Response, error) {
@@ -41,8 +41,8 @@ func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request
 func (obj *Response) Response() *http.Response {
 	return obj.response
 }
-func (obj *Response) WebSocketConn() *websocket.Conn {
-	return obj.webSocketConn
+func (obj *Response) WebSocket() *websocket.Conn {
+	return obj.webSocket
 }
 func (obj *Response) Location() (*url.URL, error) {
 	return obj.response.Location()
@@ -169,8 +169,8 @@ func (obj *Response) Close() error {
 	if obj.cnl != nil {
 		defer obj.cnl()
 	}
-	if obj.webSocketConn != nil {
-		obj.webSocketConn.Close(websocket.StatusInternalError, "close")
+	if obj.webSocket != nil {
+		obj.webSocket.Close("close")
 	}
 	if obj.response.Body != nil {
 		io.Copy(io.Discard, obj.response.Body)

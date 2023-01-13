@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gitee.com/baixudong/gospider/tools"
+	"gitee.com/baixudong/gospider/websocket"
 
 	"github.com/tidwall/gjson"
 )
@@ -55,41 +56,40 @@ type File struct {
 }
 
 type RequestOption struct {
-	Method             string //method
-	Url                string //url
-	Host               string //host
-	Proxy              string //代理,http,socks5
-	Timeout            int64  //请求超时时间
-	Headers            any    //请求头
-	Cookies            any    // cookies
-	Files              []File //文件
-	Params             any    //url params,url 参数key,val
-	Form               any    //multipart/form-data,适用于文件上传
-	Data               any    //application/x-www-form-urlencoded,适用于key,val
-	Body               *bytes.Reader
-	Json               any                                       //application/json
-	Text               any                                       //text/xml
-	TempData           any                                       //临时变量
-	Bytes              []byte                                    //二进制内容
-	DisCookie          bool                                      //关闭cookies管理
-	DisDecode          bool                                      //关闭自动解码
-	Bar                bool                                      //是否开启bar
-	DisProxy           bool                                      //是否关闭代理
-	Ja3                bool                                      //是否开启ja3
-	TryNum             int64                                     //重试次数
-	CurTryNum          int64                                     //当前尝试次数
-	BeforCallBack      func(*RequestOption)                      //请求之前回调
-	AfterCallBack      func(*RequestOption, *Response) *Response //请求之后回调
-	RedirectNum        int                                       //重定向次数
-	DisAlive           bool                                      //关闭长连接
-	DisRead            bool                                      //关闭默认读取请求体
-	DisUnZip           bool                                      //变比自动解压
-	Err                error                                     //请求过程中的error
-	Http2              bool                                      //开启http2 transport
-	WsOption           WsOption                                  //websocket headers
-	compressionOptions *compressionOptions
-	converUrl          string
-	contentType        string
+	Method        string //method
+	Url           string //url
+	Host          string //host
+	Proxy         string //代理,http,socks5
+	Timeout       int64  //请求超时时间
+	Headers       any    //请求头
+	Cookies       any    // cookies
+	Files         []File //文件
+	Params        any    //url params,url 参数key,val
+	Form          any    //multipart/form-data,适用于文件上传
+	Data          any    //application/x-www-form-urlencoded,适用于key,val
+	Body          *bytes.Reader
+	Json          any                                       //application/json
+	Text          any                                       //text/xml
+	TempData      any                                       //临时变量
+	Bytes         []byte                                    //二进制内容
+	DisCookie     bool                                      //关闭cookies管理
+	DisDecode     bool                                      //关闭自动解码
+	Bar           bool                                      //是否开启bar
+	DisProxy      bool                                      //是否关闭代理
+	Ja3           bool                                      //是否开启ja3
+	TryNum        int64                                     //重试次数
+	CurTryNum     int64                                     //当前尝试次数
+	BeforCallBack func(*RequestOption)                      //请求之前回调
+	AfterCallBack func(*RequestOption, *Response) *Response //请求之后回调
+	RedirectNum   int                                       //重定向次数
+	DisAlive      bool                                      //关闭长连接
+	DisRead       bool                                      //关闭默认读取请求体
+	DisUnZip      bool                                      //变比自动解压
+	Err           error                                     //请求过程中的error
+	Http2         bool                                      //开启http2 transport
+	WsOption      websocket.ClientOption                    //websocket option
+	converUrl     string
+	contentType   string
 }
 
 func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reader, error) {
@@ -528,7 +528,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	var r *http.Response
 	var err2 error
 	if isWs {
-		if err = setWsHeaders(reqs.Header, &request_option); err != nil {
+		if err = websocket.SetClientHeaders(reqs.Header, &request_option.WsOption); err != nil {
 			return response, tools.WrapError(errFatal, err.Error())
 		}
 	}
@@ -546,7 +546,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			return response, err2
 		}
 		if isWs && r.StatusCode == 101 {
-			if response.webSocketConn, err2 = newWsConn(r, &request_option); err2 != nil { //创建 websocket
+			if response.webSocket, err2 = websocket.NewClientConn(r, &request_option.WsOption); err2 != nil { //创建 websocket
 				return response, err2
 			}
 		}
