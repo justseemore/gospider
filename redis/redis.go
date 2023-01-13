@@ -118,15 +118,20 @@ func (r *Client) Close() error {
 	return r.object.Close()
 }
 
-// 随机获取代理
+// 获取最新代理
 func (r *Client) GetProxy(key string) (string, error) {
 	vals, err := r.GetProxys(key)
 	if err != nil {
 		return "", err
 	}
-	valLen := len(vals)
-	if valLen == 0 {
-		return "", errors.New("proxy enpty")
+	return vals[0], nil
+}
+
+// 获取最新代理
+func (r *Client) GetProxyData(key string) (Proxy, error) {
+	vals, err := r.GetProxyDatas(key)
+	if err != nil {
+		return Proxy{}, err
 	}
 	return vals[0], nil
 }
@@ -137,20 +142,33 @@ func (r *Client) GetOrderProxy(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	valLen := len(vals)
-	if valLen == 0 {
-		return "", errors.New("proxy enpty")
-	}
 	return vals[0], nil
 }
 
-type proxy struct {
-	ip  string
-	ttl int64
+type Proxy struct {
+	Ip    string
+	Port  int64
+	Ttl   int64
+	Usr   string
+	Pwd   string
+	Proxy string
 }
 
 // 获取所有代理
 func (r *Client) GetProxys(key string) ([]string, error) {
+	proxys, err := r.GetProxyDatas(key)
+	if err != nil {
+		return nil, err
+	}
+	results := []string{}
+	for _, proxy := range proxys {
+		results = append(results, proxy.Proxy)
+	}
+	return results, nil
+}
+
+// 获取所有代理
+func (r *Client) GetProxyDatas(key string) ([]Proxy, error) {
 	vals, err := r.HVals(key)
 	if err != nil {
 		return nil, err
@@ -159,44 +177,33 @@ func (r *Client) GetProxys(key string) ([]string, error) {
 	if valLen == 0 {
 		return nil, errors.New("代理为空")
 	}
-	proxys := []proxy{}
+	proxys := []Proxy{}
 	for _, jsonStr := range vals {
 		val := tools.Any2json(jsonStr)
-		var ip, usr, pwd string
-		var port int64
-		if ip = val.Get("ip").String(); ip == "" {
+		var proxy Proxy
+		proxy.Ip = val.Get("ip").String()
+		if proxy.Ip = val.Get("ip").String(); proxy.Ip == "" {
 			continue
 		}
-		if port = val.Get("port").Int(); port == 0 {
+		if proxy.Port = val.Get("port").Int(); proxy.Port == 0 {
 			continue
 		}
-		usr = val.Get("usr").String()
-		pwd = val.Get("pwd").String()
-		ttl := val.Get("ttl").Int()
-		if usr != "" && pwd != "" {
-			proxys = append(proxys,
-				proxy{
-					ip:  fmt.Sprintf("%s:%s@%s:%d", usr, pwd, ip, port),
-					ttl: ttl,
-				},
-			)
+
+		proxy.Usr = val.Get("usr").String()
+		proxy.Pwd = val.Get("pwd").String()
+		proxy.Ttl = val.Get("ttl").Int()
+
+		if proxy.Usr != "" && proxy.Pwd != "" {
+			proxy.Proxy = fmt.Sprintf("%s:%s@%s:%d", proxy.Usr, proxy.Pwd, proxy.Ip, proxy.Port)
 		} else {
-			proxys = append(proxys,
-				proxy{
-					ip:  fmt.Sprintf("%s:%d", ip, port),
-					ttl: ttl,
-				},
-			)
+			proxy.Proxy = fmt.Sprintf("%s:%d", proxy.Ip, proxy.Port)
 		}
+		proxys = append(proxys, proxy)
 	}
 	sort.Slice(proxys, func(i, j int) bool {
-		return proxys[i].ttl > proxys[j].ttl
+		return proxys[i].Ttl > proxys[j].Ttl
 	})
-	results := []string{}
-	for _, proxy := range proxys {
-		results = append(results, proxy.ip)
-	}
-	return results, nil
+	return proxys, nil
 }
 
 // 获取所有代理,排序后的

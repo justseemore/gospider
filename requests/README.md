@@ -47,7 +47,7 @@ import (
 	"log"
 
 	"gitee.com/baixudong/gospider/requests"
-	"nhooyr.io/websocket"
+	"gitee.com/baixudong/gospider/websocket"
 )
 
 func main() {
@@ -62,10 +62,11 @@ func main() {
 		log.Panic(err)
 	}
 	defer response.Close()
-	if err = response.WsWrite(context.TODO(), websocket.MessageText, []byte("测试")); err != nil { //发送txt 消息
+	wsCli := response.WebSocket()
+	if err = wsCli.WriteMsg(context.TODO(), websocket.MessageText, []byte("测试")); err != nil { //发送txt 消息
 		log.Panic(err)
 	}
-	msgType, con, err := response.WsRead(context.TODO()) //接收消息
+	msgType, con, err := wsCli.ReadMsg(context.TODO()) //接收消息
 	if err != nil {
 		log.Panic(err)
 	}
