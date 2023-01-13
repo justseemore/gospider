@@ -137,9 +137,9 @@ func NewClientConn(resp *http.Response, option *Option) (*Conn, error) {
 	}, nil
 }
 
-func NewServerConn(w http.ResponseWriter, r *http.Request, opts *Option) (_ *Conn, err error) {
-	if opts == nil {
-		opts = &Option{}
+func NewServerConn(w http.ResponseWriter, r *http.Request, option *Option) (_ *Conn, err error) {
+	if option == nil {
+		option = &Option{}
 	}
 	hj, ok := w.(http.Hijacker)
 	if !ok {
@@ -152,16 +152,13 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, opts *Option) (_ *Con
 	key := r.Header.Get("Sec-WebSocket-Key")
 	w.Header().Set("Sec-WebSocket-Accept", secWebSocketAccept(key))
 
-	subproto := selectSubprotocol(r, opts.Subprotocols)
+	subproto := selectSubprotocol(r, option.Subprotocols)
 	if subproto != "" {
 		w.Header().Set("Sec-WebSocket-Protocol", subproto)
 	}
-
-	if opts.CompressionOptions == nil {
-		opts.CompressionOptions, err = acceptCompression(r, w, opts.CompressionMode)
-		if err != nil {
-			return nil, err
-		}
+	option.CompressionOptions, err = acceptCompression(r, w, option.CompressionMode)
+	if err != nil {
+		return nil, err
 	}
 	w.WriteHeader(http.StatusSwitchingProtocols)
 	// See https://github.com/nhooyr/websocket/issues/166
@@ -182,13 +179,13 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, opts *Option) (_ *Con
 
 	return &Conn{
 		rwc:    netConn,
-		option: opts,
+		option: option,
 		conn: newConn(connConfig{
 			subprotocol:    w.Header().Get("Sec-WebSocket-Protocol"),
 			rwc:            netConn,
 			client:         false,
-			copts:          opts.CompressionOptions,
-			flateThreshold: opts.CompressionThreshold,
+			copts:          option.CompressionOptions,
+			flateThreshold: option.CompressionThreshold,
 
 			br: brw.Reader,
 			bw: brw.Writer,
