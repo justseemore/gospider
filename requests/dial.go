@@ -158,7 +158,7 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 			if err != nil {
 				return rawConn, err
 			}
-			if reqData.proxyUser != nil && reqData.url.Scheme == "http" {
+			if reqData.proxyUser != nil && reqData.proxy.Scheme == "http" && reqData.url.Scheme == "http" {
 				if password, ok := reqData.proxyUser.Password(); ok {
 					return &httpConn{
 						rawConn:            rawConn,
