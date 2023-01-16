@@ -526,7 +526,7 @@ func (obj *Client) init() error {
 		return err
 	}
 	obj.proxyCli.DisVerify = true
-	obj.proxyCli.TcpAddr = fmt.Sprintf("%s:%d", obj.host, obj.port)
+	obj.proxyCli.Proxy = fmt.Sprintf("http://%s:%d", obj.host, obj.port)
 	go obj.proxyCli.Run()
 	return obj.proxyCli.Err
 }

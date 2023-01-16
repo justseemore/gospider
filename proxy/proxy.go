@@ -62,7 +62,6 @@ type Client struct {
 	Debug     bool                   //是否打印debug
 	Err       error                  //错误
 	DisVerify bool                   //关闭验证
-	TcpAddr   string                 //原始tcp 转发
 	dialer    *netDial               //连接的Dialer
 	listener  net.Listener           //Listener 服务
 	basic     string
@@ -180,35 +179,6 @@ func (obj *Client) verifyPwd(client net.Conn, clientReq *http.Request) error {
 	}
 	return nil
 }
-func (obj *Client) parseServerAddr(clientReq *http.Request) error {
-	if clientReq.URL.Hostname() == "" {
-		if clientReq.Host != "" {
-			clientReq.URL.Host = clientReq.Host
-		}
-	}
-	if clientReq.URL.Port() == "" {
-		if clientReq.Method == http.MethodConnect {
-			clientReq.URL.Host = clientReq.URL.Hostname() + ":" + "443"
-		}
-		clientReq.URL.Host = clientReq.URL.Hostname() + ":" + "80"
-	}
-	if strings.HasPrefix(clientReq.Host, "127.0.0.1") || strings.HasPrefix(clientReq.Host, "localhost") {
-		return errors.New("loop addr error")
-	}
-	return nil
-}
-func (obj *Client) clearClientReq(clientReq *http.Request, ipUrl *url.URL) {
-	for key := range clientReq.Header {
-		if strings.HasPrefix(key, "Proxy-") {
-			clientReq.Header.Del(key)
-		}
-	}
-	if ipUrl != nil && ipUrl.User != nil { //添加代理密码
-		if _, ok := ipUrl.User.Password(); ok {
-			clientReq.Header.Set("Proxy-Authorization", "Basic "+tools.Base64Encode(ipUrl.User.String()))
-		}
-	}
-}
 func (obj *Client) getHttpProxyConn(ctx context.Context, ipUrl *url.URL) (net.Conn, error) {
 	return obj.dialer.DialContext(ctx, "tcp", net.JoinHostPort(ipUrl.Hostname(), ipUrl.Port()))
 }
@@ -218,9 +188,6 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) error {
 		return errors.New("client is nil")
 	}
 	defer client.Close()
-	if obj.TcpAddr != "" {
-		return obj.tcpHandle(ctx, client)
-	}
 	if !obj.verify && !obj.whiteVerify(client) {
 		return errors.New("auth verify false")
 	}
@@ -246,10 +213,44 @@ func (obj *Client) verifyProxy(ip_addr string) (*url.URL, error) {
 	}
 	return ipUrl, err
 }
+
+func readRequest(b *bufio.Reader) (*http.Request, bool, error) {
+	clientReq, err := http.ReadRequest(b)
+	if err != nil {
+		return clientReq, false, err
+	}
+	if clientReq.URL.Hostname() == "" {
+		clientReq.URL.Host = clientReq.Host
+	}
+	if clientReq.URL.Port() == "" {
+		if clientReq.Method == http.MethodConnect {
+			clientReq.URL.Host = clientReq.URL.Hostname() + ":" + "443"
+		} else {
+			clientReq.URL.Host = clientReq.URL.Hostname() + ":" + "80"
+		}
+	}
+	if strings.HasPrefix(clientReq.Host, "127.0.0.1") || strings.HasPrefix(clientReq.Host, "localhost") {
+		return clientReq, false, errors.New("loop addr error")
+	}
+	return clientReq, clientReq.Header.Get("Upgrade") == "websocket", err
+}
+func writeRequest(clientReq *http.Request, w io.Writer, ipUrl *url.URL) error {
+	for key := range clientReq.Header {
+		if strings.HasPrefix(key, "Proxy-") {
+			clientReq.Header.Del(key)
+		}
+	}
+	if ipUrl != nil && ipUrl.User != nil { //添加代理密码
+		if _, ok := ipUrl.User.Password(); ok {
+			clientReq.Header.Set("Proxy-Authorization", "Basic "+tools.Base64Encode(ipUrl.User.String()))
+		}
+	}
+	return clientReq.Write(w)
+}
 func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader *bufio.Reader) error {
 	defer client.Close()
 	var err error
-	clientReq, err := http.ReadRequest(clientReader)
+	clientReq, isWebsocket, err := readRequest(clientReader)
 	if err != nil {
 		return err
 	}
@@ -265,9 +266,6 @@ func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader
 	} else if obj.Proxy != "" {
 		ip_addr = obj.Proxy
 	}
-	if err = obj.parseServerAddr(clientReq); err != nil {
-		return err
-	}
 	var server net.Conn
 	if ip_addr == "" { //使用本地转发的逻辑
 		if server, err = obj.dialer.DialContext(ctx, "tcp", net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
@@ -279,8 +277,7 @@ func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader
 				return err
 			}
 		} else {
-			obj.clearClientReq(clientReq, nil)
-			if err = clientReq.Write(server); err != nil {
+			if err = writeRequest(clientReq, server, nil); err != nil {
 				return err
 			}
 		}
@@ -295,8 +292,7 @@ func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader
 				return err
 			}
 			defer server.Close()
-			obj.clearClientReq(clientReq, ipUrl)
-			if err = clientReq.Write(server); err != nil {
+			if err = writeRequest(clientReq, server, ipUrl); err != nil {
 				return err
 			}
 		case "socks5":
@@ -313,8 +309,7 @@ func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader
 					return err
 				}
 			} else {
-				obj.clearClientReq(clientReq, nil)
-				if err = clientReq.Write(server); err != nil {
+				if err = writeRequest(clientReq, server, nil); err != nil {
 					return err
 				}
 			}
@@ -327,13 +322,12 @@ func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader
 		defer client.Close()
 		io.Copy(client, server)
 	}()
-	if clientReq.Method != http.MethodConnect {
+	if clientReq.Method != http.MethodConnect && !isWebsocket {
 		for {
-			if clientReq, err = http.ReadRequest(clientReader); err != nil {
+			if clientReq, _, err = readRequest(clientReader); err != nil {
 				return err
 			}
-			obj.clearClientReq(clientReq, nil)
-			if err = clientReq.Write(server); err != nil {
+			if err = writeRequest(clientReq, server, nil); err != nil {
 				return err
 			}
 		}
@@ -341,22 +335,6 @@ func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader
 	_, err = io.Copy(server, client) //客户端发送服务端
 	return err
 }
-
-func (obj *Client) tcpHandle(ctx context.Context, client net.Conn) error {
-	defer client.Close()
-	server, err := obj.dialer.DialContext(ctx, "tcp", obj.TcpAddr)
-	if err != nil {
-		return err
-	}
-	go func() { //服务端到客户端
-		defer server.Close()
-		defer client.Close()
-		io.Copy(client, server)
-	}()
-	_, err = io.Copy(server, client) //客户端发送服务端
-	return err
-}
-
 func (obj *Client) getSocketAddr(clientReader *bufio.Reader) (string, error) {
 	buf := make([]byte, 4)
 	addr := ""
@@ -502,12 +480,11 @@ func (obj *Client) sockes5Handle(ctx context.Context, client net.Conn, clientRea
 					return err
 				}
 			} else {
-				clientReq, err := http.ReadRequest(clientReader)
+				clientReq, _, err := readRequest(clientReader)
 				if err != nil {
 					return err
 				}
-				obj.clearClientReq(clientReq, ipUrl)
-				if err = clientReq.Write(server); err != nil {
+				if err = writeRequest(clientReq, server, ipUrl); err != nil {
 					return err
 				}
 			}
