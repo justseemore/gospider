@@ -30,7 +30,22 @@ type msgClient struct {
 	time int64
 	addr string
 }
+type proxyDialer interface {
+	DialContext(context.Context, string, string) (net.Conn, error)
+	Dial(network, addr string) (c net.Conn, err error)
+}
 
+func ProxyFromUrl(u *url.URL, forward proxy.Dialer) (proxyDialer, error) {
+	dial, err := proxy.FromURL(u, forward)
+	if err != nil {
+		return nil, err
+	}
+	dialer, ok := dial.(proxyDialer)
+	if !ok {
+		return dialer, errors.New("proxyDialer 转换失败")
+	}
+	return dialer, nil
+}
 func newDail(ctx context.Context, session_option ClientOption) (*dialClient, error) {
 	var err error
 	dialCli := &dialClient{
@@ -83,11 +98,11 @@ func (obj *dialClient) addrToIp(addr string) string {
 }
 
 func (obj *dialClient) getSocksProxyConn(ctx context.Context, proxyData *url.URL, addr string) (net.Conn, error) {
-	dial, err := proxy.FromURL(proxyData, obj.dialer)
+	dial, err := ProxyFromUrl(proxyData, obj.dialer)
 	if err != nil {
 		return nil, err
 	}
-	return dial.Dial("tcp", addr)
+	return dial.DialContext(ctx, "tcp", addr)
 }
 func (obj *dialClient) getHttpProxyConn(ctx context.Context, proxyData *url.URL) (net.Conn, error) {
 	rawConn, err := obj.getHttpConn(ctx, proxyData)

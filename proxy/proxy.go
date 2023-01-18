@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,7 +18,6 @@ import (
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/thread"
 	"gitee.com/baixudong/gospider/tools"
-	netProxy "golang.org/x/net/proxy"
 )
 
 func MergeProxy(ctx context.Context, getProxy func() (string, error)) (*Client, error) {
@@ -247,13 +247,18 @@ func writeRequest(clientReq *http.Request, w io.Writer, ipUrl *url.URL) error {
 	}
 	return clientReq.Write(w)
 }
+
 func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader *bufio.Reader) error {
 	defer client.Close()
 	var err error
 	clientReq, isWebsocket, err := readRequest(clientReader)
 	if err != nil {
+		log.Print(err)
 		return err
 	}
+	log.Print("成功", clientReq.Method)
+	log.Print("成功", clientReq.URL.Hostname())
+	log.Print("成功", clientReq.URL.Port())
 	if err = obj.verifyPwd(client, clientReq); err != nil {
 		return err
 	}
@@ -296,11 +301,11 @@ func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader
 				return err
 			}
 		case "socks5":
-			tempDial, err := netProxy.FromURL(ipUrl, obj.dialer)
+			tempDial, err := requests.ProxyFromUrl(ipUrl, obj.dialer)
 			if err != nil {
 				return err
 			}
-			if server, err = tempDial.Dial("tcp", net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
+			if server, err = tempDial.DialContext(ctx, "tcp", net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
 				return err
 			}
 			defer server.Close()
@@ -489,11 +494,11 @@ func (obj *Client) sockes5Handle(ctx context.Context, client net.Conn, clientRea
 				}
 			}
 		case "socks5":
-			tempDial, err := netProxy.FromURL(ipUrl, obj.dialer)
+			tempDial, err := requests.ProxyFromUrl(ipUrl, obj.dialer)
 			if err != nil {
 				return err
 			}
-			if server, err = tempDial.Dial("tcp", serverAddr); err != nil { //获取服务连接
+			if server, err = tempDial.DialContext(ctx, "tcp", serverAddr); err != nil { //获取服务连接
 				return err
 			}
 			defer server.Close()
