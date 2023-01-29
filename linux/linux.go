@@ -178,7 +178,7 @@ func (obj *Client) NewScreen(preCtx context.Context, name string, waitTimes ...i
 		ctx:      ctx,
 		cnl:      cnl,
 	}
-	if !screen.reg(tools.BytesToString(screen.bytes())) {
+	if !screen.hasPrefix(tools.BytesToString(screen.bytes())) {
 		return nil, errors.New("打开 linux 失败")
 	}
 	cmd := []byte(fmt.Sprintf("screen -x %s\n", name))
@@ -194,15 +194,8 @@ func (obj *Client) NewScreen(preCtx context.Context, name string, waitTimes ...i
 	}
 	return screen, nil
 }
-func (obj *Screen) reg(txt string) bool { //是否匹配到命令行前缀
-	res := re.Search(`[$#](.*)$`, txt)
-	if res == nil {
-		return false
-	}
-	if res.Group(1)[0] == 32 {
-		return true
-	}
-	return false
+func (obj *Screen) hasPrefix(txt string) bool { //是否匹配到命令行前缀
+	return re.Search(`\[.+?\][$#]\s`, txt) != nil
 }
 func (obj *Screen) bytes() []byte {
 	var allCon []byte
@@ -217,8 +210,7 @@ func (obj *Screen) bytes() []byte {
 			}
 		case <-time.After(time.Second * time.Duration(obj.waitTime)):
 			lastLine := re.Search(`\n[^\n]*?$`, tools.BytesToString(allCon))
-
-			if lastLine != nil && !obj.reg(lastLine.Group()) {
+			if lastLine != nil && !obj.hasPrefix(lastLine.Group()) {
 				obj.IsRun = true
 			} else {
 				obj.IsRun = false
