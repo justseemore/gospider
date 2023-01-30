@@ -301,6 +301,7 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 	if reqData.url == nil {
 		return nil, tools.WrapError(errFatal, "not found reqData.url")
 	}
+	var nowProxy *url.URL
 	if reqData.disProxy {
 		return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 	} else if reqData.proxy != nil {
@@ -318,28 +319,30 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 				}
 			}
 			return rawConn, err
+		} else {
+			nowProxy = reqData.proxy
 		}
 	} else if obj.getProxy != nil {
 		proxyUrl, err := obj.getProxy(ctx, reqData.url)
 		if err != nil {
 			return nil, err
 		}
-		if reqData.proxy, err = verifyProxy(proxyUrl); err != nil {
+		if nowProxy, err = verifyProxy(proxyUrl); err != nil {
 			return nil, err
 		}
 	} else if obj.proxy != nil {
-		reqData.proxy = obj.proxy
+		nowProxy = obj.proxy
 	}
-	if reqData.proxy != nil {
-		switch reqData.proxy.Scheme {
+	if nowProxy != nil {
+		switch nowProxy.Scheme {
 		case "socks5":
-			return GetSocks5ProxyConn(ctx, obj.dialer, reqData.proxy, obj.addrToIp(addr))
+			return GetSocks5ProxyConn(ctx, obj.dialer, nowProxy, obj.addrToIp(addr))
 		case "http":
 			switch reqData.url.Scheme {
 			case "http":
-				return GetHttpProxyConn(ctx, obj.dialer, reqData.proxy)
+				return GetHttpProxyConn(ctx, obj.dialer, nowProxy)
 			case "https":
-				return GetHttpsProxyConn(ctx, obj.dialer, reqData.proxy, obj.addrToIp(addr), addr)
+				return GetHttpsProxyConn(ctx, obj.dialer, nowProxy, obj.addrToIp(addr), addr)
 			default:
 				return nil, tools.WrapError(errFatal, "target url scheme error")
 			}
