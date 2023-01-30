@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,7 +16,6 @@ import (
 
 	"gitee.com/baixudong/gospider/tools"
 	utls "github.com/refraction-networking/utls"
-	"golang.org/x/net/proxy"
 )
 
 type dialClient struct {
@@ -28,24 +28,9 @@ type dialClient struct {
 }
 type msgClient struct {
 	time int64
-	addr string
-}
-type proxyDialer interface {
-	DialContext(context.Context, string, string) (net.Conn, error)
-	Dial(network, addr string) (c net.Conn, err error)
+	host string
 }
 
-func ProxyFromUrl(u *url.URL, forward proxy.Dialer) (proxyDialer, error) {
-	dial, err := proxy.FromURL(u, forward)
-	if err != nil {
-		return nil, err
-	}
-	dialer, ok := dial.(proxyDialer)
-	if !ok {
-		return dialer, errors.New("proxyDialer 转换失败")
-	}
-	return dialer, nil
-}
 func newDail(ctx context.Context, session_option ClientOption) (*dialClient, error) {
 	var err error
 	dialCli := &dialClient{
@@ -75,52 +60,203 @@ func newDail(ctx context.Context, session_option ClientOption) (*dialClient, err
 func (obj *dialClient) setIpData(addr string, msgData msgClient) {
 	obj.dnsIpData.Store(addr, msgData)
 }
+
 func (obj *dialClient) addrToIp(addr string) string {
-	msgdataAny, ok := obj.dnsIpData.Load(addr)
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	host, ok := obj.loadHost(host)
+	if !ok {
+		names, err := net.LookupIP(host)
+		if err != nil || len(names) == 0 {
+			return addr
+		}
+		host = names[0].String()
+		obj.setIpData(addr, msgClient{time: time.Now().Unix(), host: host})
+	}
+	if tools.IsIpv6(host) {
+		return fmt.Sprintf("[%s]:%s", host, port)
+	}
+	return fmt.Sprintf("%s:%s", host, port)
+}
+
+func (obj *dialClient) loadHost(host string) (string, bool) {
+	msgdataAny, ok := obj.dnsIpData.Load(host)
 	if ok {
 		msgdata := msgdataAny.(msgClient)
 		if time.Now().Unix()-msgdata.time < obj.dnsTimeout {
-			return msgdata.addr
+			return msgdata.host, true
 		}
 	}
-	host, port, err := net.SplitHostPort(addr)
-	if err == nil {
-		names, err := net.LookupIP(host)
-		if err == nil && len(names) != 0 {
-			addr = fmt.Sprintf("[%s]:%s", names[0].String(), port)
-			obj.setIpData(addr, msgClient{
-				time: time.Now().Unix(),
-				addr: addr,
-			})
-		}
-	}
-	return addr
+	return host, false
 }
 
-func (obj *dialClient) getSocksProxyConn(ctx context.Context, proxyData *url.URL, addr string) (net.Conn, error) {
-	dial, err := ProxyFromUrl(proxyData, obj.dialer)
-	if err != nil {
-		return nil, err
-	}
-	return dial.DialContext(ctx, "tcp", addr)
+type proxyDialer interface {
+	DialContext(context.Context, string, string) (net.Conn, error)
 }
-func (obj *dialClient) getHttpProxyConn(ctx context.Context, proxyData *url.URL) (net.Conn, error) {
-	rawConn, err := obj.getHttpConn(ctx, proxyData)
+
+func GetSocks5ProxyConn(ctx context.Context, dialer proxyDialer, proxyData *url.URL, addr string) (conn net.Conn, err error) {
+	defer func() {
+		if err != nil && conn != nil {
+			conn.Close()
+		}
+	}()
+	if conn, err = dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%s", proxyData.Hostname(), proxyData.Port())); err != nil {
+		return
+	}
+	if _, err = conn.Write([]byte{5, 2, 0, 2}); err != nil {
+		return
+	}
+	readCon := make([]byte, 4)
+	if _, err = io.ReadFull(conn, readCon[:2]); err != nil {
+		return
+	}
+	switch readCon[1] {
+	case 2:
+		if proxyData.User == nil {
+			err = errors.New("需要验证")
+			return
+		}
+		pwd, pwdOk := proxyData.User.Password()
+		if !pwdOk {
+			err = errors.New("密码格式不对")
+			return
+		}
+		usr := proxyData.User.Username()
+
+		if usr == "" {
+			err = errors.New("用户名格式不对")
+			return
+		}
+		if _, err = conn.Write(append(
+			append(
+				[]byte{1, byte(len(usr))},
+				tools.StringToBytes(usr)...,
+			),
+			append(
+				[]byte{byte(len(pwd))},
+				tools.StringToBytes(pwd)...,
+			)...,
+		)); err != nil {
+			return
+		}
+		if _, err = io.ReadFull(conn, readCon[:2]); err != nil {
+			return
+		}
+		switch readCon[1] {
+		case 0:
+		default:
+			err = errors.New("验证失败")
+			return
+		}
+	case 0:
+	default:
+		err = errors.New("不支持的验证方式")
+		return
+	}
+	var host string
+	var port int
+	if host, port, err = tools.SplitHostPort(addr); err != nil {
+		return
+	}
+	writeCon := []byte{5, 1, 0}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip4 := ip.To4(); ip4 != nil {
+			writeCon = append(writeCon, 1)
+			writeCon = append(writeCon, ip4...)
+		} else if ip6 := ip.To16(); ip6 != nil {
+			writeCon = append(writeCon, 4)
+			writeCon = append(writeCon, ip6...)
+		} else {
+			err = errors.New("unknown address type")
+			return
+		}
+	} else {
+		if len(host) > 255 {
+			err = errors.New("FQDN too long")
+			return
+		}
+		writeCon = append(writeCon, 3)
+		writeCon = append(writeCon, byte(len(host)))
+		writeCon = append(writeCon, host...)
+	}
+	writeCon = append(writeCon, byte(port>>8), byte(port))
+	if _, err = conn.Write(writeCon); err != nil {
+		return
+	}
+	if _, err = io.ReadFull(conn, readCon); err != nil {
+		return
+	}
+	if readCon[0] != 5 {
+		err = errors.New("版本不对")
+		return
+	}
+	if readCon[1] != 0 {
+		err = errors.New("连接失败")
+		return
+	}
+	if readCon[3] != 1 {
+		err = errors.New("连接类型不一致")
+		return
+	}
+
+	switch readCon[3] {
+	case 1: //ipv4地址
+		if _, err = io.ReadFull(conn, readCon); err != nil {
+			return
+		}
+	case 3: //域名
+		if _, err = io.ReadFull(conn, readCon[:1]); err != nil { //域名的长度
+			return
+		}
+		if _, err = io.ReadFull(conn, make([]byte, readCon[0])); err != nil {
+			return
+		}
+	case 4: //IPv6地址
+		if _, err = io.ReadFull(conn, make([]byte, 16)); err != nil {
+			return
+		}
+	default:
+		err = errors.New("invalid atyp")
+		return
+	}
+	_, err = io.ReadFull(conn, readCon[:2])
+	return
+}
+func GetHttpProxyConn(ctx context.Context, dialer *net.Dialer, proxyData *url.URL) (conn net.Conn, err error) {
+	defer func() {
+		if err != nil && conn != nil {
+			conn.Close()
+		}
+	}()
+	conn, err = getHttpConn(ctx, dialer, proxyData)
 	if proxyData.User != nil {
 		if password, ok := proxyData.User.Password(); ok {
 			return &httpConn{
-				rawConn:            rawConn,
+				rawConn:            conn,
 				proxyAuthorization: tools.Base64Encode(proxyData.User.Username() + ":" + password),
 			}, err
 		}
 	}
-	return rawConn, err
+	return
 }
-func (obj *dialClient) getHttpConn(ctx context.Context, proxyData *url.URL) (net.Conn, error) {
-	return obj.dialer.DialContext(ctx, "tcp", net.JoinHostPort(proxyData.Hostname(), proxyData.Port()))
+func GetHttpsProxyConn(ctx context.Context, dialer *net.Dialer, proxyData *url.URL, addr string, host string) (conn net.Conn, err error) {
+	defer func() {
+		if err != nil && conn != nil {
+			conn.Close()
+		}
+	}()
+	if conn, err = getHttpConn(ctx, dialer, proxyData); err != nil {
+		return
+	}
+	err = Http2httpsConn(ctx, proxyData, addr, host, conn)
+	return
 }
-func Http2httpsConn(ctx context.Context, proxyData *url.URL, addr string, host string, conn net.Conn) error {
-	var err error
+func getHttpConn(ctx context.Context, dialer *net.Dialer, proxyData *url.URL) (net.Conn, error) {
+	return dialer.DialContext(ctx, "tcp", net.JoinHostPort(proxyData.Hostname(), proxyData.Port()))
+}
+func Http2httpsConn(ctx context.Context, proxyData *url.URL, addr string, host string, conn net.Conn) (err error) {
 	hdr := make(http.Header)
 	hdr.Set("User-Agent", UserAgent)
 	if proxyData.User != nil {
@@ -149,7 +285,7 @@ func Http2httpsConn(ctx context.Context, proxyData *url.URL, addr string, host s
 	case <-didReadResponse:
 	}
 	if err != nil {
-		return err
+		return
 	}
 	if resp.StatusCode != 200 {
 		_, text, ok := strings.Cut(resp.Status, " ")
@@ -158,7 +294,7 @@ func Http2httpsConn(ctx context.Context, proxyData *url.URL, addr string, host s
 		}
 		return errors.New(text)
 	}
-	return nil
+	return
 }
 func (obj *dialClient) dialContext(ctx context.Context, network string, addr string) (net.Conn, error) {
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
@@ -197,20 +333,13 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 	if reqData.proxy != nil {
 		switch reqData.proxy.Scheme {
 		case "socks5":
-			return obj.getSocksProxyConn(ctx, reqData.proxy, obj.addrToIp(addr))
+			return GetSocks5ProxyConn(ctx, obj.dialer, reqData.proxy, obj.addrToIp(addr))
 		case "http":
 			switch reqData.url.Scheme {
 			case "http":
-				return obj.getHttpProxyConn(ctx, reqData.proxy)
+				return GetHttpProxyConn(ctx, obj.dialer, reqData.proxy)
 			case "https":
-				conn, err := obj.getHttpConn(ctx, reqData.proxy)
-				if err != nil {
-					return conn, err
-				}
-				if err = Http2httpsConn(ctx, reqData.proxy, obj.addrToIp(addr), addr, conn); err != nil {
-					conn.Close()
-				}
-				return conn, err
+				return GetHttpsProxyConn(ctx, obj.dialer, reqData.proxy, obj.addrToIp(addr), addr)
 			default:
 				return nil, tools.WrapError(errFatal, "target url scheme error")
 			}

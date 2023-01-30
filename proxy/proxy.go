@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -19,22 +20,6 @@ import (
 	"gitee.com/baixudong/gospider/thread"
 	"gitee.com/baixudong/gospider/tools"
 )
-
-func MergeProxy(ctx context.Context, getProxy func() (string, error)) (*Client, error) {
-	if getProxy == nil {
-		return nil, errors.New("not found get Proxy for mergeProxy")
-	}
-	var err error
-	proxyCli, err := NewClient(ctx, ClientOption{
-		Host: "127.0.0.1",
-	})
-	if err != nil {
-		return proxyCli, err
-	}
-	proxyCli.GetProxy = getProxy
-	go proxyCli.Run()
-	return proxyCli, proxyCli.Err
-}
 
 type ClientOption struct {
 	Usr       string      //用户名
@@ -62,15 +47,16 @@ type Client struct {
 	Debug     bool                   //是否打印debug
 	Err       error                  //错误
 	DisVerify bool                   //关闭验证
-	dialer    *netDial               //连接的Dialer
-	listener  net.Listener           //Listener 服务
-	basic     string
-	usr       string
-	pwd       string
-	verify    bool
-	ipWhite   *kinds.Set[string]
-	ctx       context.Context
-	cnl       context.CancelFunc
+
+	dialer   *netDial     //连接的Dialer
+	listener net.Listener //Listener 服务
+	basic    string
+	usr      string
+	pwd      string
+	verify   bool
+	ipWhite  *kinds.Set[string]
+	ctx      context.Context
+	cnl      context.CancelFunc
 }
 
 func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error) {
@@ -247,7 +233,6 @@ func writeRequest(clientReq *http.Request, w io.Writer, ipUrl *url.URL) error {
 	}
 	return clientReq.Write(w)
 }
-
 func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader *bufio.Reader) error {
 	defer client.Close()
 	var err error
@@ -301,11 +286,7 @@ func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader
 				return err
 			}
 		case "socks5":
-			tempDial, err := requests.ProxyFromUrl(ipUrl, obj.dialer)
-			if err != nil {
-				return err
-			}
-			if server, err = tempDial.DialContext(ctx, "tcp", net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
+			if server, err = requests.GetSocks5ProxyConn(ctx, obj.dialer, ipUrl, net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
 				return err
 			}
 			defer server.Close()
@@ -343,7 +324,7 @@ func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader
 func (obj *Client) getSocketAddr(clientReader *bufio.Reader) (string, error) {
 	buf := make([]byte, 4)
 	addr := ""
-	_, err := io.ReadFull(clientReader, buf)
+	_, err := io.ReadFull(clientReader, buf) //读取版本号，CMD，RSV ，ATYP ，ADDR ，PORT
 	if err != nil {
 		return addr, fmt.Errorf("read header failed:%w", err)
 	}
@@ -355,13 +336,13 @@ func (obj *Client) getSocketAddr(clientReader *bufio.Reader) (string, error) {
 		return addr, fmt.Errorf("not supported cmd:%v", ver)
 	}
 	switch atyp {
-	case 1:
+	case 1: //ipv4地址
 		if _, err = io.ReadFull(clientReader, buf); err != nil {
 			return addr, fmt.Errorf("read atyp failed:%w", err)
 		}
 		addr = net.IPv4(buf[0], buf[1], buf[2], buf[3]).String()
-	case 3:
-		hostSize, err := clientReader.ReadByte()
+	case 3: //域名
+		hostSize, err := clientReader.ReadByte() //域名的长度
 		if err != nil {
 			return addr, fmt.Errorf("read hostSize failed:%w", err)
 		}
@@ -370,45 +351,49 @@ func (obj *Client) getSocketAddr(clientReader *bufio.Reader) (string, error) {
 			return addr, fmt.Errorf("read host failed:%w", err)
 		}
 		addr = tools.BytesToString(host)
-	case 4:
+	case 4: //IPv6地址
 		host := make([]byte, 16)
 		if _, err = io.ReadFull(clientReader, host); err != nil {
 			return addr, fmt.Errorf("read atyp failed:%w", err)
 		}
-		addr = net.IP{host[0], host[1], host[2], host[3], host[4], host[5], host[6], host[7], host[8], host[9], host[10], host[11], host[12], host[13], host[14], host[15]}.String()
+		addr = net.IP(host).String()
 	default:
 		return addr, errors.New("invalid atyp")
 	}
-	if _, err = io.ReadFull(clientReader, buf[:2]); err != nil {
+	if _, err = io.ReadFull(clientReader, buf[:2]); err != nil { //读取端口号
 		return addr, fmt.Errorf("read port failed:%w", err)
 	}
 	return fmt.Sprintf("%s:%d", addr, binary.BigEndian.Uint16(buf[:2])), nil
 }
 func (obj *Client) verifySocket(client net.Conn, clientReader *bufio.Reader) error {
-	ver, err := clientReader.ReadByte()
+	ver, err := clientReader.ReadByte() //读取第一个字节判断是否是socks5协议
 	if err != nil {
 		return fmt.Errorf("read ver failed:%w", err)
 	}
 	if ver != 5 {
 		return fmt.Errorf("not supported ver:%v", ver)
 	}
-	methodSize, err := clientReader.ReadByte()
+	methodSize, err := clientReader.ReadByte() //读取第二个字节,method 的长度，支持认证的方法数量
 	if err != nil {
 		return fmt.Errorf("read methodSize failed:%w", err)
 	}
-	if _, err = io.ReadFull(clientReader, make([]byte, methodSize)); err != nil {
+	methods := make([]byte, methodSize)
+	if _, err = io.ReadFull(clientReader, methods); err != nil { //读取method，支持认证的方法
 		return fmt.Errorf("read method failed:%w", err)
 	}
-	if obj.verify && !obj.whiteVerify(client) { //验证用户名密码
-		_, err = client.Write([]byte{5, 2})
+	if obj.verify && !obj.whiteVerify(client) { //开始验证用户名密码
+		if bytes.IndexByte(methods, 2) == -1 {
+			return errors.New("不支持用户名密码验证")
+		}
+		_, err = client.Write([]byte{5, 2}) //告诉客户端要进行用户名密码验证
 		if err != nil {
 			return err
 		}
-		okVar, err := clientReader.ReadByte()
+		okVar, err := clientReader.ReadByte() //获取版本，通常为0x01
 		if err != nil {
 			return err
 		}
-		Len, err := clientReader.ReadByte()
+		Len, err := clientReader.ReadByte() //获取用户名的长度
 		if err != nil {
 			return err
 		}
@@ -416,7 +401,7 @@ func (obj *Client) verifySocket(client net.Conn, clientReader *bufio.Reader) err
 		if _, err = io.ReadFull(clientReader, user); err != nil {
 			return err
 		}
-		if Len, err = clientReader.ReadByte(); err != nil {
+		if Len, err = clientReader.ReadByte(); err != nil { //获取密码的长度
 			return err
 		}
 		pass := make([]byte, Len)
@@ -494,11 +479,7 @@ func (obj *Client) sockes5Handle(ctx context.Context, client net.Conn, clientRea
 				}
 			}
 		case "socks5":
-			tempDial, err := requests.ProxyFromUrl(ipUrl, obj.dialer)
-			if err != nil {
-				return err
-			}
-			if server, err = tempDial.DialContext(ctx, "tcp", serverAddr); err != nil { //获取服务连接
+			if server, err = requests.GetSocks5ProxyConn(ctx, obj.dialer, ipUrl, serverAddr); err != nil { //获取服务连接
 				return err
 			}
 			defer server.Close()

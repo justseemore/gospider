@@ -25,6 +25,7 @@ import (
 	"reflect"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -713,4 +714,30 @@ func CopyWitchContext(preCtx context.Context, writer io.Writer, reader io.Reader
 			}
 		}
 	}
+}
+
+func IsIpv4(ip string) bool {
+	return net.ParseIP(ip).To4() != nil
+}
+func IsIpv6(ip string) bool {
+	hip := net.ParseIP(ip)
+	if hip.To4() != nil {
+		return false
+	}
+	return hip.To16() != nil
+}
+
+func SplitHostPort(address string) (string, int, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return "", 0, err
+	}
+	portnum, err := strconv.Atoi(port)
+	if err != nil {
+		return "", 0, err
+	}
+	if 1 > portnum || portnum > 0xffff {
+		return "", 0, errors.New("port number out of range " + port)
+	}
+	return host, portnum, nil
 }
