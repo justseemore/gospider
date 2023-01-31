@@ -301,7 +301,7 @@ func (obj *RequestOption) optionInit() error {
 		if err != nil {
 			return err
 		}
-		if pu.Query() == nil {
+		if pu.Query() == nil || len(pu.Query()) == 0 {
 			obj.converUrl = obj.Url + "?" + tools.BytesToString(con)
 		} else {
 			obj.converUrl = obj.Url + "&" + tools.BytesToString(con)
