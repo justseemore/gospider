@@ -37,8 +37,8 @@ func (obj *WebSock) FetchFulfillRequest(preCtx context.Context, requestId string
 	if fulData.Headers == nil {
 		fulData.Headers = []Header{}
 	}
-	if fulData.StatusCode == 0 {
-		fulData.StatusCode = 200
+	if fulData.ResponsePhrase == "" {
+		fulData.ResponsePhrase = "200 OK"
 	}
 	return obj.send(preCtx, commend{
 		Method: "Fetch.fulfillRequest",

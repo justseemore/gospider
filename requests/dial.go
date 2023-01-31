@@ -248,13 +248,13 @@ func GetHttpsProxyConn(ctx context.Context, dialer *net.Dialer, proxyData *url.U
 	if conn, err = getHttpConn(ctx, dialer, proxyData); err != nil {
 		return
 	}
-	err = Http2httpsConn(ctx, proxyData, addr, host, conn)
+	err = Http2HttpsConn(ctx, proxyData, addr, host, conn)
 	return
 }
 func getHttpConn(ctx context.Context, dialer *net.Dialer, proxyData *url.URL) (net.Conn, error) {
 	return dialer.DialContext(ctx, "tcp", net.JoinHostPort(proxyData.Hostname(), proxyData.Port()))
 }
-func Http2httpsConn(ctx context.Context, proxyData *url.URL, addr string, host string, conn net.Conn) (err error) {
+func Http2HttpsConn(ctx context.Context, proxyData *url.URL, addr string, host string, conn net.Conn) (err error) {
 	hdr := make(http.Header)
 	hdr.Set("User-Agent", UserAgent)
 	if proxyData.User != nil {
