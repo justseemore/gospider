@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -66,6 +65,10 @@ func (obj *dialClient) addrToIp(addr string) string {
 	if err != nil {
 		return addr
 	}
+	_, ipInt := tools.ParseIp(host)
+	if ipInt == 4 || ipInt == 6 {
+		return addr
+	}
 	host, ok := obj.loadHost(host)
 	if !ok {
 		names, err := net.LookupIP(host)
@@ -75,10 +78,7 @@ func (obj *dialClient) addrToIp(addr string) string {
 		host = names[0].String()
 		obj.setIpData(addr, msgClient{time: time.Now().Unix(), host: host})
 	}
-	if tools.IsIpv6(host) {
-		return fmt.Sprintf("[%s]:%s", host, port)
-	}
-	return fmt.Sprintf("%s:%s", host, port)
+	return net.JoinHostPort(host, port)
 }
 
 func (obj *dialClient) loadHost(host string) (string, bool) {
@@ -102,7 +102,8 @@ func GetSocks5ProxyConn(ctx context.Context, dialer proxyDialer, proxyData *url.
 			conn.Close()
 		}
 	}()
-	if conn, err = dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%s", proxyData.Hostname(), proxyData.Port())); err != nil {
+
+	if conn, err = dialer.DialContext(ctx, "tcp", net.JoinHostPort(proxyData.Hostname(), proxyData.Port())); err != nil {
 		return
 	}
 	if _, err = conn.Write([]byte{5, 2, 0, 2}); err != nil {
@@ -161,18 +162,15 @@ func GetSocks5ProxyConn(ctx context.Context, dialer proxyDialer, proxyData *url.
 		return
 	}
 	writeCon := []byte{5, 1, 0}
-	if ip := net.ParseIP(host); ip != nil {
-		if ip4 := ip.To4(); ip4 != nil {
-			writeCon = append(writeCon, 1)
-			writeCon = append(writeCon, ip4...)
-		} else if ip6 := ip.To16(); ip6 != nil {
-			writeCon = append(writeCon, 4)
-			writeCon = append(writeCon, ip6...)
-		} else {
-			err = errors.New("unknown address type")
-			return
-		}
-	} else {
+	ip, ipInt := tools.ParseIp(host)
+	switch ipInt {
+	case 4:
+		writeCon = append(writeCon, 1)
+		writeCon = append(writeCon, ip...)
+	case 6:
+		writeCon = append(writeCon, 4)
+		writeCon = append(writeCon, ip...)
+	case 0:
 		if len(host) > 255 {
 			err = errors.New("FQDN too long")
 			return
@@ -302,10 +300,10 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 		return nil, tools.WrapError(errFatal, "not found reqData.url")
 	}
 	var nowProxy *url.URL
-	if reqData.disProxy {
+	if reqData.disProxy { //关闭代理直接返回
 		return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
-	} else if reqData.proxy != nil {
-		if !reqData.ja3 && !reqData.h2 { //ja3 必须https 才能设置，http2 的transport 没有proxy 方法
+	} else if reqData.proxy != nil { //单独代理设置优先级最高
+		if !reqData.ja3 && !reqData.h2 { //ja3 必须https 才能设置所以不能走官方代理，http2 的transport 没有proxy 方法
 			rawConn, err := obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 			if err != nil {
 				return rawConn, err
@@ -319,21 +317,19 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 				}
 			}
 			return rawConn, err
-		} else {
+		} else { //走自实现代理
 			nowProxy = reqData.proxy
 		}
-	} else if obj.getProxy != nil {
-		proxyUrl, err := obj.getProxy(ctx, reqData.url)
-		if err != nil {
+	} else if obj.getProxy != nil { //走自实现代理
+		if proxyUrl, err := obj.getProxy(ctx, reqData.url); err != nil {
+			return nil, err
+		} else if nowProxy, err = verifyProxy(proxyUrl); err != nil {
 			return nil, err
 		}
-		if nowProxy, err = verifyProxy(proxyUrl); err != nil {
-			return nil, err
-		}
-	} else if obj.proxy != nil {
+	} else if obj.proxy != nil { //走自实现代理
 		nowProxy = obj.proxy
 	}
-	if nowProxy != nil {
+	if nowProxy != nil { //走自实现代理
 		switch nowProxy.Scheme {
 		case "socks5":
 			return GetSocks5ProxyConn(ctx, obj.dialer, nowProxy, obj.addrToIp(addr))

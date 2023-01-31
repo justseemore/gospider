@@ -41,7 +41,7 @@ func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli 
 		Proxy: func(r *http.Request) (*url.URL, error) {
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
 			ctxData.url = r.URL
-			if ctxData.ja3 {
+			if ctxData.ja3 || ctxData.disProxy { //如果是ja3或者关闭代理，则走自实现代理
 				return nil, nil
 			}
 			if ctxData.proxy != nil && ctxData.proxy.User != nil && ctxData.proxy.Scheme == "http" && ctxData.url.Scheme == "http" {

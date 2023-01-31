@@ -715,18 +715,16 @@ func CopyWitchContext(preCtx context.Context, writer io.Writer, reader io.Reader
 		}
 	}
 }
-
-func IsIpv4(ip string) bool {
-	return net.ParseIP(ip).To4() != nil
-}
-func IsIpv6(ip string) bool {
-	hip := net.ParseIP(ip)
-	if hip.To4() != nil {
-		return false
+func ParseIp(host string) (net.IP, int) {
+	if ip := net.ParseIP(host); ip != nil {
+		if ip4 := ip.To4(); ip4 != nil {
+			return ip4, 4
+		} else if ip6 := ip.To16(); ip6 != nil {
+			return ip6, 6
+		}
 	}
-	return hip.To16() != nil
+	return nil, 0
 }
-
 func SplitHostPort(address string) (string, int, error) {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
