@@ -324,8 +324,7 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 		if reqData.proxyUser != nil {
 			nowProxy.User = reqData.proxyUser
 			return GetHttpProxyConn(ctx, obj.dialer, nowProxy)
-		}
-		if !reqData.ja3 && !reqData.h2 { //ja3 必须https 才能设置所以不能走官方代理，http2 的transport 没有proxy 方法
+		} else if reqData.isCallback { //走官方代理
 			return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 		}
 	} else if obj.getProxy != nil { //走自实现代理

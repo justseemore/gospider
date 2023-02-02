@@ -40,6 +40,7 @@ var (
 )
 
 type reqCtxData struct {
+	isCallback  bool
 	proxyUser   *url.Userinfo
 	proxy       *url.URL
 	url         *url.URL
