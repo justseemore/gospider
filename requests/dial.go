@@ -96,16 +96,7 @@ type proxyDialer interface {
 	DialContext(context.Context, string, string) (net.Conn, error)
 }
 
-func GetSocks5ProxyConn(ctx context.Context, dialer proxyDialer, proxyData *url.URL, addr string) (conn net.Conn, err error) {
-	defer func() {
-		if err != nil && conn != nil {
-			conn.Close()
-		}
-	}()
-
-	if conn, err = dialer.DialContext(ctx, "tcp", net.JoinHostPort(proxyData.Hostname(), proxyData.Port())); err != nil {
-		return
-	}
+func verifySocks5(proxyData *url.URL, addr string, conn net.Conn) (err error) {
 	if _, err = conn.Write([]byte{5, 2, 0, 2}); err != nil {
 		return
 	}
@@ -222,6 +213,28 @@ func GetSocks5ProxyConn(ctx context.Context, dialer proxyDialer, proxyData *url.
 	_, err = io.ReadFull(conn, readCon[:2])
 	return
 }
+func GetSocks5ProxyConn(ctx context.Context, dialer proxyDialer, proxyData *url.URL, addr string) (conn net.Conn, err error) {
+	defer func() {
+		if err != nil && conn != nil {
+			conn.Close()
+		}
+	}()
+
+	if conn, err = dialer.DialContext(ctx, "tcp", net.JoinHostPort(proxyData.Hostname(), proxyData.Port())); err != nil {
+		return
+	}
+	didVerify := make(chan struct{})
+	go func() {
+		defer close(didVerify)
+		err = verifySocks5(proxyData, addr, conn)
+	}()
+	select {
+	case <-ctx.Done():
+		return conn, ctx.Err()
+	case <-didVerify:
+		return
+	}
+}
 func GetHttpProxyConn(ctx context.Context, dialer *net.Dialer, proxyData *url.URL) (conn net.Conn, err error) {
 	defer func() {
 		if err != nil && conn != nil {
@@ -294,6 +307,10 @@ func Http2HttpsConn(ctx context.Context, proxyData *url.URL, addr string, host s
 	}
 	return
 }
+func cloneUrl(u *url.URL) *url.URL {
+	r := *u
+	return &r
+}
 func (obj *dialClient) dialContext(ctx context.Context, network string, addr string) (net.Conn, error) {
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
 	if reqData.url == nil {
@@ -303,22 +320,13 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 	if reqData.disProxy { //关闭代理直接返回
 		return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 	} else if reqData.proxy != nil { //单独代理设置优先级最高
+		nowProxy = cloneUrl(reqData.proxy)
+		if reqData.proxyUser != nil {
+			nowProxy.User = reqData.proxyUser
+			return GetHttpProxyConn(ctx, obj.dialer, nowProxy)
+		}
 		if !reqData.ja3 && !reqData.h2 { //ja3 必须https 才能设置所以不能走官方代理，http2 的transport 没有proxy 方法
-			rawConn, err := obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
-			if err != nil {
-				return rawConn, err
-			}
-			if reqData.proxyUser != nil && reqData.proxy.Scheme == "http" && reqData.url.Scheme == "http" {
-				if password, ok := reqData.proxyUser.Password(); ok {
-					return &httpConn{
-						rawConn:            rawConn,
-						proxyAuthorization: tools.Base64Encode(reqData.proxyUser.Username() + ":" + password),
-					}, err
-				}
-			}
-			return rawConn, err
-		} else { //走自实现代理
-			nowProxy = reqData.proxy
+			return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 		}
 	} else if obj.getProxy != nil { //走自实现代理
 		if proxyUrl, err := obj.getProxy(ctx, reqData.url); err != nil {
@@ -327,7 +335,7 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 			return nil, err
 		}
 	} else if obj.proxy != nil { //走自实现代理
-		nowProxy = obj.proxy
+		nowProxy = cloneUrl(obj.proxy)
 	}
 	if nowProxy != nil { //走自实现代理
 		switch nowProxy.Scheme {
