@@ -449,7 +449,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	//构造ctxData
 	ctxData := new(reqCtxData)
 	ctxData.disProxy = request_option.DisProxy
-	ctxData.h2 = request_option.Http2
 	ctxData.ja3 = request_option.Ja3
 	if request_option.Proxy != "" { //代理相关构造
 		tempProxy, err := verifyProxy(request_option.Proxy)
@@ -487,6 +486,13 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		return response, tools.WrapError(errFatal, err)
 	}
 	ctxData.url = reqs.URL
+	if request_option.Http2 { //根据scheme判断是否启动http2
+		if reqs.URL.Scheme == "https" {
+			ctxData.h2 = request_option.Http2
+		} else {
+			request_option.Http2 = false
+		}
+	}
 	//判断ws
 	switch reqs.URL.Scheme {
 	case "ws":
@@ -522,9 +528,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			reqs.AddCookie(vv)
 		}
 	}
-	if !request_option.Http2 {
-		reqs.Close = request_option.DisAlive
-	}
+	reqs.Close = request_option.DisAlive
 	//开始发送请求
 	var r *http.Response
 	var err2 error
