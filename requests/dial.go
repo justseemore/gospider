@@ -321,10 +321,11 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 		return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 	} else if reqData.proxy != nil { //单独代理设置优先级最高
 		nowProxy = cloneUrl(reqData.proxy)
-		if reqData.proxyUser != nil {
-			nowProxy.User = reqData.proxyUser
-			return GetHttpProxyConn(ctx, obj.dialer, nowProxy)
-		} else if reqData.isCallback { //走官方代理
+		if reqData.isCallback { //走官方代理
+			if reqData.proxyUser != nil {
+				nowProxy.User = reqData.proxyUser
+				return GetHttpProxyConn(ctx, obj.dialer, nowProxy)
+			}
 			return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 		}
 	} else if obj.getProxy != nil { //走自实现代理
