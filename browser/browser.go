@@ -367,7 +367,7 @@ func downChromeFile(preCtx context.Context, dirUrl string) error {
 	var fileDir string
 	var fileTime int64
 	for _, dir := range resp.Json().Array() {
-		tempTime, err := time.Parse("2006-01-02T15:04:05Z", dir.Get("date").String())
+		tempTime, err := time.Parse(fmt.Sprintf("%sT%sZ", time.DateOnly, time.TimeOnly), dir.Get("date").String())
 		if err == nil && tempTime.Unix() > fileTime {
 			fileDir = dir.Get("url").String()
 			fileTime = tempTime.Unix()

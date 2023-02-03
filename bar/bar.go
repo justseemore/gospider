@@ -122,7 +122,7 @@ func (obj *Client) Print(curs ...int64) {
 	}
 	se := time2Dhms(int64(math.Ceil(float64(obj.total-obj.cur) / mt))) //剩余时间
 	fmt.Println(
-		blog.Color(5, 0, time.Now().Format("2006-01-02 15:04:05")),
+		blog.Color(5, 0, time.Now().Format(time.DateTime)),
 		blog.Color(2, 0, fmt.Sprintf(" %-50s", obj.rate.String())),
 		blog.Color(4, 0, fmt.Sprintf(" %3d%%", obj.percent)),
 		blog.Color(3, 0, fmt.Sprintf(" %d/%d", obj.cur, obj.total)),

@@ -482,7 +482,7 @@ func (obj *Client) panNext(data []string) bool {
 	return false
 }
 func (obj *Client) dateBj(publishTime string) string {
-	publishTime_format, err := time.ParseInLocation("2006-01-02", publishTime, time.Local)
+	publishTime_format, err := time.ParseInLocation(time.DateOnly, publishTime, time.Local)
 	if err != nil {
 		return "日期格式错误"
 	} else {
