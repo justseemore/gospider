@@ -1,7 +1,7 @@
 # 功能概述
 
 - 基于net/http 二次封装
-- cookies 开关，连接池开关，http2
+- cookies 开关，连接池开关，http2，ja3
 - 自实现http,socks5代理
 - 自动解压缩,解码
 - dns缓存
