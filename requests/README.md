@@ -2,7 +2,7 @@
 
 - 基于net/http 二次封装
 - cookies 开关，连接池开关，http2，ja3
-- 自实现http,socks5代理
+- 自实现socks五,http代理
 - 自动解压缩,解码
 - dns缓存
 - 类型自动转化
