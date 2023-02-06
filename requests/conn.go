@@ -26,7 +26,10 @@ func (obj *httpConn) Read(b []byte) (n int, err error) {
 	return obj.rawConn.Read(b)
 }
 func (obj *httpConn) Close() error {
-	return obj.rawConn.Close()
+	if obj.rawConn != nil {
+		return obj.rawConn.Close()
+	}
+	return nil
 }
 func (obj *httpConn) LocalAddr() net.Addr {
 	return obj.rawConn.LocalAddr()
