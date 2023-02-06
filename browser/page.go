@@ -165,7 +165,7 @@ func (obj *Page) Close() error {
 	if err != nil {
 		err = obj.close()
 	}
-	obj.webSock.Close()
+	obj.webSock.Close(nil)
 	return err
 }
 func (obj *Page) close() error {

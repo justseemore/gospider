@@ -38,18 +38,17 @@ func delTempDir(dir string) {
 
 // go build -ldflags="-H windowsgui" -o browser/browserCmd.exe main.go
 // go build -o browser/browserCmd main.go
-func BrowserCmdMain() {
+func BrowserCmdMain() (err error) {
 	preCtx := context.Background()
-	ctx, cnl := context.WithCancel(preCtx)
+	ctx, cnl := context.WithCancelCause(preCtx)
 	pipData := make(chan struct{})
 	data := map[string]any{}
 	args := []string{}
 	var cmdCli *cmd.Client
-	go func() {
-		defer cnl()
+	go func() (err error) {
+		defer cnl(err)
 		jsonDecode := json.NewDecoder(os.Stdin)
-		err := jsonDecode.Decode(&data)
-		if err != nil || data["name"] == nil {
+		if err = jsonDecode.Decode(&data); err != nil || data["name"] == nil {
 			return
 		}
 		jsonData := tools.Any2json(data)
@@ -57,13 +56,20 @@ func BrowserCmdMain() {
 			args = append(args, arg.String())
 		}
 		cmdCli = cmd.NewClient(ctx, cmd.ClientOption{Name: jsonData.Get("name").String(), Args: args})
-		go cmdCli.Run()
-		pipData <- struct{}{}
-		jsonDecode.Decode(&data)
+		go func() {
+			err = cmdCli.Run()
+		}()
+		if err != nil {
+			return
+		}
+		close(pipData)
+		return jsonDecode.Decode(&data)
 	}()
 	select {
+	case <-cmdCli.Done():
+		return cmdCli.Err
 	case <-ctx.Done():
-		return
+		return context.Cause(ctx)
 	case <-pipData:
 	case <-time.After(time.Second * 2):
 		return
@@ -86,7 +92,9 @@ func BrowserCmdMain() {
 	defer cmdCli.Close()
 	select {
 	case <-ctx.Done():
+		return context.Cause(ctx)
 	case <-cmdCli.Done():
+		return cmdCli.Err
 	}
 }
 
@@ -429,7 +437,7 @@ func downChrome(preCtx context.Context) error {
 }
 
 // 新建浏览器
-func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error) {
+func NewClient(preCtx context.Context, options ...ClientOption) (client *Client, err error) {
 	clearTemp()
 	var option ClientOption
 	if len(options) > 0 {
@@ -440,26 +448,24 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	}
 	ctx, cnl := context.WithCancel(preCtx)
 	var cli *cmd.Client
-	var err error
 	if option.Host == "" || option.Port == 0 {
 		cli, err = runChrome(ctx, &option)
 	}
 	if err != nil {
 		cnl()
-		return nil, err
+		return
 	}
 	reqCli, err := requests.NewClient(ctx)
 	if err != nil {
 		cnl()
 		return nil, err
 	}
-
 	db, err := cdp.NewDbClient(option.UserDir)
 	if err != nil {
 		cnl()
 		return nil, err
 	}
-	client := &Client{
+	client = &Client{
 		proxy:    option.Proxy,
 		getProxy: option.GetProxy,
 		ctx:      ctx,

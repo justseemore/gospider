@@ -44,7 +44,7 @@ type WebSock struct {
 	methods   sync.Map
 	conn      *websocket.Conn
 	ctx       context.Context
-	cnl       context.CancelFunc
+	cnl       context.CancelCauseFunc
 	id        atomic.Int64
 	RouteFunc func(context.Context, *Route)
 	reqCli    *requests.Client
@@ -59,10 +59,10 @@ type DataEntrie struct {
 func (obj *WebSock) Done() <-chan struct{} {
 	return obj.ctx.Done()
 }
-func (obj *WebSock) routeMain() error {
+func (obj *WebSock) routeMain() (err error) {
 	event := obj.RegMethod(obj.ctx, "Fetch.requestPaused")
 	pool := thread.NewClient(obj.ctx, 65535)
-	defer obj.Close()
+	defer obj.Close(err)
 	defer pool.Close()
 	defer event.Cnl()
 	for {
@@ -127,8 +127,8 @@ func (obj *WebSock) recv(ctx context.Context, rd RecvData) error {
 	}
 	return nil
 }
-func (obj *WebSock) recvMain() error {
-	defer obj.Close()
+func (obj *WebSock) recvMain() (err error) {
+	defer obj.Close(err)
 	pool := thread.NewClient(obj.ctx, 65535)
 	defer pool.Close()
 	for {
@@ -176,13 +176,13 @@ func NewWebSock(preCtx context.Context, ws, href, proxy string, getProxy func() 
 		reqCli:     reqCli,
 		filterKeys: kinds.NewSet[[16]byte](),
 	}
-	cli.ctx, cli.cnl = context.WithCancel(preCtx)
+	cli.ctx, cli.cnl = context.WithCancelCause(preCtx)
 	go cli.recvMain()
 	go cli.routeMain()
 	return cli, err
 }
-func (obj *WebSock) Close() error {
-	obj.cnl()
+func (obj *WebSock) Close(err error) error {
+	obj.cnl(err)
 	obj.reqCli.Close()
 	return obj.conn.Close("close")
 }
@@ -212,8 +212,8 @@ func (obj *WebSock) send(ctx context.Context, cmd commend) (RecvData, error) {
 		defer cnl()
 	}
 	select {
-	case <-obj.Done(): //webSocks 关闭
-		return RecvData{}, errors.New("websocks closed")
+	case <-obj.Done():
+		return RecvData{}, context.Cause(obj.ctx)
 	case <-ctx.Done():
 		return RecvData{}, obj.ctx.Err()
 	default:
@@ -225,7 +225,7 @@ func (obj *WebSock) send(ctx context.Context, cmd commend) (RecvData, error) {
 		}
 		select {
 		case <-obj.Done():
-			return RecvData{}, errors.New("websocks closed")
+			return RecvData{}, context.Cause(obj.ctx)
 		case <-ctx.Done():
 			return RecvData{}, ctx.Err()
 		case idRecvData := <-idEvent.RecvData:

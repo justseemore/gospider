@@ -221,15 +221,13 @@ func (obj *JsClient) run(con []byte) (gjson.Result, error) {
 }
 
 // 执行函数
-func (obj *JsClient) Call(funcName string, values ...any) (gjson.Result, error) {
-	var jsonData gjson.Result
+func (obj *JsClient) Call(funcName string, values ...any) (jsonData gjson.Result, err error) {
 	scrJson, _ := json.Marshal(map[string]any{"Func": funcName, "Args": values})
-	jsonData, err := obj.run(scrJson)
-	if err != nil {
+	if jsonData, err = obj.run(scrJson); err != nil {
 		if obj.client.Err != nil {
 			err = obj.client.Err
 		}
-		return jsonData, err
+		return
 	}
 	if jsonData.Get("Error").Exists() && jsonData.Get("Error").String() != "" {
 		return jsonData.Get("Result"), errors.New(jsonData.Get("Error").String())
