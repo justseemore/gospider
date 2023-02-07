@@ -54,15 +54,9 @@ func (obj *Response) Cookies() []*http.Cookie {
 	return obj.response.Cookies()
 }
 func (obj *Response) StatusCode() int {
-	if obj.response == nil {
-		return 0
-	}
 	return obj.response.StatusCode
 }
 func (obj *Response) Status() string {
-	if obj.response == nil {
-		return ""
-	}
 	return obj.response.Status
 }
 func (obj *Response) Url() *url.URL {
@@ -75,12 +69,6 @@ func (obj *Response) Headers() http.Header {
 	return obj.response.Header
 }
 
-func (obj *Response) Text(val ...string) string {
-	if len(val) > 0 {
-		obj.content = tools.StringToBytes(val[0])
-	}
-	return tools.BytesToString(obj.content)
-}
 func (obj *Response) Decode(encoding string) {
 	if obj.encoding != encoding {
 		obj.encoding = encoding
@@ -96,6 +84,12 @@ func (obj *Response) Map(path ...string) map[string]any {
 }
 func (obj *Response) Json(path ...string) gjson.Result {
 	return tools.Any2json(obj.content, path...)
+}
+func (obj *Response) Text(val ...string) string {
+	if len(val) > 0 {
+		obj.content = tools.StringToBytes(val[0])
+	}
+	return tools.BytesToString(obj.content)
 }
 func (obj *Response) Content(val ...[]byte) []byte {
 	if len(val) > 0 {
@@ -159,9 +153,14 @@ func (obj *Response) read(bar bool) error { //读取body,对body 解压，解码
 			return errors.New("gzip NewReader error: " + err.Error())
 		}
 	}
-	obj.content = bBody.Bytes()
 	if !obj.disDecode && !obj.verifyBytes() {
-		obj.content, obj.encoding = tools.Charset(obj.content, obj.ContentType())
+		if content, encoding, err := tools.Charset(bBody.Bytes(), obj.ContentType()); err == nil {
+			obj.content, obj.encoding = content, encoding
+		} else {
+			obj.content = bBody.Bytes()
+		}
+	} else {
+		obj.content = bBody.Bytes()
 	}
 	return nil
 }

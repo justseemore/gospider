@@ -152,7 +152,8 @@ func (obj *Client) write(preCtx context.Context, option RendOption) (*Task, erro
 		return task, errors.New("time out")
 	}
 }
-func (obj *Client) error(ctx *gin.Context, code int, err error) {
+func (obj *Client) error(ctx *gin.Context, url string, code int, err error) {
+	obj.logCli.Info(code, map[string]any{"url": url, "err": err})
 	ctx.Header("error", err.Error())
 	ctx.String(code, "")
 }
@@ -160,32 +161,32 @@ func (obj *Client) error(ctx *gin.Context, code int, err error) {
 func (obj *Client) mainHandler(ctx *gin.Context, option RendOption) {
 	href, err := url.Parse(option.Url)
 	if err != nil {
-		obj.error(ctx, 503, err)
+		obj.error(ctx, option.Url, 503, err)
 		return
 	}
 	if href.Scheme != "http" && href.Scheme != "https" {
-		obj.error(ctx, 504, errors.New("url scheme error"))
+		obj.error(ctx, option.Url, 504, errors.New("url scheme error"))
 		return
 	}
 	if option.Proxy != "" {
 		if href, err = url.Parse(option.Proxy); err != nil {
-			obj.error(ctx, 505, err)
+			obj.error(ctx, option.Url, 505, err)
 			return
 		}
 		if href.Scheme != "http" && href.Scheme != "socks5" {
-			obj.error(ctx, 506, errors.New("proxy scheme error"))
+			obj.error(ctx, option.Url, 506, errors.New("proxy scheme error"))
 			return
 		}
 	}
 	option.cookies = ctx.Request.Cookies()
 	task, err := obj.write(ctx.Request.Context(), option)
 	if err != nil {
-		obj.error(ctx, 501, err)
+		obj.error(ctx, option.Url, 501, err)
 		return
 	}
 	rs, err := task.result(task.reqCtx)
 	if err != nil {
-		obj.error(ctx, 502, err)
+		obj.error(ctx, option.Url, 502, err)
 		return
 	}
 	for _, cook := range rs.Cookies {
@@ -202,7 +203,7 @@ func (obj *Client) postHandler(ctx *gin.Context) {
 	var option RendOption
 	err := ctx.BindJSON(&option)
 	if err != nil {
-		obj.error(ctx, 500, err)
+		obj.error(ctx, "", 500, err)
 		return
 	}
 	obj.mainHandler(ctx, option)
@@ -211,7 +212,7 @@ func (obj *Client) getHandler(ctx *gin.Context) {
 	var option RendOption
 	err := ctx.BindQuery(&option)
 	if err != nil {
-		obj.error(ctx, 500, err)
+		obj.error(ctx, "", 500, err)
 		return
 	}
 	obj.mainHandler(ctx, option)

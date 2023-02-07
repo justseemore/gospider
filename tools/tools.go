@@ -83,13 +83,10 @@ func UrlJoin(base, href string) (string, error) {
 }
 
 // 网页解码，并返回 编码
-func Charset(content []byte, content_type string) ([]byte, string) {
+func Charset(content []byte, content_type string) ([]byte, string, error) {
 	chset, chset_name, _ := charset.DetermineEncoding(content, content_type)
 	chset_content, err := chset.NewDecoder().Bytes(content)
-	if err != nil {
-		return content, "utf-8"
-	}
-	return chset_content, chset_name
+	return chset_content, chset_name, err
 }
 
 // 转码
@@ -431,34 +428,29 @@ func AesDecode(val string, key []byte) ([]byte, error) {
 
 // 压缩解码
 func ZipDecode(r *bytes.Buffer, encoding string) (*bytes.Buffer, error) {
-	var rs *bytes.Buffer
+	rs := bytes.NewBuffer(nil)
 	var err error
+	if encoding == "br" {
+		_, err = io.Copy(rs, brotli.NewReader(r))
+		return rs, err
+	}
+	var reader io.ReadCloser
+	defer func() {
+		if reader != nil {
+			reader.Close()
+		}
+	}()
 	switch encoding {
 	case "deflate":
-		reader := flate.NewReader(r)
-		if reader != nil {
-			defer reader.Close()
-		}
-		rs = bytes.NewBuffer(nil)
-		_, err = io.Copy(rs, reader)
+		reader = flate.NewReader(r)
 	case "gzip":
-		var reader *gzip.Reader
-		reader, err = gzip.NewReader(r)
-		if reader != nil {
-			defer reader.Close()
+		if reader, err = gzip.NewReader(r); err != nil {
+			return r, err
 		}
-		if err != nil {
-			return nil, err
-		}
-		rs = bytes.NewBuffer(nil)
-		_, err = io.Copy(rs, reader)
-	case "br":
-		reader := brotli.NewReader(r)
-		rs = bytes.NewBuffer(nil)
-		_, err = io.Copy(rs, reader)
 	default:
-		rs = r
+		return r, err
 	}
+	_, err = io.Copy(rs, reader)
 	return rs, err
 }
 

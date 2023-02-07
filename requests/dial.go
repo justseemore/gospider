@@ -314,7 +314,7 @@ func cloneUrl(u *url.URL) *url.URL {
 func (obj *dialClient) dialContext(ctx context.Context, network string, addr string) (net.Conn, error) {
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
 	if reqData.url == nil {
-		return nil, tools.WrapError(errFatal, "not found reqData.url")
+		return nil, tools.WrapError(ErrFatal, "not found reqData.url")
 	}
 	var nowProxy *url.URL
 	if reqData.disProxy { //关闭代理直接返回
@@ -348,7 +348,7 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 			case "https":
 				return GetHttpsProxyConn(ctx, obj.dialer, nowProxy, obj.addrToIp(addr), addr)
 			default:
-				return nil, tools.WrapError(errFatal, "target url scheme error")
+				return nil, tools.WrapError(ErrFatal, "target url scheme error")
 			}
 		}
 	}

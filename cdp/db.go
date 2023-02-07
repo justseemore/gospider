@@ -47,6 +47,12 @@ func (obj *DbClient) keyMd5(key RequestOption, resourceType string) [16]byte {
 	}
 	return tools.Md5(md5Str)
 }
+func (obj *DbClient) Put(key [16]byte, val any, ttl uint32) error {
+	return obj.put(key, val, ttl)
+}
+func (obj *DbClient) Get(key [16]byte, val any) error {
+	return obj.get(key, val)
+}
 func (obj *DbClient) put(key [16]byte, val any, ttl uint32) error {
 	return obj.db.Update(
 		func(tx *nutsdb.Tx) error {

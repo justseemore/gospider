@@ -482,20 +482,17 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 
 // 浏览器初始化
 func (obj *Client) init() error {
-	nowTime := time.Now().Unix()
 	rs, err := obj.reqCli.Request(obj.ctx, "get",
 		fmt.Sprintf("http://%s:%d/json/version", obj.host, obj.port),
 		requests.RequestOption{
-			AfterCallBack: func(ro *requests.RequestOption, r *requests.Response) *requests.Response {
-				if ro.Err != nil || r.StatusCode() != 200 {
-					ro.Err = errors.New("code error")
-					if time.Now().Unix()-nowTime < 10 {
-						time.Sleep(time.Millisecond * 1000)
-					} else {
-						ro.CurTryNum = 10
-					}
+			BeforCallBack: func(ro *requests.RequestOption) {
+				time.Sleep(time.Millisecond * 1000)
+			},
+			AfterCallBack: func(ro *requests.RequestOption, r *requests.Response) error {
+				if r.StatusCode() == 200 {
+					return nil
 				}
-				return r
+				return errors.New("code error")
 			},
 			TryNum: 10,
 		})

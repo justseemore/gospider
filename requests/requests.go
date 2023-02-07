@@ -36,7 +36,7 @@ const (
 )
 
 var (
-	errFatal = errors.New("致命错误")
+	ErrFatal = errors.New("致命错误")
 )
 
 type reqCtxData struct {
@@ -69,26 +69,24 @@ type RequestOption struct {
 	Form          any    //multipart/form-data,适用于文件上传
 	Data          any    //application/x-www-form-urlencoded,适用于key,val
 	Body          *bytes.Reader
-	Json          any                                       //application/json
-	Text          any                                       //text/xml
-	TempData      any                                       //临时变量
-	Bytes         []byte                                    //二进制内容
-	DisCookie     bool                                      //关闭cookies管理
-	DisDecode     bool                                      //关闭自动解码
-	Bar           bool                                      //是否开启bar
-	DisProxy      bool                                      //是否关闭代理
-	Ja3           bool                                      //是否开启ja3
-	TryNum        int64                                     //重试次数
-	CurTryNum     int64                                     //当前尝试次数
-	BeforCallBack func(*RequestOption)                      //请求之前回调
-	AfterCallBack func(*RequestOption, *Response) *Response //请求之后回调
-	RedirectNum   int                                       //重定向次数
-	DisAlive      bool                                      //关闭长连接
-	DisRead       bool                                      //关闭默认读取请求体
-	DisUnZip      bool                                      //变比自动解压
-	Err           error                                     //请求过程中的error
-	Http2         bool                                      //开启http2 transport
-	WsOption      websocket.Option                          //websocket option
+	Json          any                                   //application/json
+	Text          any                                   //text/xml
+	TempData      any                                   //临时变量
+	Bytes         []byte                                //二进制内容
+	DisCookie     bool                                  //关闭cookies管理
+	DisDecode     bool                                  //关闭自动解码
+	Bar           bool                                  //是否开启bar
+	DisProxy      bool                                  //是否关闭代理
+	Ja3           bool                                  //是否开启ja3
+	TryNum        int64                                 //重试次数
+	BeforCallBack func(*RequestOption)                  //请求之前回调
+	AfterCallBack func(*RequestOption, *Response) error //请求之后回调
+	RedirectNum   int                                   //重定向次数
+	DisAlive      bool                                  //关闭长连接
+	DisRead       bool                                  //关闭默认读取请求体
+	DisUnZip      bool                                  //变比自动解压
+	Http2         bool                                  //开启http2 transport
+	WsOption      websocket.Option                      //websocket option
 	converUrl     string
 	contentType   string
 }
@@ -363,7 +361,7 @@ func (obj *Client) newRequestOption(option *RequestOption) {
 	}
 }
 
-func (obj *Client) Request(preCtx context.Context, method string, href string, options ...RequestOption) (*Response, error) {
+func (obj *Client) Request(preCtx context.Context, method string, href string, options ...RequestOption) (resp *Response, err error) {
 	if obj == nil {
 		return nil, errors.New("初始化client失败")
 	}
@@ -374,7 +372,6 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	if len(options) > 0 {
 		option = options[0]
 	}
-	var err error
 	if option.Method == "" {
 		option.Method = method
 	}
@@ -387,12 +384,12 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	obj.newRequestOption(&option)
 	if option.BeforCallBack == nil {
 		if err = option.optionInit(); err != nil {
-			return nil, err
+			return
 		}
 	}
 	//开始请求
-	var resp *Response
-	for ; option.CurTryNum <= option.TryNum; option.CurTryNum++ {
+	var tryNum int64
+	for tryNum = 0; tryNum <= option.TryNum; tryNum++ {
 		select {
 		case <-preCtx.Done():
 			return nil, preCtx.Err()
@@ -403,28 +400,30 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 			if option.BeforCallBack != nil || option.AfterCallBack != nil {
 				obj.newRequestOption(&option)
 				if err = option.optionInit(); err != nil {
-					return nil, err
+					return
 				}
 			}
 			if option.Body != nil {
 				option.Body.Seek(0, 0)
 			}
-			resp, option.Err = obj.tempRequest(preCtx, option)
-			if option.Err != nil && errors.Is(option.Err, errFatal) {
-				return resp, option.Err
-			}
-			if option.AfterCallBack != nil {
-				callBackRespon := option.AfterCallBack(&option, resp)
-				if callBackRespon != nil && option.Err == nil {
-					return callBackRespon, option.Err
+			resp, err = obj.tempRequest(preCtx, option)
+			if err != nil { //有错误
+				if errors.Is(err, ErrFatal) { //致命错误直接返回
+					return
 				}
-			} else if option.Err == nil {
-				return resp, option.Err
+			} else if option.AfterCallBack == nil { //没有错误，且没有回调，直接返回
+				return
+			} else if err = option.AfterCallBack(&option, resp); err != nil { //没有错误，有回调，回调错误
+				if errors.Is(err, ErrFatal) { //没有错误，有回调，回调错误,致命错误直接返回
+					return
+				}
+			} else { //没有错误，有回调，没有回调错误，直接返回
+				return
 			}
 		}
 	}
-	if option.Err != nil {
-		return resp, option.Err
+	if err != nil { //有错误直接返回错误
+		return
 	}
 	return resp, errors.New("max try num")
 }
@@ -437,7 +436,7 @@ func verifyProxy(proxyUrl string) (*url.URL, error) {
 	case "http", "socks5":
 		return proxy, nil
 	default:
-		return nil, tools.WrapError(errFatal, "不支持的代理协议")
+		return nil, tools.WrapError(ErrFatal, "不支持的代理协议")
 	}
 }
 
@@ -453,7 +452,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	if request_option.Proxy != "" { //代理相关构造
 		tempProxy, err := verifyProxy(request_option.Proxy)
 		if err != nil {
-			return response, tools.WrapError(errFatal, err)
+			return response, tools.WrapError(ErrFatal, err)
 		}
 		ctxData.proxy = tempProxy
 	}
@@ -483,7 +482,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		reqs, err = http.NewRequestWithContext(reqCtx, method, href, nil)
 	}
 	if err != nil {
-		return response, tools.WrapError(errFatal, err)
+		return response, tools.WrapError(ErrFatal, err)
 	}
 	ctxData.url = reqs.URL
 	if request_option.Http2 { //根据scheme判断是否启动http2
@@ -505,7 +504,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	//添加headers
 	var headOk bool
 	if reqs.Header, headOk = request_option.Headers.(http.Header); !headOk {
-		return response, tools.WrapError(errFatal, "headers 转换错误")
+		return response, tools.WrapError(ErrFatal, "headers 转换错误")
 	}
 
 	if !isWs && reqs.Header.Get("Content-type") == "" && request_option.contentType != "" {
@@ -522,7 +521,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	if request_option.Cookies != nil {
 		cooks, cookOk := request_option.Cookies.([]*http.Cookie)
 		if !cookOk {
-			return response, tools.WrapError(errFatal, "cookies 转换错误")
+			return response, tools.WrapError(ErrFatal, "cookies 转换错误")
 		}
 		for _, vv := range cooks {
 			reqs.AddCookie(vv)
@@ -534,7 +533,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	var err2 error
 	if isWs {
 		if err = websocket.SetClientHeaders(reqs.Header, &request_option.WsOption); err != nil {
-			return response, tools.WrapError(errFatal, err.Error())
+			return response, tools.WrapError(ErrFatal, err.Error())
 		}
 	}
 	r, err = obj.getClient(request_option).Do(reqs)
