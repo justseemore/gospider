@@ -2,8 +2,6 @@ package cdp
 
 import (
 	"context"
-	"errors"
-	"log"
 
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/tools"
@@ -88,13 +86,9 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	var err error
 	routeKey := obj.webSock.db.keyMd5(routeOption, resourceType)
 	if !obj.webSock.filterKeys.Has(routeKey) {
-		if err = obj.webSock.db.get(routeKey, &fulData); err == nil {
+		if fulData, err = obj.webSock.db.get(routeKey); err == nil {
 			if resourceType == "Document" || "resourceType" == "XHR" {
 				obj.webSock.filterKeys.Add(routeKey)
-			}
-			if fulData.StatusCode == 0 {
-				log.Print(routeOption.Url, " == ", fulData.StatusCode, " == body length == ", len(fulData.Body))
-				log.Panic(errors.New("错误的状态码get"))
 			}
 			return fulData, err
 		}
@@ -116,12 +110,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	fulData.Body = rs.Text()
 	fulData.Headers = headers
 	fulData.ResponsePhrase = rs.Status()
-	if fulData.StatusCode == 0 {
-		log.Print(rs)
-		log.Print(routeOption.Url, " == ", fulData.StatusCode, " == body length == ", len(fulData.Body))
-		log.Panic(errors.New("错误的状态码put"))
-	}
-	obj.webSock.db.put(routeKey, fulData, 60*60)
+	obj.webSock.db.put(routeKey, fulData)
 	return fulData, nil
 }
 

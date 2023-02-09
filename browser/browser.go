@@ -460,7 +460,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 		cnl()
 		return nil, err
 	}
-	db, err := cdp.NewDbClient(option.UserDir)
+	db, err := cdp.NewDbClient(ctx, option.UserDir)
 	if err != nil {
 		cnl()
 		return nil, err
@@ -485,10 +485,11 @@ func (obj *Client) init() error {
 	rs, err := obj.reqCli.Request(obj.ctx, "get",
 		fmt.Sprintf("http://%s:%d/json/version", obj.host, obj.port),
 		requests.RequestOption{
-			BeforCallBack: func(ro *requests.RequestOption) {
+			ErrCallBack: func(err error) bool {
 				time.Sleep(time.Millisecond * 1000)
+				return false
 			},
-			AfterCallBack: func(ro *requests.RequestOption, r *requests.Response) error {
+			AfterCallBack: func(r *requests.Response) error {
 				if r.StatusCode() == 200 {
 					return nil
 				}

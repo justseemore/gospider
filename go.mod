@@ -12,8 +12,8 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/pkg/sftp v1.13.5
 	github.com/refraction-networking/utls v1.2.0
+	github.com/syndtr/goleveldb v1.0.0
 	github.com/tidwall/gjson v1.14.4
-	github.com/xujiajun/nutsdb v0.11.1
 	github.com/ysmood/leakless v0.8.0
 	go.mongodb.org/mongo-driver v1.11.1
 	go.uber.org/atomic v1.10.0
@@ -27,7 +27,6 @@ require (
 
 require (
 	github.com/andybalholm/cascadia v1.3.1 // indirect
-	github.com/bwmarrin/snowflake v0.3.0 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect
@@ -56,8 +55,6 @@ require (
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
-	github.com/xujiajun/mmap-go v1.0.1 // indirect
-	github.com/xujiajun/utils v0.0.0-20220904132955-5f7c5b914235 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect

@@ -68,25 +68,27 @@ type RequestOption struct {
 	Params        any    //url params,url 参数key,val
 	Form          any    //multipart/form-data,适用于文件上传
 	Data          any    //application/x-www-form-urlencoded,适用于key,val
-	Body          *bytes.Reader
-	Json          any                                   //application/json
-	Text          any                                   //text/xml
-	TempData      any                                   //临时变量
-	Bytes         []byte                                //二进制内容
-	DisCookie     bool                                  //关闭cookies管理
-	DisDecode     bool                                  //关闭自动解码
-	Bar           bool                                  //是否开启bar
-	DisProxy      bool                                  //是否关闭代理
-	Ja3           bool                                  //是否开启ja3
-	TryNum        int64                                 //重试次数
-	BeforCallBack func(*RequestOption)                  //请求之前回调
-	AfterCallBack func(*RequestOption, *Response) error //请求之后回调
-	RedirectNum   int                                   //重定向次数
-	DisAlive      bool                                  //关闭长连接
-	DisRead       bool                                  //关闭默认读取请求体
-	DisUnZip      bool                                  //变比自动解压
-	Http2         bool                                  //开启http2 transport
-	WsOption      websocket.Option                      //websocket option
+	body          io.Reader
+	Body          io.Reader
+	Json          any                        //application/json
+	Text          any                        //text/xml
+	TempData      any                        //临时变量
+	Bytes         []byte                     //二进制内容
+	DisCookie     bool                       //关闭cookies管理
+	DisDecode     bool                       //关闭自动解码
+	Bar           bool                       //是否开启bar
+	DisProxy      bool                       //是否关闭代理
+	Ja3           bool                       //是否开启ja3
+	TryNum        int64                      //重试次数
+	BeforCallBack func(*RequestOption) error //请求之前回调
+	AfterCallBack func(*Response) error      //请求之后回调
+	ErrCallBack   func(error) bool           //true 直接返回error,中断尝试
+	RedirectNum   int                        //重定向次数
+	DisAlive      bool                       //关闭长连接
+	DisRead       bool                       //关闭默认读取请求体
+	DisUnZip      bool                       //变比自动解压
+	Http2         bool                       //开启http2 transport
+	WsOption      websocket.Option           //websocket option
 	converUrl     string
 	contentType   string
 }
@@ -100,7 +102,7 @@ func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reade
 		switch valType {
 		case "json", "text":
 			return bytes.NewReader(tools.StringToBytes(value.Raw)), nil
-		case "data", "params":
+		case "data":
 			tempVal := url.Values{}
 			for kk, vv := range value.Map() {
 				if vv.IsArray() {
@@ -112,7 +114,7 @@ func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reade
 				}
 			}
 			return bytes.NewReader(tools.StringToBytes(tempVal.Encode())), nil
-		case "form":
+		case "form", "params":
 			for kk, vv := range value.Map() {
 				kkvv := []string{}
 				if vv.IsArray() {
@@ -142,9 +144,6 @@ func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reade
 		default:
 			return nil, errors.New("未知的content-type：" + valType)
 		}
-	case io.Reader:
-		tempCon, err := io.ReadAll(value)
-		return bytes.NewReader(tempCon), err
 	default:
 		return newBody(tools.Any2json(value), valType, dataMap)
 	}
@@ -156,6 +155,7 @@ func (obj *RequestOption) newHeaders() error {
 	}
 	switch headers := obj.Headers.(type) {
 	case http.Header:
+		obj.Headers = headers.Clone()
 		return nil
 	case gjson.Result:
 		if !headers.IsObject() {
@@ -215,21 +215,19 @@ func (obj *RequestOption) newCookies() error {
 func (obj *RequestOption) optionInit() error {
 	obj.converUrl = obj.Url
 	var err error
+	//构造body
 	if obj.Bytes != nil {
-		obj.Body = bytes.NewReader(obj.Bytes)
-	}
-	if obj.Form != nil {
-		tempBody := bytes.NewBuffer(nil)
+		obj.body = bytes.NewReader(obj.Bytes)
+	} else if obj.Form != nil {
 		dataMap := map[string][]string{}
-		obj.Body, err = newBody(obj.Form, "form", dataMap)
-		if err != nil {
+		if obj.body, err = newBody(obj.Form, "form", dataMap); err != nil {
 			return err
 		}
+		tempBody := bytes.NewBuffer(nil)
 		writer := multipart.NewWriter(tempBody)
 		for key, vals := range dataMap {
 			for _, val := range vals {
-				err := writer.WriteField(key, val)
-				if err != nil {
+				if err = writer.WriteField(key, val); err != nil {
 					return err
 				}
 			}
@@ -237,82 +235,66 @@ func (obj *RequestOption) optionInit() error {
 		escapeQuotes := strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
 		for _, file := range obj.Files {
 			h := make(textproto.MIMEHeader)
-			h.Set("Content-Disposition",
-				fmt.Sprintf(`form-data; name="%s"; filename="%s"`,
-					escapeQuotes.Replace(file.Key), escapeQuotes.Replace(file.Name)))
+			h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, escapeQuotes.Replace(file.Key), escapeQuotes.Replace(file.Name)))
 			if file.Type == "" {
 				h.Set("Content-Type", "application/octet-stream")
 			} else {
 				h.Set("Content-Type", file.Type)
 			}
-			wp, err := writer.CreatePart(h)
-			if err != nil {
+			if wp, err := writer.CreatePart(h); err != nil {
 				return err
-			}
-			_, err = wp.Write(file.Content)
-			if err != nil {
+			} else if _, err = wp.Write(file.Content); err != nil {
 				return err
 			}
 		}
-		err = writer.Close()
-		if err != nil {
+		if err = writer.Close(); err != nil {
 			return err
 		}
 		obj.contentType = writer.FormDataContentType()
-		temCon, err := io.ReadAll(tempBody)
-		if err != nil {
-			return err
-		}
-		obj.Body = bytes.NewReader(temCon)
-	}
-	if obj.Data != nil {
-		obj.Body, err = newBody(obj.Data, "data", nil)
-		if err != nil {
+		obj.body = tempBody
+	} else if obj.Data != nil {
+		if obj.body, err = newBody(obj.Data, "data", nil); err != nil {
 			return err
 		}
 		obj.contentType = "application/x-www-form-urlencoded"
-	}
-	if obj.Json != nil {
-		obj.Body, err = newBody(obj.Json, "json", nil)
-		if err != nil {
+	} else if obj.Json != nil {
+		if obj.body, err = newBody(obj.Json, "json", nil); err != nil {
 			return err
 		}
 		obj.contentType = "application/json"
-	}
-	if obj.Text != nil {
-		obj.Body, err = newBody(obj.Text, "text", nil)
-		if err != nil {
+	} else if obj.Text != nil {
+		if obj.body, err = newBody(obj.Text, "text", nil); err != nil {
 			return err
 		}
 		obj.contentType = "text/plain"
 	}
+	//构造params
 	if obj.Params != nil {
-
-		tempParam, err := newBody(obj.Params, "params", nil)
-		if err != nil {
-			return err
-		}
-		con, err := io.ReadAll(tempParam)
-		if err != nil {
+		dataMap := map[string][]string{}
+		if _, err = newBody(obj.Params, "params", dataMap); err != nil {
 			return err
 		}
 		pu, err := url.Parse(obj.Url)
 		if err != nil {
 			return err
 		}
-		if pu.Query() == nil || len(pu.Query()) == 0 {
-			obj.converUrl = obj.Url + "?" + tools.BytesToString(con)
-		} else {
-			obj.converUrl = obj.Url + "&" + tools.BytesToString(con)
+		puValues := pu.Query()
+		for kk, vvs := range dataMap {
+			for _, vv := range vvs {
+				puValues.Add(kk, vv)
+			}
 		}
+		pu.RawQuery = puValues.Encode()
+		obj.converUrl = pu.String()
 	}
+	//构造headers
 	if err = obj.newHeaders(); err != nil {
 		return err
 	}
+	//构造cookies
 	return obj.newCookies()
 }
-
-func (obj *Client) newRequestOption(option *RequestOption) {
+func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error) {
 	if option.TryNum == 0 {
 		option.TryNum = obj.TryNum
 	}
@@ -321,6 +303,9 @@ func (obj *Client) newRequestOption(option *RequestOption) {
 	}
 	if option.AfterCallBack == nil {
 		option.AfterCallBack = obj.AfterCallBack
+	}
+	if option.ErrCallBack == nil {
+		option.ErrCallBack = obj.ErrCallBack
 	}
 	if option.Headers == nil {
 		if obj.Headers == nil {
@@ -359,6 +344,23 @@ func (obj *Client) newRequestOption(option *RequestOption) {
 	if !option.Ja3 {
 		option.Ja3 = obj.Ja3
 	}
+	var err error
+	if con, ok := option.Json.(io.Reader); ok {
+		if option.Json, err = io.ReadAll(con); err != nil {
+			return option, err
+		}
+	}
+	if con, ok := option.Text.(io.Reader); ok {
+		if option.Text, err = io.ReadAll(con); err != nil {
+			return option, err
+		}
+	}
+	if con, ok := option.Data.(io.Reader); ok {
+		if option.Data, err = io.ReadAll(con); err != nil {
+			return option, err
+		}
+	}
+	return option, err
 }
 
 func (obj *Client) Request(preCtx context.Context, method string, href string, options ...RequestOption) (resp *Response, err error) {
@@ -368,52 +370,60 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	if preCtx == nil {
 		preCtx = obj.ctx
 	}
-	var option RequestOption
+	var rawOption RequestOption
 	if len(options) > 0 {
-		option = options[0]
+		rawOption = options[0]
 	}
-	if option.Method == "" {
-		option.Method = method
+	if rawOption.Method == "" {
+		rawOption.Method = method
 	}
-	if option.Url == "" {
-		option.Url = href
+	if rawOption.Url == "" {
+		rawOption.Url = href
 	}
-	if option.Body != nil {
-		option.TryNum = 0
+	if rawOption.Body != nil {
+		if rawOption.Bytes, err = io.ReadAll(rawOption.Body); err != nil {
+			return
+		}
 	}
-	obj.newRequestOption(&option)
-	if option.BeforCallBack == nil {
-		if err = option.optionInit(); err != nil {
+	var optionBak RequestOption
+	if optionBak, err = obj.newRequestOption(rawOption); err != nil {
+		return
+	}
+	if optionBak.BeforCallBack == nil {
+		if err = optionBak.optionInit(); err != nil {
 			return
 		}
 	}
 	//开始请求
 	var tryNum int64
-	for tryNum = 0; tryNum <= option.TryNum; tryNum++ {
+	for tryNum = 0; tryNum <= optionBak.TryNum; tryNum++ {
 		select {
 		case <-preCtx.Done():
 			return nil, preCtx.Err()
 		default:
+			option := optionBak
 			if option.BeforCallBack != nil {
-				option.BeforCallBack(&option)
-			}
-			if option.BeforCallBack != nil || option.AfterCallBack != nil {
-				obj.newRequestOption(&option)
-				if err = option.optionInit(); err != nil {
-					return
+				if err = option.BeforCallBack(&option); err != nil {
+					if errors.Is(err, ErrFatal) {
+						return
+					} else {
+						continue
+					}
 				}
 			}
-			if option.Body != nil {
-				option.Body.Seek(0, 0)
+			if err = option.optionInit(); err != nil {
+				return
 			}
 			resp, err = obj.tempRequest(preCtx, option)
 			if err != nil { //有错误
 				if errors.Is(err, ErrFatal) { //致命错误直接返回
 					return
+				} else if option.ErrCallBack != nil && option.ErrCallBack(err) { //不是致命错误，有错误回调,错误回调true,直接返回
+					return
 				}
 			} else if option.AfterCallBack == nil { //没有错误，且没有回调，直接返回
 				return
-			} else if err = option.AfterCallBack(&option, resp); err != nil { //没有错误，有回调，回调错误
+			} else if err = option.AfterCallBack(resp); err != nil { //没有错误，有回调，回调错误
 				if errors.Is(err, ErrFatal) { //没有错误，有回调，回调错误,致命错误直接返回
 					return
 				}
@@ -476,8 +486,8 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		}
 	}()
 	//创建request
-	if request_option.Body != nil {
-		reqs, err = http.NewRequestWithContext(reqCtx, method, href, request_option.Body)
+	if request_option.body != nil {
+		reqs, err = http.NewRequestWithContext(reqCtx, method, href, request_option.body)
 	} else {
 		reqs, err = http.NewRequestWithContext(reqCtx, method, href, nil)
 	}
