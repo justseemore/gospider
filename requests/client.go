@@ -36,8 +36,8 @@ type Client struct {
 	Http2         bool                       //开启http2 transport
 	Ja3           bool                       //开启ja3
 
-	Headers map[string]string //请求头
-	Bar     bool              //是否开启bar
+	Headers any  //请求头
+	Bar     bool //是否开启bar
 
 	disCookie bool //关闭cookies管理
 	disAlive  bool //关闭长连接
