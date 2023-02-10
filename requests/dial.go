@@ -22,7 +22,8 @@ type dialClient struct {
 	getProxy   func(ctx context.Context, url *url.URL) (string, error)
 	proxy      *url.URL
 	dialer     *net.Dialer
-	dnsIpData  sync.Map
+	dnsIpData  map[string]msgClient
+	lock       sync.RWMutex
 	dnsTimeout int64
 }
 type msgClient struct {
@@ -33,6 +34,7 @@ type msgClient struct {
 func newDail(ctx context.Context, session_option ClientOption) (*dialClient, error) {
 	var err error
 	dialCli := &dialClient{
+		dnsIpData:  make(map[string]msgClient),
 		dialer:     &net.Dialer{Timeout: time.Second * time.Duration(session_option.TLSHandshakeTimeout)},
 		ctx:        ctx,
 		dnsTimeout: session_option.DnsCacheTime,
@@ -57,7 +59,15 @@ func newDail(ctx context.Context, session_option ClientOption) (*dialClient, err
 	return dialCli, err
 }
 func (obj *dialClient) setIpData(addr string, msgData msgClient) {
-	obj.dnsIpData.Store(addr, msgData)
+	obj.lock.Lock()
+	obj.dnsIpData[addr] = msgData
+	obj.lock.Unlock()
+}
+func (obj *dialClient) getIpData(addr string) (msgClient, bool) {
+	obj.lock.RLock()
+	msgData, ok := obj.dnsIpData[addr]
+	obj.lock.RUnlock()
+	return msgData, ok
 }
 
 func (obj *dialClient) addrToIp(addr string) string {
@@ -82,12 +92,9 @@ func (obj *dialClient) addrToIp(addr string) string {
 }
 
 func (obj *dialClient) loadHost(host string) (string, bool) {
-	msgdataAny, ok := obj.dnsIpData.Load(host)
-	if ok {
-		msgdata := msgdataAny.(msgClient)
-		if time.Now().Unix()-msgdata.time < obj.dnsTimeout {
-			return msgdata.host, true
-		}
+	msgdata, ok := obj.getIpData(host)
+	if ok && time.Now().Unix()-msgdata.time < obj.dnsTimeout {
+		return msgdata.host, true
 	}
 	return host, false
 }

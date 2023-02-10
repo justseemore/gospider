@@ -454,19 +454,14 @@ func ZipDecode(r *bytes.Buffer, encoding string) (*bytes.Buffer, error) {
 	return rs, err
 }
 
-// 字符串转字节串
-func StringToBytes(s string) []byte {
-	return *(*[]byte)(unsafe.Pointer(
-		&struct {
-			string
-			Cap int
-		}{s, len(s)},
-	))
-}
-
 // 字节串转字符串
 func BytesToString(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
+	return unsafe.String(&b[0], len(b))
+}
+
+// 字符串转字节串
+func StringToBytes(s string) []byte {
+	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
 // 随机函数
@@ -501,7 +496,7 @@ type bidclient struct {
 	bidCharsFLen float64
 	bidChars     string
 	curTime      int64
-	sync.Mutex
+	lock         sync.Mutex
 }
 
 func newBidClient() *bidclient {
@@ -562,8 +557,8 @@ func (obj *bidclient) bidDecode(str string) (int64, error) {
 }
 
 func NewBonId() BonId {
-	bidClient.Lock()
-	defer bidClient.Unlock()
+	bidClient.lock.Lock()
+	defer bidClient.lock.Unlock()
 	curTime := time.Now().Unix()
 	var result BonId
 	result.Timestamp = curTime

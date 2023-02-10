@@ -14,7 +14,7 @@ import (
 type Client struct {
 	object *redis.Client
 	proxys map[string][]string
-	sync.Mutex
+	lock   sync.Mutex
 }
 type ClientOption struct {
 	Host string //host
@@ -235,8 +235,8 @@ func (r *Client) GetOrderProxys(key string) ([]string, error) {
 			j++
 		}
 	}
-	r.Lock()
-	defer r.Unlock()
+	r.lock.Lock()
 	r.proxys[key] = results
+	r.lock.Unlock()
 	return results, nil
 }

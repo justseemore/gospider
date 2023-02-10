@@ -14,7 +14,7 @@ type Client struct {
 	dataSortKeys *kinds.Set[string]
 
 	minNum int
-	sync.Mutex
+	lock   sync.Mutex
 }
 type ClientOption struct {
 	MinNum int
@@ -54,7 +54,8 @@ func (obj *Client) Add(words string) {
 	}
 	value2, ok := obj.dataLen[word_one]
 	if ok {
-		if value2.Add(word_len) {
+		if !value2.Has(word_len) {
+			value2.Add(word_len)
 			obj.dataSortKeys.Add(word_one)
 		}
 	} else {
@@ -63,12 +64,12 @@ func (obj *Client) Add(words string) {
 	}
 }
 func (obj *Client) sort() {
-	obj.Lock()
-	defer obj.Unlock()
+	obj.lock.Lock()
+	defer obj.lock.Unlock()
 	if obj.dataSortKeys.Len() == 0 {
 		return
 	}
-	for _, k := range obj.dataSortKeys.Array() {
+	for k := range obj.dataSortKeys.Data {
 		obj.dataOrdLen[k] = make([]int, obj.dataLen[k].Len())
 		for i, vv := range obj.dataLen[k].Array() {
 			obj.dataOrdLen[k][i] = vv

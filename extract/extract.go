@@ -349,7 +349,7 @@ func clearNode(results []*NodeA) [][]*NodeA {
 	groupMaps := []nodeMap{}
 	for _, val := range groupSets {
 		nodeScors := []nodeScore{}
-		for _, node := range val.nodes.Array() {
+		for node := range val.nodes.Data {
 			var score float64
 			if node.index == val.index && (node.score > 0 || node.index > 0) {
 				score = node.score

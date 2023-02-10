@@ -113,7 +113,7 @@ type JsClient struct {
 	client *Client
 	write  io.WriteCloser
 	read   *json.Decoder
-	sync.Mutex
+	lock   sync.Mutex
 }
 
 // 创建py解析器
@@ -208,8 +208,8 @@ func NewJsClient(pre_ctx context.Context, script string, name string, names ...s
 	return jsCli, nil
 }
 func (obj *JsClient) run(con []byte) (gjson.Result, error) {
-	obj.Lock()
-	defer obj.Unlock()
+	obj.lock.Lock()
+	defer obj.lock.Unlock()
 	con = append(con, '\n')
 	_, err := obj.write.Write(con)
 	if err != nil {

@@ -12,7 +12,6 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/pkg/sftp v1.13.5
 	github.com/refraction-networking/utls v1.2.0
-	github.com/syndtr/goleveldb v1.0.0
 	github.com/tidwall/gjson v1.14.4
 	github.com/ysmood/leakless v0.8.0
 	go.mongodb.org/mongo-driver v1.11.1

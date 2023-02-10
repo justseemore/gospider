@@ -1,12 +1,9 @@
 package cdp
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"errors"
 	"fmt"
-	"log"
 	"sort"
 	"strconv"
 	"sync"
@@ -16,14 +13,12 @@ import (
 	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/tools"
 	"golang.org/x/exp/maps"
-
-	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type DbClient struct {
-	db       *leveldb.DB
 	orderKey *chanx.Client[dbKey]
-	mapKey   sync.Map
+	mapKey   map[[16]byte]dbData
+	lock     sync.RWMutex
 	timeOut  int64
 	ctx      context.Context
 	cnl      context.CancelFunc
@@ -32,19 +27,21 @@ type dbKey struct {
 	key [16]byte
 	ttl int64
 }
+type dbData struct {
+	data FulData
+	ttl  int64
+}
 
-func NewDbClient(preCtx context.Context, dir string) (*DbClient, error) {
-	ctx, cnl := context.WithCancel(preCtx)
-	db, err := leveldb.OpenFile(dir, nil)
+func NewDbClient(ctx context.Context, cnl context.CancelFunc) *DbClient {
 	client := &DbClient{
 		ctx:      ctx,
 		cnl:      cnl,
-		db:       db,
-		timeOut:  60 * 60,
+		timeOut:  60 * 15,
+		mapKey:   make(map[[16]byte]dbData),
 		orderKey: chanx.NewClient[dbKey](ctx),
 	}
 	go client.run()
-	return client, err
+	return client
 }
 
 func (obj *DbClient) run() {
@@ -65,19 +62,19 @@ func (obj *DbClient) run() {
 				case <-time.After(time.Second * time.Duration(awaitTime)):
 				}
 			}
-			mapValAny, ok := obj.mapKey.Load(orderVal.key)
-			if ok { //删除mapkey，删除db 数据,数据过期开始删除
-				if mapVal, ok := mapValAny.(int64); ok && (orderVal.ttl == mapVal || time.Now().Unix()-mapVal >= obj.timeOut) {
-					obj.mapKey.Delete(orderVal.key)
-					obj.db.Delete(orderVal.key[:], nil)
-				}
+			obj.lock.RLock()
+			mapVal, ok := obj.mapKey[orderVal.key]
+			obj.lock.RUnlock()
+			if ok && (orderVal.ttl == mapVal.ttl || time.Now().Unix()-mapVal.ttl >= obj.timeOut) { //删除mapkey，删除db 数据,数据过期开始删除
+				obj.lock.Lock()
+				delete(obj.mapKey, orderVal.key)
+				obj.lock.Unlock()
 			}
 		}
 	}
 }
-func (obj *DbClient) Close() error {
+func (obj *DbClient) Close() {
 	obj.cnl()
-	return obj.db.Close()
 }
 func (obj *DbClient) keyMd5(key RequestOption, resourceType string) [16]byte {
 	var md5Str string
@@ -103,25 +100,21 @@ func (obj *DbClient) keyMd5(key RequestOption, resourceType string) [16]byte {
 	return tools.Md5(md5Str)
 }
 func (obj *DbClient) put(key [16]byte, fulData FulData) error {
-	valNetwork := bytes.NewBuffer(nil)
-	if err := gob.NewEncoder(valNetwork).Encode(fulData); err != nil {
-		return err
-	} else if err = obj.db.Put(key[:], valNetwork.Bytes(), nil); err != nil {
-		return err
-	}
 	nowTime := time.Now().Unix()
 	obj.orderKey.Add(dbKey{key: key, ttl: nowTime})
-	obj.mapKey.Store(key, nowTime)
+	obj.lock.Lock()
+	obj.mapKey[key] = dbData{data: fulData, ttl: nowTime}
+	obj.lock.Unlock()
 	return nil
 }
 func (obj *DbClient) get(key [16]byte) (fulData FulData, err error) {
-	var con []byte
-	if con, err = obj.db.Get(key[:], nil); err != nil {
-		if !errors.Is(err, leveldb.ErrNotFound) {
-			log.Print(err)
-		}
-		return
+	obj.lock.RLock()
+	mapVal, ok := obj.mapKey[key]
+	obj.lock.RUnlock()
+	if ok {
+		fulData = mapVal.data
+	} else {
+		err = errors.New("not found")
 	}
-	err = gob.NewDecoder(bytes.NewReader(con)).Decode(&fulData)
 	return
 }

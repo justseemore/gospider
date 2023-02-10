@@ -4,7 +4,6 @@ import (
 	"container/list"
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -15,8 +14,8 @@ type Client[T any] struct {
 	cnl  context.CancelFunc
 	ctx2 context.Context
 	cnl2 context.CancelFunc
-	sync.Mutex
-	len atomic.Int64
+	lock sync.RWMutex
+	len  int64
 }
 
 func NewClient[T any](preCtx context.Context) *Client[T] {
@@ -51,16 +50,16 @@ func (obj *Client[T]) Chan() <-chan T {
 	return obj.pip
 }
 func (obj *Client[T]) push(val T) {
-	obj.Lock()
+	obj.lock.Lock()
 	obj.buf.PushBack(val)
-	obj.Unlock()
-	obj.len.Add(1)
+	obj.len++
+	obj.lock.Unlock()
 }
 func (obj *Client[T]) get() any {
-	obj.Lock()
+	obj.lock.Lock()
 	val := obj.buf.Remove(obj.buf.Front())
-	obj.Unlock()
-	obj.len.Add(-1)
+	obj.len--
+	obj.lock.Unlock()
 	return val
 }
 
@@ -109,5 +108,5 @@ func (obj *Client[T]) Done() <-chan struct{} {
 	return obj.ctx2.Done()
 }
 func (obj *Client[T]) Len() int64 {
-	return obj.len.Load()
+	return obj.len
 }

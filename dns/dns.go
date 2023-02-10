@@ -20,8 +20,8 @@ type Client struct {
 	cacheTime  int64
 	dnsConn    net.PacketConn
 	saveData   map[[16]byte]msgData
-	sync.Mutex
-	dialer net.Dialer
+	lock       sync.Mutex
+	dialer     net.Dialer
 }
 type ClientOption struct {
 	ListenAddr string //监听的地址；
@@ -143,9 +143,9 @@ func (obj *Client) handle(ctx context.Context, addr net.Addr, buf []byte) error 
 	if err = msg.Unpack(buf[:bn]); err != nil {
 		return err
 	}
-	obj.Lock()
+	obj.lock.Lock()
 	obj.saveData[keyMd5] = msgData{answers: msg.Answers, time: time.Now().Unix()}
-	obj.Unlock()
+	obj.lock.Unlock()
 	if raw, err = msg.Pack(); err != nil {
 		return err
 	}

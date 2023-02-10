@@ -2,17 +2,16 @@ package kinds
 
 import (
 	"sync"
-	"sync/atomic"
 )
 
 type Set[T comparable] struct {
-	data sync.Map
-	l    atomic.Int64
+	Data map[T]struct{}
+	lock sync.RWMutex
 }
 
 // 新建客户端
 func NewSet[T comparable](strs ...T) *Set[T] {
-	list := new(Set[T])
+	list := &Set[T]{Data: map[T]struct{}{}}
 	for _, str := range strs {
 		list.Add(str)
 	}
@@ -20,46 +19,45 @@ func NewSet[T comparable](strs ...T) *Set[T] {
 }
 
 // 添加元素
-func (obj *Set[T]) Add(value T) bool {
-	_, ok := obj.data.LoadOrStore(value, struct{}{})
-	if !ok {
-		obj.l.Add(1)
-	}
-	return !ok
+func (obj *Set[T]) Add(value T) {
+	obj.lock.Lock()
+	obj.Data[value] = struct{}{}
+	obj.lock.Unlock()
 }
 
 // 删除元素
 func (obj *Set[T]) Rem(value T) bool {
-	obj.l.Add(-1)
-	obj.data.Delete(value)
+	obj.lock.Lock()
+	delete(obj.Data, value)
+	obj.lock.Unlock()
 	return false
 }
 
 // 判断元素是否存在
 func (obj *Set[T]) Has(value T) bool {
-	_, ok := obj.data.Load(value)
+	obj.lock.RLock()
+	_, ok := obj.Data[value]
+	obj.lock.RUnlock()
 	return ok
 }
 
 // 返回元素长度
-func (obj *Set[T]) Len() int64 {
-	return obj.l.Load()
+func (obj *Set[T]) Len() int {
+	return len(obj.Data)
 }
 
 // 重置
 func (obj *Set[T]) ReSet() {
-	obj.data = sync.Map{}
-	obj.l = atomic.Int64{}
+	obj.Data = make(map[T]struct{})
 }
 
 // 返回数组
 func (obj *Set[T]) Array() []T {
 	result := make([]T, obj.Len())
-	var i int64
-	obj.data.Range(func(key, value any) bool {
-		result[i] = key.(T)
+	var i int
+	for val := range obj.Data {
+		result[i] = val
 		i++
-		return true
-	})
+	}
 	return result
 }

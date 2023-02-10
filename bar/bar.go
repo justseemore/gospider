@@ -11,12 +11,12 @@ import (
 )
 
 type Client struct {
-	cur     int64         //当前数量
-	total   int64         //总数量
-	shape   string        //进度条图像
-	percent int           //进度
-	rate    *bytes.Buffer //进度条
-	sync.Mutex
+	cur       int64         //当前数量
+	total     int64         //总数量
+	shape     string        //进度条图像
+	percent   int           //进度
+	rate      *bytes.Buffer //进度条
+	lock      sync.Mutex
 	startTime int64
 	preMt     barMt
 	preMt2    barMt
@@ -93,8 +93,8 @@ type barMt struct {
 
 // 打印进度条
 func (obj *Client) Print(curs ...int64) {
-	obj.Lock()
-	defer obj.Unlock()
+	obj.lock.Lock()
+	defer obj.lock.Unlock()
 
 	if len(curs) == 0 {
 		obj.cur++

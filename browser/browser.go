@@ -28,11 +28,16 @@ import (
 var version = "020"
 
 func delTempDir(dir string) {
-	for i := 0; i < 500; i++ {
+	timeout := 10 * 1000         //10s
+	sleep := 100                 //每次睡眠0.1s
+	totalSize := timeout / sleep //总共100次
+	for i := 0; i < totalSize; i++ {
+		if i > 0 {
+			time.Sleep(time.Millisecond * time.Duration(sleep))
+		}
 		if os.RemoveAll(dir) == nil {
 			return
 		}
-		time.Sleep(time.Millisecond * 10)
 	}
 }
 
@@ -81,7 +86,7 @@ func BrowserCmdMain() (err error) {
 			if rs != nil {
 				defer delTempDir(rs.Group(1))
 			} else {
-				rs = re.Search(`--user-data-dir=(.*)`, arg)
+				rs = re.Search(`--user-data-dir=(\S*)`, arg)
 				if rs != nil {
 					defer delTempDir(rs.Group(1))
 				}
@@ -105,12 +110,12 @@ var stealth string
 var stealth2 string
 
 type Client struct {
-	db     *cdp.DbClient
-	cmdCli *cmd.Client
-	reqCli *requests.Client
-	port   int
-	host   string
-	sync.Mutex
+	db       *cdp.DbClient
+	cmdCli   *cmd.Client
+	reqCli   *requests.Client
+	port     int
+	host     string
+	lock     sync.Mutex
 	ctx      context.Context
 	cnl      context.CancelFunc
 	webSock  *cdp.WebSock
@@ -447,23 +452,20 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 		preCtx = context.TODO()
 	}
 	ctx, cnl := context.WithCancel(preCtx)
+	defer func() {
+		if err != nil {
+			cnl()
+		}
+	}()
 	var cli *cmd.Client
 	if option.Host == "" || option.Port == 0 {
-		cli, err = runChrome(ctx, &option)
+		if cli, err = runChrome(ctx, &option); err != nil {
+			return
+		}
 	}
-	if err != nil {
-		cnl()
+	var reqCli *requests.Client
+	if reqCli, err = requests.NewClient(ctx); err != nil {
 		return
-	}
-	reqCli, err := requests.NewClient(ctx)
-	if err != nil {
-		cnl()
-		return nil, err
-	}
-	db, err := cdp.NewDbClient(ctx, option.UserDir)
-	if err != nil {
-		cnl()
-		return nil, err
 	}
 	client = &Client{
 		proxy:    option.Proxy,
@@ -471,7 +473,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 		ctx:      ctx,
 		cnl:      cnl,
 		cmdCli:   cli,
-		db:       db,
+		db:       cdp.NewDbClient(ctx, cnl),
 		host:     option.Host,
 		port:     option.Port,
 		reqCli:   reqCli,
@@ -540,9 +542,9 @@ func (obj *Client) Done() <-chan struct{} {
 func (obj *Client) Addr() string {
 	return obj.proxyCli.Addr()
 }
-func (obj *Client) Close() error {
+func (obj *Client) Close() (err error) {
 	if obj.webSock != nil {
-		if err := obj.webSock.BrowserClose(); err != nil {
+		if err = obj.webSock.BrowserClose(); err != nil {
 			return err
 		}
 	}
@@ -550,7 +552,8 @@ func (obj *Client) Close() error {
 		obj.cmdCli.Close()
 	}
 	obj.cnl()
-	return obj.db.Close()
+	obj.db.Close()
+	return
 }
 
 // 新建标签页
