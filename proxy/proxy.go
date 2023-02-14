@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -238,12 +237,8 @@ func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader
 	var err error
 	clientReq, isWebsocket, err := readRequest(clientReader)
 	if err != nil {
-		log.Print(err)
 		return err
 	}
-	log.Print("成功", clientReq.Method)
-	log.Print("成功", clientReq.URL.Hostname())
-	log.Print("成功", clientReq.URL.Port())
 	if err = obj.verifyPwd(client, clientReq); err != nil {
 		return err
 	}

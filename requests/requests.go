@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
 
@@ -29,17 +30,14 @@ var defaultHeaders = http.Header{
 	"User-Agent":      []string{UserAgent},
 }
 
-type myInt int
-
-const (
-	keyPrincipalID myInt = iota
-)
+const keyPrincipalID = "gospiderContextData"
 
 var (
 	ErrFatal = errors.New("致命错误")
 )
 
 type reqCtxData struct {
+	ja3Id       ja3.ClientHelloId
 	isCallback  bool
 	proxyUser   *url.Userinfo
 	proxy       *url.URL
@@ -79,6 +77,7 @@ type RequestOption struct {
 	Bar           bool                       //是否开启bar
 	DisProxy      bool                       //是否关闭代理
 	Ja3           bool                       //是否开启ja3
+	Ja3Id         ja3.ClientHelloId          //客户端helloID
 	TryNum        int64                      //重试次数
 	BeforCallBack func(*RequestOption) error //请求之前回调
 	AfterCallBack func(*Response) error      //请求之后回调
@@ -291,6 +290,11 @@ func (obj *RequestOption) optionInit() error {
 	if err = obj.newHeaders(); err != nil {
 		return err
 	}
+	if !obj.Ja3Id.IsSet() { //有值
+		obj.Ja3 = true
+	} else if obj.Ja3 {
+		obj.Ja3Id = ja3.HelloChrome_Auto
+	}
 	//构造cookies
 	return obj.newCookies()
 }
@@ -343,6 +347,9 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	}
 	if !option.Ja3 {
 		option.Ja3 = obj.Ja3
+	}
+	if option.Ja3Id.IsSet() {
+		option.Ja3Id = obj.Ja3Id
 	}
 	var err error
 	if con, ok := option.Json.(io.Reader); ok {
@@ -459,6 +466,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	ctxData := new(reqCtxData)
 	ctxData.disProxy = request_option.DisProxy
 	ctxData.ja3 = request_option.Ja3
+	ctxData.ja3Id = request_option.Ja3Id
 	if request_option.Proxy != "" { //代理相关构造
 		tempProxy, err := verifyProxy(request_option.Proxy)
 		if err != nil {

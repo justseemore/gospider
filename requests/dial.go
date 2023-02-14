@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/tools"
-	utls "github.com/refraction-networking/utls"
 )
 
 type dialClient struct {
@@ -362,9 +362,14 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 	return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 }
 
-func (obj *dialClient) dialTlsContext(ctx context.Context, network string, addr string) (net.Conn, error) {
-	conn, err := obj.dialContext(ctx, network, addr)
-	if err != nil {
+func (obj *dialClient) dialTlsContext(ctx context.Context, network string, addr string) (tlsConn net.Conn, err error) {
+	var conn net.Conn
+	defer func() {
+		if err != nil && conn != nil {
+			conn.Close()
+		}
+	}()
+	if conn, err = obj.dialContext(ctx, network, addr); err != nil {
 		return nil, err
 	}
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
@@ -374,36 +379,9 @@ func (obj *dialClient) dialTlsContext(ctx context.Context, network string, addr 
 	}
 	serverName := addr[:colonPos]
 	if reqData.ja3 {
-		tlsConn := utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: serverName}, utls.HelloCustom)
-		spec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
-		if err != nil {
-			conn.Close()
-			return nil, err
-		}
-		if !reqData.h2 {
-			for i := 0; i < len(spec.Extensions); i++ {
-				if extension, ok := spec.Extensions[i].(*utls.ALPNExtension); ok {
-					alns := []string{}
-					for _, aln := range extension.AlpnProtocols {
-						if aln != "h2" {
-							alns = append(alns, aln)
-						}
-					}
-					extension.AlpnProtocols = alns
-				}
-			}
-		}
-		if err = tlsConn.ApplyPreset(&spec); err != nil {
-			conn.Close()
-			return nil, err
-		}
-		if err = tlsConn.HandshakeContext(ctx); err != nil {
-			conn.Close()
-			return nil, err
-		}
-		return tlsConn, err
+		return ja3.Ja3DialContext(ctx, conn, reqData.ja3Id, reqData.h2, serverName)
 	}
-	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: serverName}), err
+	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: serverName, NextProtos: []string{"h2", "http/1.1"}}), err
 }
 func (obj *dialClient) dialTlsContext2(ctx context.Context, network string, addr string, cfg *tls.Config) (net.Conn, error) {
 	return obj.dialTlsContext(ctx, network, addr)

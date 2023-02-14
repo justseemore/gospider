@@ -6,6 +6,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 
+	"gitee.com/baixudong/gospider/ja3"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/publicsuffix"
 )
@@ -35,6 +36,7 @@ type Client struct {
 	Timeout       int64                      //请求超时时间
 	Http2         bool                       //开启http2 transport
 	Ja3           bool                       //开启ja3
+	Ja3Id         ja3.ClientHelloId          //客户端helloID
 
 	Headers any  //请求头
 	Bar     bool //是否开启bar
