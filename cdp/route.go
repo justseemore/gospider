@@ -114,7 +114,11 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	return fulData, nil
 }
 
-func (obj *Route) FulFill(ctx context.Context, fulData FulData) error {
+func (obj *Route) FulFill(ctx context.Context, fulDatas ...FulData) error {
+	var fulData FulData
+	if len(fulDatas) > 0 {
+		fulData = fulDatas[0]
+	}
 	if _, err := obj.webSock.FetchFulfillRequest(ctx, obj.recvData.RequestId, fulData); err != nil {
 		if err2 := obj.Fail(nil); err2 != nil {
 			return err2
