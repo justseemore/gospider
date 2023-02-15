@@ -590,14 +590,7 @@ func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page
 		return nil, err
 	}
 	if !obj.disRoute {
-		if err = page.Route(preCtx, func(ctx context.Context, r *cdp.Route) {
-			rs, err := r.Request(ctx, r.NewRequestOption())
-			if err != nil {
-				r.Fail(ctx, "Failed")
-			} else if err = r.FulFill(ctx, rs); err != nil {
-				r.Fail(ctx, "Failed")
-			}
-		}); err != nil {
+		if err = page.Route(preCtx, func(ctx context.Context, r *cdp.Route) { r.Continue(ctx) }); err != nil {
 			return nil, err
 		}
 	}

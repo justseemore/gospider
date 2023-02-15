@@ -362,6 +362,40 @@ func (obj *dialClient) dialContext(ctx context.Context, network string, addr str
 	return obj.dialer.DialContext(ctx, network, obj.addrToIp(addr))
 }
 
+// type TestRead struct {
+// 	con net.Conn
+// }
+
+// func (obj *TestRead) Read(b []byte) (int, error) {
+// 	i, err := obj.con.Read(b)
+// 	log.Print("read: ", tools.BytesToString(b))
+// 	return i, err
+// }
+// func (obj *TestRead) Write(b []byte) (int, error) {
+// 	log.Print("writet: ", tools.BytesToString(b))
+// 	i, err := obj.con.Write(b)
+// 	return i, err
+// }
+
+// func (obj *TestRead) Close() error {
+// 	return obj.con.Close()
+// }
+// func (obj *TestRead) LocalAddr() net.Addr {
+// 	return obj.con.LocalAddr()
+// }
+// func (obj *TestRead) RemoteAddr() net.Addr {
+// 	return obj.con.RemoteAddr()
+// }
+// func (obj *TestRead) SetDeadline(t time.Time) error {
+// 	return obj.con.SetDeadline(t)
+// }
+// func (obj *TestRead) SetReadDeadline(t time.Time) error {
+// 	return obj.con.SetReadDeadline(t)
+// }
+// func (obj *TestRead) SetWriteDeadline(t time.Time) error {
+// 	return obj.con.SetWriteDeadline(t)
+// }
+
 func (obj *dialClient) dialTlsContext(ctx context.Context, network string, addr string) (tlsConn net.Conn, err error) {
 	var conn net.Conn
 	defer func() {
@@ -381,6 +415,10 @@ func (obj *dialClient) dialTlsContext(ctx context.Context, network string, addr 
 	if reqData.ja3 {
 		return ja3.Ja3DialContext(ctx, conn, reqData.ja3Id, reqData.h2, serverName)
 	}
+	// tt := TestRead{
+	// 	con: tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: serverName, NextProtos: []string{"h2", "http/1.1"}}),
+	// }
+	// return &tt, err
 	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: serverName, NextProtos: []string{"h2", "http/1.1"}}), err
 }
 func (obj *dialClient) dialTlsContext2(ctx context.Context, network string, addr string, cfg *tls.Config) (net.Conn, error) {

@@ -14,7 +14,6 @@ import (
 
 	"gitee.com/baixudong/gospider/blog"
 	"gitee.com/baixudong/gospider/browser"
-	"gitee.com/baixudong/gospider/cdp"
 	"gitee.com/baixudong/gospider/mgo"
 	"gitee.com/baixudong/gospider/redis"
 	"gitee.com/baixudong/gospider/requests"
@@ -242,14 +241,6 @@ func (obj *Client) Request(ctx context.Context, method string, url string, optio
 	}
 	defer page.Close()
 	page.ReqCli = obj.Session
-	page.Route(ctx, func(ctx context.Context, r *cdp.Route) {
-		rs, err := r.Request(ctx, r.NewRequestOption(), option)
-		if err != nil {
-			r.Fail(ctx, "Failed")
-		} else {
-			r.FulFill(ctx, rs)
-		}
-	})
 	if err = page.GoTo(ctx, url); err != nil {
 		return nil, err
 	}

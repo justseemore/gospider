@@ -115,16 +115,32 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 }
 
 func (obj *Route) FulFill(ctx context.Context, fulData FulData) error {
-	_, err := obj.webSock.FetchFulfillRequest(ctx, obj.recvData.RequestId, fulData)
-	return err
+	if _, err := obj.webSock.FetchFulfillRequest(ctx, obj.recvData.RequestId, fulData); err != nil {
+		if err2 := obj.Fail(nil); err2 != nil {
+			return err2
+		}
+		return err
+	}
+	return nil
 }
 func (obj *Route) Continue(ctx context.Context) error {
-	_, err := obj.webSock.FetchContinueRequest(ctx, obj.recvData.RequestId)
-	return err
+	if fulData, err := obj.Request(ctx, obj.NewRequestOption()); err != nil {
+		return err
+	} else if err = obj.FulFill(ctx, fulData); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Failed, Aborted, TimedOut, AccessDenied, ConnectionClosed, ConnectionReset, ConnectionRefused, ConnectionAborted, ConnectionFailed, NameNotResolved, InternetDisconnected, AddressUnreachable, BlockedByClient, BlockedByResponse
-func (obj *Route) Fail(ctx context.Context, errorReason string) error {
+func (obj *Route) Fail(ctx context.Context, errorReasons ...string) error {
+	var errorReason string
+	if len(errorReasons) > 0 {
+		errorReason = errorReasons[0]
+	}
+	if errorReason == "" {
+		errorReason = "Failed"
+	}
 	_, err := obj.webSock.FetchFailRequest(ctx, obj.recvData.RequestId, errorReason)
 	return err
 }
