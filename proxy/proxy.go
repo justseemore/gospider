@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -19,6 +20,12 @@ import (
 	"gitee.com/baixudong/gospider/thread"
 	"gitee.com/baixudong/gospider/tools"
 )
+
+//go:embed gospider.crt
+var CrtFile []byte
+
+//go:embed gospider.key
+var KeyFile []byte
 
 type ClientOption struct {
 	Usr       string      //用户名
