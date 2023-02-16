@@ -733,14 +733,17 @@ func SplitHostPort(address string) (string, int, error) {
 	}
 	return host, portnum, nil
 }
-func GetCert() (cert tls.Certificate, err error) {
-	if certOut, keyOut, err := GetCertFile(); err != nil {
+func GetCert(addr string) (cert tls.Certificate, err error) {
+	if addr == "" {
+		addr = "127.0.0.1"
+	}
+	if certOut, keyOut, err := GetCertFile(addr); err != nil {
 		return cert, err
 	} else {
 		return tls.X509KeyPair(certOut.Bytes(), keyOut.Bytes())
 	}
 }
-func GetCertFile() (certOut *bytes.Buffer, keyOut *bytes.Buffer, err error) {
+func GetCertFile(addr string) (*bytes.Buffer, *bytes.Buffer, error) {
 	rootCsr := &x509.Certificate{
 		Version:      3,                             //证书的版本，数字1,2,3。
 		SerialNumber: big.NewInt(time.Now().Unix()), //证书序列号，标识证书的唯一整数，重复的编号无法安装到系统里。
@@ -751,13 +754,20 @@ func GetCertFile() (certOut *bytes.Buffer, keyOut *bytes.Buffer, err error) {
 			Organization:       []string{"GoSpider"},     //证书持有者组织名称。
 			OrganizationalUnit: []string{"GoSpiderCert"}, //证书持有者组织唯一标识。
 			CommonName:         "GoSpider Root CA",       //证书持有者通用名，需保持唯一，否则验证会失败。
+
 		},
-		NotBefore:   time.Now(),                                                   //证书有效期开始时间。
-		NotAfter:    time.Now().AddDate(10, 0, 0),                                 //证书过期时间。 10年
-		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature, //定义了证书包含的密钥的用途。
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},               //该扩展表示被认证的公钥的用途
-		// IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},                           //需要颁发证书的 IP 地址。
+		NotBefore:             time.Now(),                   //证书有效期开始时间。
+		NotAfter:              time.Now().AddDate(10, 0, 0), //证书过期时间。 10年
+		BasicConstraintsValid: true,                         //为true表示IsCA/MaxPathLen/MaxPathLenZero有效
+		IsCA:                  true,                         //
+		MaxPathLen:            1,
+		MaxPathLenZero:        false,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature, //定义了证书包含的密钥的用途。
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},                                                              //该扩展表示被认证的公钥的用途
+		IPAddresses:           []net.IP{net.ParseIP(addr)},                                                                                 //需要颁发证书的 IP 地址。
 	}
+	certOut := bytes.NewBuffer(nil)
+	keyOut := bytes.NewBuffer(nil)
 	if pk, err := rsa.GenerateKey(rand2.Reader, 2048); err != nil {
 		return certOut, keyOut, err
 	} else if derBytes, err := x509.CreateCertificate(rand2.Reader, rootCsr, rootCsr, &pk.PublicKey, pk); err != nil {
@@ -766,6 +776,7 @@ func GetCertFile() (certOut *bytes.Buffer, keyOut *bytes.Buffer, err error) {
 		return certOut, keyOut, err
 	} else if err = pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(pk)}); err != nil {
 		return certOut, keyOut, err
+	} else {
+		return certOut, keyOut, err
 	}
-	return
 }
