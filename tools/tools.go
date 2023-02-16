@@ -9,14 +9,21 @@ import (
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/md5"
+	rand2 "crypto/rand"
+	"crypto/rsa"
 	"crypto/sha1"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"math"
+	"math/big"
 	"math/rand"
 	"net"
 	"net/url"
@@ -725,4 +732,40 @@ func SplitHostPort(address string) (string, int, error) {
 		return "", 0, errors.New("port number out of range " + port)
 	}
 	return host, portnum, nil
+}
+func GetCert() (cert tls.Certificate, err error) {
+	if certOut, keyOut, err := GetCertFile(); err != nil {
+		return cert, err
+	} else {
+		return tls.X509KeyPair(certOut.Bytes(), keyOut.Bytes())
+	}
+}
+func GetCertFile() (certOut *bytes.Buffer, keyOut *bytes.Buffer, err error) {
+	rootCsr := &x509.Certificate{
+		Version:      3,                             //证书的版本，数字1,2,3。
+		SerialNumber: big.NewInt(time.Now().Unix()), //证书序列号，标识证书的唯一整数，重复的编号无法安装到系统里。
+		Subject: pkix.Name{
+			Country:            []string{"CN"},           // 国家
+			Province:           []string{"Shanghai"},     //省
+			Locality:           []string{"Shanghai"},     //市
+			Organization:       []string{"GoSpider"},     //证书持有者组织名称。
+			OrganizationalUnit: []string{"GoSpiderCert"}, //证书持有者组织唯一标识。
+			CommonName:         "GoSpider Root CA",       //证书持有者通用名，需保持唯一，否则验证会失败。
+		},
+		NotBefore:   time.Now(),                                                   //证书有效期开始时间。
+		NotAfter:    time.Now().AddDate(10, 0, 0),                                 //证书过期时间。 10年
+		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature, //定义了证书包含的密钥的用途。
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},               //该扩展表示被认证的公钥的用途
+		// IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},                           //需要颁发证书的 IP 地址。
+	}
+	if pk, err := rsa.GenerateKey(rand2.Reader, 2048); err != nil {
+		return certOut, keyOut, err
+	} else if derBytes, err := x509.CreateCertificate(rand2.Reader, rootCsr, rootCsr, &pk.PublicKey, pk); err != nil {
+		return certOut, keyOut, err
+	} else if err = pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
+		return certOut, keyOut, err
+	} else if err = pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(pk)}); err != nil {
+		return certOut, keyOut, err
+	}
+	return
 }

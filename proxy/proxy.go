@@ -232,6 +232,91 @@ func writeRequest(clientReq *http.Request, w io.Writer, ipUrl *url.URL) error {
 	}
 	return clientReq.Write(w)
 }
+
+func (obj *Client) httpsHandle(ctx context.Context, client net.Conn, clientReader *bufio.Reader) error {
+	defer client.Close()
+	var err error
+	clientReq, isWebsocket, err := readRequest(clientReader)
+	if err != nil {
+		return err
+	}
+	if err = obj.verifyPwd(client, clientReq); err != nil {
+		return err
+	}
+	var ip_addr string
+	if obj.GetProxy != nil {
+		ip_addr, err = obj.GetProxy()
+		if err != nil {
+			return err
+		}
+	} else if obj.Proxy != "" {
+		ip_addr = obj.Proxy
+	}
+	var server net.Conn
+	if ip_addr == "" { //使用本地转发的逻辑
+		if server, err = obj.dialer.DialContext(ctx, "tcp", net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
+			return err
+		}
+		defer server.Close()
+		if clientReq.Method == http.MethodConnect {
+			if _, err = client.Write([]byte(fmt.Sprintf("%s 200 Connection established\r\n\r\n", clientReq.Proto))); err != nil {
+				return err
+			}
+		} else {
+			if err = writeRequest(clientReq, server, nil); err != nil {
+				return err
+			}
+		}
+	} else { //使用代理转发的逻辑
+		ipUrl, err := obj.verifyProxy(ip_addr)
+		if err != nil {
+			return err
+		}
+		switch ipUrl.Scheme {
+		case "http":
+			if server, err = obj.getHttpProxyConn(ctx, ipUrl); err != nil { //获取服务连接
+				return err
+			}
+			defer server.Close()
+			if err = writeRequest(clientReq, server, ipUrl); err != nil {
+				return err
+			}
+		case "socks5":
+			if server, err = requests.GetSocks5ProxyConn(ctx, obj.dialer, ipUrl, net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
+				return err
+			}
+			defer server.Close()
+			if clientReq.Method == http.MethodConnect {
+				if _, err = client.Write([]byte(fmt.Sprintf("%s 200 Connection established\r\n\r\n", clientReq.Proto))); err != nil {
+					return err
+				}
+			} else {
+				if err = writeRequest(clientReq, server, nil); err != nil {
+					return err
+				}
+			}
+		default:
+			return errors.New("不支持的代理协议")
+		}
+	}
+	go func() { //服务端到客户端
+		defer server.Close()
+		defer client.Close()
+		io.Copy(client, server)
+	}()
+	if clientReq.Method != http.MethodConnect && !isWebsocket {
+		for {
+			if clientReq, _, err = readRequest(clientReader); err != nil {
+				return err
+			}
+			if err = writeRequest(clientReq, server, nil); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = io.Copy(server, client) //客户端发送服务端
+	return err
+}
 func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader *bufio.Reader) error {
 	defer client.Close()
 	var err error
@@ -454,7 +539,6 @@ func (obj *Client) sockes5Handle(ctx context.Context, client net.Conn, clientRea
 			if _, err = client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil { //响应客户端连接成功
 				return err
 			}
-
 			httpsBytes, err := clientReader.Peek(1)
 			if err != nil {
 				return err
