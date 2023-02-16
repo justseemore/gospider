@@ -1,4 +1,4 @@
-import warnings
+import warnings,base64
 warnings.filterwarnings("ignore",category=DeprecationWarning)
 import imp,sys,json
 def print(*arg,**kwgs):
@@ -6,9 +6,8 @@ def print(*arg,**kwgs):
 def loadModule(source):
     mod = sys.modules.setdefault("", imp.new_module(""))
     mod.__dict__["print"]=print
-    exec(compile(source, "", 'exec'), mod.__dict__)
+    exec(compile(base64.b64decode(source).decode("utf8"), "", 'exec'), mod.__dict__)
     return mod
-globals()
 while True:
     error=""
     result=""

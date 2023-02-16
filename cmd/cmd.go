@@ -106,8 +106,8 @@ var cmdPipJsScript []byte
 //go:embed cmdPipPyScript.py
 var cmdPipPyScript []byte
 
-var jsScriptVersion = "013"
-var pyScriptVersion = "007"
+var jsScriptVersion = "014"
+var pyScriptVersion = "014"
 
 type JsClient struct {
 	client *Client
@@ -148,7 +148,7 @@ func NewPyClient(pre_ctx context.Context, script string, name string, names ...s
 		read:   json.NewDecoder(readBody),
 		write:  writeBody,
 	}
-	scrJson, err := json.Marshal(map[string]any{"Script": script, "Names": names})
+	scrJson, err := json.Marshal(map[string]any{"Script": tools.Base64Encode(script), "Names": names})
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +193,7 @@ func NewJsClient(pre_ctx context.Context, script string, name string, names ...s
 		read:   json.NewDecoder(readBody),
 		write:  writeBody,
 	}
-	scrJson, err := json.Marshal(map[string]any{"Script": script, "Names": names})
+	scrJson, err := json.Marshal(map[string]any{"Script": tools.Base64Encode(script), "Names": names})
 	if err != nil {
 		return nil, err
 	}

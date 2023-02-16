@@ -1,6 +1,7 @@
 var Module = require('module');
 var path = require('path');
 function requireFromString(code, ...names) {
+    code = Buffer.from(code, 'utf-8').toString('base64')
     code +=`\r\n;module.exports={${names.join(",")}}`
 	if (typeof filename === 'object') {
 		opts = filename;
