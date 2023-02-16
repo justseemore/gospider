@@ -106,7 +106,7 @@ var cmdPipJsScript []byte
 //go:embed cmdPipPyScript.py
 var cmdPipPyScript []byte
 
-var jsScriptVersion = "014"
+var jsScriptVersion = "015"
 var pyScriptVersion = "014"
 
 type JsClient struct {
