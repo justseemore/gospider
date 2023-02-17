@@ -9,12 +9,12 @@ import (
 	"gitee.com/baixudong/gospider/tools"
 )
 
-type httpConn struct {
+type pwdConn struct {
 	rawConn            net.Conn
 	proxyAuthorization string
 }
 
-func (obj *httpConn) Write(b []byte) (n int, err error) {
+func (obj *pwdConn) Write(b []byte) (n int, err error) {
 	if obj.proxyAuthorization == "" {
 		return obj.rawConn.Write(b)
 	}
@@ -22,27 +22,27 @@ func (obj *httpConn) Write(b []byte) (n int, err error) {
 	obj.proxyAuthorization = ""
 	return obj.rawConn.Write(b)
 }
-func (obj *httpConn) Read(b []byte) (n int, err error) {
+func (obj *pwdConn) Read(b []byte) (n int, err error) {
 	return obj.rawConn.Read(b)
 }
-func (obj *httpConn) Close() error {
+func (obj *pwdConn) Close() error {
 	if obj.rawConn != nil {
 		return obj.rawConn.Close()
 	}
 	return nil
 }
-func (obj *httpConn) LocalAddr() net.Addr {
+func (obj *pwdConn) LocalAddr() net.Addr {
 	return obj.rawConn.LocalAddr()
 }
-func (obj *httpConn) RemoteAddr() net.Addr {
+func (obj *pwdConn) RemoteAddr() net.Addr {
 	return obj.rawConn.RemoteAddr()
 }
-func (obj *httpConn) SetDeadline(t time.Time) error {
+func (obj *pwdConn) SetDeadline(t time.Time) error {
 	return obj.rawConn.SetDeadline(t)
 }
-func (obj *httpConn) SetReadDeadline(t time.Time) error {
+func (obj *pwdConn) SetReadDeadline(t time.Time) error {
 	return obj.rawConn.SetReadDeadline(t)
 }
-func (obj *httpConn) SetWriteDeadline(t time.Time) error {
+func (obj *pwdConn) SetWriteDeadline(t time.Time) error {
 	return obj.rawConn.SetWriteDeadline(t)
 }

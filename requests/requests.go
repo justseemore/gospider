@@ -42,6 +42,7 @@ type reqCtxData struct {
 	proxyUser   *url.Userinfo
 	proxy       *url.URL
 	url         *url.URL
+	host        string
 	redirectNum int
 	disProxy    bool
 	h2          bool
@@ -450,7 +451,7 @@ func verifyProxy(proxyUrl string) (*url.URL, error) {
 		return nil, err
 	}
 	switch proxy.Scheme {
-	case "http", "socks5":
+	case "http", "socks5", "https":
 		return proxy, nil
 	default:
 		return nil, tools.WrapError(ErrFatal, "不支持的代理协议")
@@ -503,6 +504,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		return response, tools.WrapError(ErrFatal, err)
 	}
 	ctxData.url = reqs.URL
+	ctxData.host = reqs.Host
 	if request_option.Http2 { //根据scheme判断是否启动http2
 		if reqs.URL.Scheme == "https" {
 			ctxData.h2 = request_option.Http2

@@ -59,7 +59,7 @@ var (
 	HelloQQ_11_1 = utls.HelloQQ_11_1
 )
 
-func Ja3DialContext(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, h2 bool, serverName string) (utlsConn *utls.UConn, err error) {
+func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, serverName string) (utlsConn *utls.UConn, err error) {
 	defer func() {
 		if err != nil {
 			conn.Close()
@@ -72,20 +72,7 @@ func Ja3DialContext(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, h2 
 	if spec, err = utls.UTLSIdToSpec(ja3Id); err != nil {
 		return
 	}
-	if !h2 {
-		for i := 0; i < len(spec.Extensions); i++ {
-			if extension, ok := spec.Extensions[i].(*utls.ALPNExtension); ok {
-				alns := []string{}
-				for _, aln := range extension.AlpnProtocols {
-					if aln != "h2" {
-						alns = append(alns, aln)
-					}
-				}
-				extension.AlpnProtocols = alns
-			}
-		}
-	}
-	utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: serverName}, utls.HelloCustom)
+	utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: serverName, NextProtos: []string{"h2", "http/1.1"}}, utls.HelloCustom)
 	if err = utlsConn.ApplyPreset(&spec); err != nil {
 		return
 	}

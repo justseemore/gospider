@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	_ "embed"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -28,41 +30,37 @@ var CrtFile []byte
 var KeyFile []byte
 
 type ClientOption struct {
-	Usr       string      //用户名
-	Pwd       string      //密码
-	IpWhite   []net.IP    //白名单 192.168.1.1,192.168.1.2
-	Dialer    *net.Dialer //连接的Dialer
-	LocalAddr string      //本地网卡出口
-	Port      int         //代理端口
-	Host      string      //代理host
-}
-type netDial struct {
-	dialer *net.Dialer //连接的Dialer
-}
+	Usr     string   //用户名
+	Pwd     string   //密码
+	IpWhite []net.IP //白名单 192.168.1.1,192.168.1.2
+	Port    int      //代理端口
+	Host    string   //代理host
+	CrtFile []byte   //公钥,根证书
+	KeyFile []byte   //私钥
 
-func (obj *netDial) DialContext(ctx context.Context, network string, address string) (net.Conn, error) { //http conn
-	return obj.dialer.DialContext(ctx, network, address)
-}
-func (obj *netDial) Dial(network string, address string) (net.Conn, error) { //websock conn
-	return obj.dialer.Dial(network, address)
+	TLSHandshakeTimeout int64
+	DnsCacheTime        int64
+	GetProxy            func(ctx context.Context, url *url.URL) (string, error) //代理ip http://116.62.55.139:8888
+	Proxy               string                                                  //代理ip http://192.168.1.50:8888
+	KeepAlive           int64
+	LocalAddr           string //本地网卡出口
+
 }
 
 type Client struct {
-	Proxy     string                 //代理ip 192.168.1.50:8888
-	GetProxy  func() (string, error) //代理ip 116.62.55.139:8888
-	Debug     bool                   //是否打印debug
-	Err       error                  //错误
-	DisVerify bool                   //关闭验证
-
-	dialer   *netDial     //连接的Dialer
-	listener net.Listener //Listener 服务
-	basic    string
-	usr      string
-	pwd      string
-	verify   bool
-	ipWhite  *kinds.Set[string]
-	ctx      context.Context
-	cnl      context.CancelFunc
+	Debug     bool  //是否打印debug
+	Err       error //错误
+	DisVerify bool  //关闭验证
+	cert      tls.Certificate
+	dialer    *requests.DialClient //连接的Dialer
+	listener  net.Listener         //Listener 服务
+	basic     string
+	usr       string
+	pwd       string
+	verify    bool
+	ipWhite   *kinds.Set[string]
+	ctx       context.Context
+	cnl       context.CancelFunc
 }
 
 func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error) {
@@ -83,33 +81,36 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		server.pwd = option.Pwd
 		server.verify = true
 	}
+	//白名单
 	server.ipWhite = kinds.NewSet[string]()
 	for _, ip_white := range option.IpWhite {
 		server.ipWhite.Add(ip_white.String())
 	}
-	if option.Dialer == nil {
-		option.Dialer = &net.Dialer{
-			Timeout:   time.Duration(8) * time.Second,
-			KeepAlive: time.Duration(10) * time.Second,
-		}
-	}
-	if option.LocalAddr != "" {
-		if !strings.Contains(option.LocalAddr, ":") {
-			option.LocalAddr += ":0"
-		}
-		localaddr, err := net.ResolveTCPAddr("tcp", option.LocalAddr)
-		if err != nil {
-			return nil, err
-		}
-		option.Dialer.LocalAddr = localaddr
-	}
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", option.Host, option.Port)) //监听本地端口
-	if err != nil {
+	var err error
+	//dialer
+	if server.dialer, err = requests.NewDail(requests.DialOption{
+		TLSHandshakeTimeout: option.TLSHandshakeTimeout,
+		DnsCacheTime:        option.DnsCacheTime,
+		GetProxy:            option.GetProxy,
+		Proxy:               option.Proxy,
+		KeepAlive:           option.KeepAlive,
+		LocalAddr:           option.LocalAddr,
+	}); err != nil {
 		return nil, err
 	}
-	server.listener = l
-	server.dialer = &netDial{
-		dialer: option.Dialer,
+	//证书
+	if option.CrtFile != nil && KeyFile != nil {
+		if server.cert, err = tls.X509KeyPair(option.CrtFile, option.KeyFile); err != nil {
+			return nil, err
+		}
+	} else {
+		if server.cert, err = tls.X509KeyPair(CrtFile, KeyFile); err != nil {
+			return nil, err
+		}
+	}
+	//构造listen
+	if server.listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", option.Host, option.Port)); err != nil {
+		return nil, err
 	}
 	return &server, nil
 }
@@ -189,30 +190,54 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) error {
 	if err != nil {
 		return err
 	}
-	if firstCons[0] == 5 {
-		return obj.sockes5Handle(ctx, client, clientReader)
+	switch firstCons[0] {
+	case 5: //socks5 代理
+		return obj.sockes5Handle(ctx, &ProxyConn{conn: client, reader: clientReader})
+	case 22: //https 代理
+		return obj.httpsHandle(ctx, &ProxyConn{conn: client, reader: clientReader})
+	default: //http 代理
+		return obj.httpHandle(ctx, &ProxyConn{conn: client, reader: clientReader})
 	}
-	return obj.httpHandle(ctx, client, clientReader)
-}
-func (obj *Client) verifyProxy(ip_addr string) (*url.URL, error) {
-	var err error
-	var ipUrl *url.URL
-	if ipUrl, err = url.Parse(ip_addr); err != nil {
-		return ipUrl, err
-	}
-	if ipUrl.Scheme != "http" && ipUrl.Scheme != "socks5" {
-		return ipUrl, errors.New("proxy scheme error")
-	}
-	return ipUrl, err
 }
 
-func readRequest(b *bufio.Reader) (*http.Request, bool, error) {
-	clientReq, err := http.ReadRequest(b)
+type ProxyConn struct {
+	conn   net.Conn
+	reader *bufio.Reader
+}
+
+func (obj *ProxyConn) Read(b []byte) (int, error) {
+	return obj.reader.Read(b)
+}
+func (obj *ProxyConn) Write(b []byte) (int, error) {
+	return obj.conn.Write(b)
+}
+func (obj *ProxyConn) Close() error {
+	return obj.conn.Close()
+}
+func (obj *ProxyConn) LocalAddr() net.Addr {
+	return obj.conn.LocalAddr()
+}
+func (obj *ProxyConn) RemoteAddr() net.Addr {
+	return obj.conn.RemoteAddr()
+}
+func (obj *ProxyConn) SetDeadline(t time.Time) error {
+	return obj.conn.SetDeadline(t)
+}
+func (obj *ProxyConn) SetReadDeadline(t time.Time) error {
+	return obj.conn.SetReadDeadline(t)
+}
+func (obj *ProxyConn) SetWriteDeadline(t time.Time) error {
+	return obj.conn.SetWriteDeadline(t)
+}
+func (obj *ProxyConn) ReadRequest() (*http.Request, bool, error) {
+	clientReq, err := http.ReadRequest(obj.reader)
 	if err != nil {
 		return clientReq, false, err
 	}
-	if clientReq.URL.Hostname() == "" {
+	if hostName := clientReq.URL.Hostname(); hostName == "" {
 		clientReq.URL.Host = clientReq.Host
+	} else if clientReq.Host == "" {
+		clientReq.Host = hostName
 	}
 	if clientReq.URL.Port() == "" {
 		if clientReq.Method == http.MethodConnect {
@@ -221,12 +246,19 @@ func readRequest(b *bufio.Reader) (*http.Request, bool, error) {
 			clientReq.URL.Host = clientReq.URL.Hostname() + ":" + "80"
 		}
 	}
+	if clientReq.URL.Scheme == "" {
+		if clientReq.Method == http.MethodConnect {
+			clientReq.URL.Scheme = "https"
+		} else {
+			clientReq.URL.Scheme = "http"
+		}
+	}
 	if strings.HasPrefix(clientReq.Host, "127.0.0.1") || strings.HasPrefix(clientReq.Host, "localhost") {
 		return clientReq, false, errors.New("loop addr error")
 	}
 	return clientReq, clientReq.Header.Get("Upgrade") == "websocket", err
 }
-func writeRequest(clientReq *http.Request, w io.Writer, ipUrl *url.URL) error {
+func (obj *ProxyConn) WriteRequest(clientReq *http.Request, w io.Writer, ipUrl *url.URL) error {
 	for key := range clientReq.Header {
 		if strings.HasPrefix(key, "Proxy-") {
 			clientReq.Header.Del(key)
@@ -240,178 +272,61 @@ func writeRequest(clientReq *http.Request, w io.Writer, ipUrl *url.URL) error {
 	return clientReq.Write(w)
 }
 
-func (obj *Client) httpsHandle(ctx context.Context, client net.Conn, clientReader *bufio.Reader) error {
+func (obj *Client) httpsHandle(ctx context.Context, client *ProxyConn) error {
+	defer client.Close()
+	tlsClient := tls.Server(client, &tls.Config{
+		InsecureSkipVerify: true,
+		Certificates:       []tls.Certificate{obj.cert},
+	})
+	defer tlsClient.Close()
+	return obj.httpHandle(ctx, &ProxyConn{
+		conn:   tlsClient,
+		reader: bufio.NewReader(tlsClient),
+	})
+}
+func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	defer client.Close()
 	var err error
-	clientReq, isWebsocket, err := readRequest(clientReader)
+	clientReq, _, err := client.ReadRequest()
 	if err != nil {
 		return err
 	}
 	if err = obj.verifyPwd(client, clientReq); err != nil {
 		return err
 	}
-	var ip_addr string
-	if obj.GetProxy != nil {
-		ip_addr, err = obj.GetProxy()
-		if err != nil {
-			return err
-		}
-	} else if obj.Proxy != "" {
-		ip_addr = obj.Proxy
-	}
-	var server net.Conn
-	if ip_addr == "" { //使用本地转发的逻辑
-		if server, err = obj.dialer.DialContext(ctx, "tcp", net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
-			return err
-		}
-		defer server.Close()
-		if clientReq.Method == http.MethodConnect {
-			if _, err = client.Write([]byte(fmt.Sprintf("%s 200 Connection established\r\n\r\n", clientReq.Proto))); err != nil {
-				return err
-			}
-		} else {
-			if err = writeRequest(clientReq, server, nil); err != nil {
-				return err
-			}
-		}
-	} else { //使用代理转发的逻辑
-		ipUrl, err := obj.verifyProxy(ip_addr)
-		if err != nil {
-			return err
-		}
-		switch ipUrl.Scheme {
-		case "http":
-			if server, err = obj.getHttpProxyConn(ctx, ipUrl); err != nil { //获取服务连接
-				return err
-			}
-			defer server.Close()
-			if err = writeRequest(clientReq, server, ipUrl); err != nil {
-				return err
-			}
-		case "socks5":
-			if server, err = requests.GetSocks5ProxyConn(ctx, obj.dialer, ipUrl, net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
-				return err
-			}
-			defer server.Close()
-			if clientReq.Method == http.MethodConnect {
-				if _, err = client.Write([]byte(fmt.Sprintf("%s 200 Connection established\r\n\r\n", clientReq.Proto))); err != nil {
-					return err
-				}
-			} else {
-				if err = writeRequest(clientReq, server, nil); err != nil {
-					return err
-				}
-			}
-		default:
-			return errors.New("不支持的代理协议")
-		}
-	}
-	go func() { //服务端到客户端
-		defer server.Close()
-		defer client.Close()
-		io.Copy(client, server)
-	}()
-	if clientReq.Method != http.MethodConnect && !isWebsocket {
-		for {
-			if clientReq, _, err = readRequest(clientReader); err != nil {
-				return err
-			}
-			if err = writeRequest(clientReq, server, nil); err != nil {
-				return err
-			}
-		}
-	}
-	_, err = io.Copy(server, client) //客户端发送服务端
-	return err
-}
-func (obj *Client) httpHandle(ctx context.Context, client net.Conn, clientReader *bufio.Reader) error {
-	defer client.Close()
-	var err error
-	clientReq, isWebsocket, err := readRequest(clientReader)
+	proxyUrl, err := obj.dialer.GetProxy(ctx, nil)
 	if err != nil {
 		return err
 	}
-	if err = obj.verifyPwd(client, clientReq); err != nil {
+	var server net.Conn
+	network := "tcp"
+	addr := net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())
+	if server, err = obj.dialer.DialContextForProxy(ctx, network, clientReq.URL.Scheme, addr, clientReq.Host, proxyUrl); err != nil {
 		return err
 	}
-	var ip_addr string
-	if obj.GetProxy != nil {
-		ip_addr, err = obj.GetProxy()
-		if err != nil {
+	defer server.Close()
+	if clientReq.Method == http.MethodConnect {
+		if _, err = client.Write([]byte(fmt.Sprintf("%s 200 Connection established\r\n\r\n", clientReq.Proto))); err != nil {
 			return err
 		}
-	} else if obj.Proxy != "" {
-		ip_addr = obj.Proxy
-	}
-	var server net.Conn
-	if ip_addr == "" { //使用本地转发的逻辑
-		if server, err = obj.dialer.DialContext(ctx, "tcp", net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
+	} else {
+		if err = client.WriteRequest(clientReq, server, nil); err != nil {
 			return err
-		}
-		defer server.Close()
-		if clientReq.Method == http.MethodConnect {
-			if _, err = client.Write([]byte(fmt.Sprintf("%s 200 Connection established\r\n\r\n", clientReq.Proto))); err != nil {
-				return err
-			}
-		} else {
-			if err = writeRequest(clientReq, server, nil); err != nil {
-				return err
-			}
-		}
-	} else { //使用代理转发的逻辑
-		ipUrl, err := obj.verifyProxy(ip_addr)
-		if err != nil {
-			return err
-		}
-		switch ipUrl.Scheme {
-		case "http":
-			if server, err = obj.getHttpProxyConn(ctx, ipUrl); err != nil { //获取服务连接
-				return err
-			}
-			defer server.Close()
-			if err = writeRequest(clientReq, server, ipUrl); err != nil {
-				return err
-			}
-		case "socks5":
-			if server, err = requests.GetSocks5ProxyConn(ctx, obj.dialer, ipUrl, net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())); err != nil { //获取服务连接
-				return err
-			}
-			defer server.Close()
-			if clientReq.Method == http.MethodConnect {
-				if _, err = client.Write([]byte(fmt.Sprintf("%s 200 Connection established\r\n\r\n", clientReq.Proto))); err != nil {
-					return err
-				}
-			} else {
-				if err = writeRequest(clientReq, server, nil); err != nil {
-					return err
-				}
-			}
-		default:
-			return errors.New("不支持的代理协议")
 		}
 	}
+
 	go func() { //服务端到客户端
 		defer server.Close()
 		defer client.Close()
 		io.Copy(client, server)
 	}()
-	if clientReq.Method != http.MethodConnect && !isWebsocket {
-		for {
-			if clientReq, _, err = readRequest(clientReader); err != nil {
-				return err
-			}
-			if err = writeRequest(clientReq, server, nil); err != nil {
-				return err
-			}
-		}
-	}
 	_, err = io.Copy(server, client) //客户端发送服务端
 	return err
 }
-func (obj *Client) getSocketAddr(clientReader *bufio.Reader) (string, error) {
+func (obj *Client) getSocketAddr(client *ProxyConn) (string, error) {
 	buf := make([]byte, 4)
 	addr := ""
-	_, err := io.ReadFull(clientReader, buf) //读取版本号，CMD，RSV ，ATYP ，ADDR ，PORT
+	_, err := io.ReadFull(client.reader, buf) //读取版本号，CMD，RSV ，ATYP ，ADDR ，PORT
 	if err != nil {
 		return addr, fmt.Errorf("read header failed:%w", err)
 	}
@@ -424,48 +339,48 @@ func (obj *Client) getSocketAddr(clientReader *bufio.Reader) (string, error) {
 	}
 	switch atyp {
 	case 1: //ipv4地址
-		if _, err = io.ReadFull(clientReader, buf); err != nil {
+		if _, err = io.ReadFull(client.reader, buf); err != nil {
 			return addr, fmt.Errorf("read atyp failed:%w", err)
 		}
 		addr = net.IPv4(buf[0], buf[1], buf[2], buf[3]).String()
 	case 3: //域名
-		hostSize, err := clientReader.ReadByte() //域名的长度
+		hostSize, err := client.reader.ReadByte() //域名的长度
 		if err != nil {
 			return addr, fmt.Errorf("read hostSize failed:%w", err)
 		}
 		host := make([]byte, hostSize)
-		if _, err = io.ReadFull(clientReader, host); err != nil {
+		if _, err = io.ReadFull(client.reader, host); err != nil {
 			return addr, fmt.Errorf("read host failed:%w", err)
 		}
 		addr = tools.BytesToString(host)
 	case 4: //IPv6地址
 		host := make([]byte, 16)
-		if _, err = io.ReadFull(clientReader, host); err != nil {
+		if _, err = io.ReadFull(client.reader, host); err != nil {
 			return addr, fmt.Errorf("read atyp failed:%w", err)
 		}
 		addr = net.IP(host).String()
 	default:
 		return addr, errors.New("invalid atyp")
 	}
-	if _, err = io.ReadFull(clientReader, buf[:2]); err != nil { //读取端口号
+	if _, err = io.ReadFull(client.reader, buf[:2]); err != nil { //读取端口号
 		return addr, fmt.Errorf("read port failed:%w", err)
 	}
 	return fmt.Sprintf("%s:%d", addr, binary.BigEndian.Uint16(buf[:2])), nil
 }
-func (obj *Client) verifySocket(client net.Conn, clientReader *bufio.Reader) error {
-	ver, err := clientReader.ReadByte() //读取第一个字节判断是否是socks5协议
+func (obj *Client) verifySocket(client *ProxyConn) error {
+	ver, err := client.reader.ReadByte() //读取第一个字节判断是否是socks5协议
 	if err != nil {
 		return fmt.Errorf("read ver failed:%w", err)
 	}
 	if ver != 5 {
 		return fmt.Errorf("not supported ver:%v", ver)
 	}
-	methodSize, err := clientReader.ReadByte() //读取第二个字节,method 的长度，支持认证的方法数量
+	methodSize, err := client.reader.ReadByte() //读取第二个字节,method 的长度，支持认证的方法数量
 	if err != nil {
 		return fmt.Errorf("read methodSize failed:%w", err)
 	}
 	methods := make([]byte, methodSize)
-	if _, err = io.ReadFull(clientReader, methods); err != nil { //读取method，支持认证的方法
+	if _, err = io.ReadFull(client.reader, methods); err != nil { //读取method，支持认证的方法
 		return fmt.Errorf("read method failed:%w", err)
 	}
 	if obj.verify && !obj.whiteVerify(client) { //开始验证用户名密码
@@ -476,23 +391,23 @@ func (obj *Client) verifySocket(client net.Conn, clientReader *bufio.Reader) err
 		if err != nil {
 			return err
 		}
-		okVar, err := clientReader.ReadByte() //获取版本，通常为0x01
+		okVar, err := client.reader.ReadByte() //获取版本，通常为0x01
 		if err != nil {
 			return err
 		}
-		Len, err := clientReader.ReadByte() //获取用户名的长度
+		Len, err := client.reader.ReadByte() //获取用户名的长度
 		if err != nil {
 			return err
 		}
 		user := make([]byte, Len)
-		if _, err = io.ReadFull(clientReader, user); err != nil {
+		if _, err = io.ReadFull(client.reader, user); err != nil {
 			return err
 		}
-		if Len, err = clientReader.ReadByte(); err != nil { //获取密码的长度
+		if Len, err = client.reader.ReadByte(); err != nil { //获取密码的长度
 			return err
 		}
 		pass := make([]byte, Len)
-		if _, err = io.ReadFull(clientReader, pass); err != nil {
+		if _, err = io.ReadFull(client.reader, pass); err != nil {
 			return err
 		}
 		if tools.BytesToString(user) != obj.usr || tools.BytesToString(pass) != obj.pwd {
@@ -502,89 +417,57 @@ func (obj *Client) verifySocket(client net.Conn, clientReader *bufio.Reader) err
 		_, err = client.Write([]byte{okVar, 0}) //协商成功
 		return err
 	}
-	_, err = client.Write([]byte{5, 0}) //协商成功
-	return err
-}
-func (obj *Client) sockes5Handle(ctx context.Context, client net.Conn, clientReader *bufio.Reader) error {
-	defer client.Close()
-	var err error
-	if err = obj.verifySocket(client, clientReader); err != nil {
+	if _, err = client.Write([]byte{5, 0}); err != nil { //协商成功
 		return err
 	}
-	serverAddr, err := obj.getSocketAddr(clientReader)
+	if _, err = client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil { //响应客户端连接成功
+		return err
+	}
+	return err
+}
+func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
+	defer client.Close()
+	var err error
+	if err = obj.verifySocket(client); err != nil {
+		return err
+	}
+	//获取serverAddr
+	addr, err := obj.getSocketAddr(client)
 	if err != nil {
 		return err
 	}
-	var ip_addr string
-	var httpsByte byte
-	if obj.GetProxy != nil {
-		if ip_addr, err = obj.GetProxy(); err != nil {
-			return err
-		}
-	} else if obj.Proxy != "" {
-		ip_addr = obj.Proxy
+	//获取host
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
 	}
-	var server net.Conn
-	if ip_addr == "" {
-		if server, err = obj.dialer.DialContext(ctx, "tcp", serverAddr); err != nil { //获取服务连接
-			return err
-		}
-		if _, err = client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil { //响应客户端连接成功
-			return err
-		}
-	} else {
-		ipUrl, err := obj.verifyProxy(ip_addr)
-		if err != nil {
-			return err
-		}
-		switch ipUrl.Scheme {
-		case "http":
-			if server, err = obj.getHttpProxyConn(ctx, ipUrl); err != nil { //获取服务连接
-				return err
-			}
-			defer server.Close()
-			if _, err = client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil { //响应客户端连接成功
-				return err
-			}
-			httpsBytes, err := clientReader.Peek(1)
-			if err != nil {
-				return err
-			}
-			httpsByte = httpsBytes[0]
-			if httpsByte == 22 {
-				if err = requests.Http2HttpsConn(ctx, ipUrl, serverAddr, serverAddr, server); err != nil {
-					return err
-				}
-			} else {
-				clientReq, _, err := readRequest(clientReader)
-				if err != nil {
-					return err
-				}
-				if err = writeRequest(clientReq, server, ipUrl); err != nil {
-					return err
-				}
-			}
-		case "socks5":
-			if server, err = requests.GetSocks5ProxyConn(ctx, obj.dialer, ipUrl, serverAddr); err != nil { //获取服务连接
-				return err
-			}
-			defer server.Close()
-			if _, err = client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil { //响应客户端连接成功
-				return err
-			}
-		default:
-			return errors.New("代理协议不支持")
-		}
+	//获取代理
+	proxyUrl, err := obj.dialer.GetProxy(ctx, nil)
+	if err != nil {
+		log.Print(err)
+		return err
 	}
+	//获取schema
+	httpsBytes, err := client.reader.Peek(1)
+	if err != nil {
+		return err
+	}
+	schema := "http"
+	if httpsBytes[0] == 22 {
+		schema = "https"
+	}
+	netword := "tcp"
+	server, err := obj.dialer.DialContextForProxy(ctx, netword, schema, addr, host, proxyUrl)
+	if err != nil {
+		return err
+	}
+
+	defer server.Close()
 	go func() { //服务端到客户端
 		defer server.Close()
 		defer client.Close()
 		io.Copy(client, server)
 	}()
-	if httpsByte == 22 {
-		_, err = io.Copy(server, clientReader) //客户端发送服务端
-	} else {
-		_, err = io.Copy(server, client) //客户端发送服务端
-	}
+	_, err = io.Copy(server, client) //客户端发送服务端
 	return err
 }

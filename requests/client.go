@@ -79,7 +79,14 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 	if session_option.DnsCacheTime == 0 {
 		session_option.DnsCacheTime = 60 * 30
 	}
-	dialClient, err := newDail(ctx, session_option)
+	dialClient, err := NewDail(DialOption{
+		TLSHandshakeTimeout: session_option.TLSHandshakeTimeout,
+		DnsCacheTime:        session_option.DnsCacheTime,
+		GetProxy:            session_option.GetProxy,
+		Proxy:               session_option.Proxy,
+		KeepAlive:           session_option.KeepAlive,
+		LocalAddr:           session_option.LocalAddr,
+	})
 	if err != nil {
 		cnl()
 		return nil, err
@@ -112,6 +119,7 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 	ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
 	if ctxData.redirectNum == 0 || ctxData.redirectNum >= len(via) {
 		ctxData.url = req.URL
+		ctxData.host = req.Host
 		return nil
 	}
 	return http.ErrUseLastResponse
