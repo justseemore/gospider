@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	_ "unsafe"
 
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/tools"
@@ -19,6 +20,13 @@ import (
 
 	"github.com/tidwall/gjson"
 )
+
+//go:linkname readCookies net/http.readCookies
+func readCookies(h http.Header, filter string) []*http.Cookie
+
+func ReadCookies(cookies string) []*http.Cookie {
+	return readCookies(http.Header{"Cookie": []string{cookies}}, "")
+}
 
 var UserAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36`
 
@@ -184,6 +192,9 @@ func (obj *RequestOption) newCookies() error {
 	}
 	switch cookies := obj.Cookies.(type) {
 	case []*http.Cookie:
+		return nil
+	case string:
+		obj.Cookies = ReadCookies(cookies)
 		return nil
 	case gjson.Result:
 		if !cookies.IsObject() {
@@ -538,6 +549,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	}
 
 	//添加cookies
+
 	if request_option.Cookies != nil {
 		cooks, cookOk := request_option.Cookies.([]*http.Cookie)
 		if !cookOk {
