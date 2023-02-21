@@ -20,7 +20,7 @@ type compressionOptions struct {
 	clientNoContextTakeover bool
 	serverNoContextTakeover bool
 }
-
+type CompressionOptions = compressionOptions
 type connConfig struct {
 	subprotocol    string
 	rwc            io.ReadWriteCloser
@@ -55,6 +55,30 @@ func acceptCompression(r *http.Request, w http.ResponseWriter, mode websocket.Co
 
 //go:linkname verifyServerExtensions nhooyr.io/websocket.verifyServerExtensions
 func verifyServerExtensions(copts *compressionOptions, h http.Header) (*compressionOptions, error)
+
+type websocketExtension struct {
+	name   string
+	params []string
+}
+
+//go:linkname websocketExtensions nhooyr.io/websocket.websocketExtensions
+func websocketExtensions(h http.Header) []websocketExtension
+
+func GetCompressionOptions(h http.Header) *compressionOptions {
+	exts := websocketExtensions(h)
+	var copts compressionOptions
+	for _, ext := range exts {
+		for _, p := range ext.params {
+			switch p {
+			case "client_no_context_takeover":
+				copts.clientNoContextTakeover = true
+			case "server_no_context_takeover":
+				copts.serverNoContextTakeover = true
+			}
+		}
+	}
+	return &copts
+}
 
 type Conn struct {
 	rwc    io.ReadWriteCloser
@@ -113,6 +137,29 @@ func SetClientHeaders(headers http.Header, option *Option) error {
 	}
 	return nil
 }
+func NewConn(conn io.ReadWriteCloser, client bool, options ...Option) *Conn {
+	var option Option
+	if len(options) > 0 {
+		option = options[0]
+	}
+	var subprotocol string
+	if len(option.Subprotocols) > 0 {
+		subprotocol = option.Subprotocols[0]
+	}
+	return &Conn{
+		rwc:    conn,
+		option: option,
+		conn: newConn(connConfig{
+			subprotocol:    subprotocol,
+			rwc:            conn,
+			client:         client,
+			copts:          option.CompressionOptions,
+			flateThreshold: option.CompressionThreshold,
+			br:             getBufioReader(conn),
+			bw:             getBufioWriter(conn),
+		}),
+	}
+}
 func NewClientConn(resp *http.Response, options ...Option) (*Conn, error) {
 	var option *Option
 	if len(options) > 0 {
@@ -128,19 +175,8 @@ func NewClientConn(resp *http.Response, options ...Option) (*Conn, error) {
 	if !ok {
 		return nil, fmt.Errorf("response body is not a io.ReadWriteCloser")
 	}
-	return &Conn{
-		rwc:    rwc,
-		option: *option,
-		conn: newConn(connConfig{
-			subprotocol:    resp.Header.Get("Sec-WebSocket-Protocol"),
-			rwc:            rwc,
-			client:         true,
-			copts:          option.CompressionOptions,
-			flateThreshold: option.CompressionThreshold,
-			br:             getBufioReader(rwc),
-			bw:             getBufioWriter(rwc),
-		}),
-	}, nil
+	option.Subprotocols = resp.Header["Sec-WebSocket-Protocol"]
+	return NewConn(rwc, true, *option), nil
 }
 
 func NewServerConn(w http.ResponseWriter, r *http.Request, options ...Option) (_ *Conn, err error) {
@@ -185,7 +221,6 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, options ...Option) (_
 	// https://github.com/golang/go/issues/32314
 	b, _ := brw.Reader.Peek(brw.Reader.Buffered())
 	brw.Reader.Reset(io.MultiReader(bytes.NewReader(b), netConn))
-
 	return &Conn{
 		rwc:    netConn,
 		option: *option,

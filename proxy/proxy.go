@@ -16,11 +16,14 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	_ "unsafe"
 
+	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/thread"
 	"gitee.com/baixudong/gospider/tools"
+	"gitee.com/baixudong/gospider/websocket"
 )
 
 //go:embed gospider.crt
@@ -30,13 +33,15 @@ var CrtFile []byte
 var KeyFile []byte
 
 type ClientOption struct {
-	Usr     string   //用户名
-	Pwd     string   //密码
-	IpWhite []net.IP //白名单 192.168.1.1,192.168.1.2
-	Port    int      //代理端口
-	Host    string   //代理host
-	CrtFile []byte   //公钥,根证书
-	KeyFile []byte   //私钥
+	Ja3     bool              //是否开启ja3
+	Ja3Id   ja3.ClientHelloId //指定ja3id
+	Usr     string            //用户名
+	Pwd     string            //密码
+	IpWhite []net.IP          //白名单 192.168.1.1,192.168.1.2
+	Port    int               //代理端口
+	Host    string            //代理host
+	CrtFile []byte            //公钥,根证书
+	KeyFile []byte            //私钥
 
 	TLSHandshakeTimeout int64
 	DnsCacheTime        int64
@@ -47,20 +52,30 @@ type ClientOption struct {
 
 }
 
+//go:linkname readRequest net/http.readRequest
+func readRequest(b *bufio.Reader) (*http.Request, error)
+
 type Client struct {
-	Debug     bool  //是否打印debug
-	Err       error //错误
-	DisVerify bool  //关闭验证
-	cert      tls.Certificate
-	dialer    *requests.DialClient //连接的Dialer
-	listener  net.Listener         //Listener 服务
-	basic     string
-	usr       string
-	pwd       string
-	verify    bool
-	ipWhite   *kinds.Set[string]
-	ctx       context.Context
-	cnl       context.CancelFunc
+	Debug            bool  //是否打印debug
+	Err              error //错误
+	DisVerify        bool  //关闭验证
+	RequestCallBack  func(*http.Request)
+	ResponseCallBack func(*http.Request, *http.Response)
+	WsSendCallBack   func(*MsgData)
+	WsRecvCallBack   func(*MsgData)
+
+	cert     tls.Certificate
+	dialer   *requests.DialClient //连接的Dialer
+	listener net.Listener         //Listener 服务
+	basic    string
+	usr      string
+	pwd      string
+	verify   bool
+	ipWhite  *kinds.Set[string]
+	ja3      bool
+	ja3Id    ja3.ClientHelloId
+	ctx      context.Context
+	cnl      context.CancelFunc
 }
 
 func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error) {
@@ -75,11 +90,24 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 	server := Client{}
 	server.ctx = ctx
 	server.cnl = cnl
+
 	if option.Usr != "" && option.Pwd != "" {
 		server.basic = "Basic " + tools.Base64Encode(option.Usr+":"+option.Pwd)
 		server.usr = option.Usr
 		server.pwd = option.Pwd
 		server.verify = true
+	}
+
+	if option.Ja3 {
+		server.ja3 = true
+		if option.Ja3Id.IsSet() {
+			server.ja3Id = ja3.HelloChrome_Auto
+		} else {
+			server.ja3Id = option.Ja3Id
+		}
+	} else if !option.Ja3Id.IsSet() {
+		server.ja3 = true
+		server.ja3Id = option.Ja3Id
 	}
 	//白名单
 	server.ipWhite = kinds.NewSet[string]()
@@ -192,19 +220,29 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) error {
 	}
 	switch firstCons[0] {
 	case 5: //socks5 代理
-		return obj.sockes5Handle(ctx, &ProxyConn{conn: client, reader: clientReader})
+		return obj.sockes5Handle(ctx, NewProxyCon(client, clientReader, "", "", false, "", false))
 	case 22: //https 代理
-		return obj.httpsHandle(ctx, &ProxyConn{conn: client, reader: clientReader})
+		return obj.httpsHandle(ctx, NewProxyCon(client, clientReader, "", "", false, "", false))
 	default: //http 代理
-		return obj.httpHandle(ctx, &ProxyConn{conn: client, reader: clientReader})
+		return obj.httpHandle(ctx, NewProxyCon(client, clientReader, "", "", false, "", false))
 	}
 }
 
 type ProxyConn struct {
-	conn   net.Conn
-	reader *bufio.Reader
+	http2              bool
+	host               string
+	conn               net.Conn
+	reader             *bufio.Reader
+	schema             string
+	port               string
+	isWs               bool
+	subprotocols       []string
+	compressionOptions *websocket.CompressionOptions
 }
 
+func NewProxyCon(conn net.Conn, reader *bufio.Reader, schema string, port string, isWs bool, host string, http2 bool) *ProxyConn {
+	return &ProxyConn{conn: conn, reader: reader, schema: schema, port: port, isWs: isWs, host: host, http2: http2}
+}
 func (obj *ProxyConn) Read(b []byte) (int, error) {
 	return obj.reader.Read(b)
 }
@@ -229,47 +267,89 @@ func (obj *ProxyConn) SetReadDeadline(t time.Time) error {
 func (obj *ProxyConn) SetWriteDeadline(t time.Time) error {
 	return obj.conn.SetWriteDeadline(t)
 }
-func (obj *ProxyConn) ReadRequest() (*http.Request, bool, error) {
-	clientReq, err := http.ReadRequest(obj.reader)
+func (obj *ProxyConn) readResponse(req *http.Request) (*http.Response, error) {
+	response, err := http.ReadResponse(obj.reader, req)
 	if err != nil {
-		return clientReq, false, err
+		return nil, err
 	}
+	if response.StatusCode == 101 && response.Header.Get("Upgrade") == "websocket" {
+		obj.isWs = true
+		obj.subprotocols = response.Header["Sec-WebSocket-Protocol"]
+	}
+	return response, err
+}
+func (obj *ProxyConn) readRequest() (*http.Request, error) {
+	clientReq, err := readRequest(obj.reader)
+	if err != nil {
+		return clientReq, err
+	}
+	if clientReq.Header.Get("Upgrade") == "websocket" {
+		obj.isWs = true
+		obj.compressionOptions = websocket.GetCompressionOptions(clientReq.Header)
+	}
+
+	hostName := clientReq.URL.Hostname()
+	if obj.host == "" {
+		if headHost := clientReq.Header.Get("Host"); headHost != "" {
+			obj.host = headHost
+		} else if clientReq.Host != "" {
+			obj.host = clientReq.Host
+		} else if hostName != "" {
+			obj.host = hostName
+		}
+	}
+	if hostName == "" {
+		if clientReq.Host != "" {
+			clientReq.URL.Host = clientReq.Host
+		} else {
+			clientReq.URL.Host = obj.host
+		}
+	}
+
 	if hostName := clientReq.URL.Hostname(); hostName == "" {
 		clientReq.URL.Host = clientReq.Host
 	} else if clientReq.Host == "" {
 		clientReq.Host = hostName
 	}
-	if clientReq.URL.Port() == "" {
-		if clientReq.Method == http.MethodConnect {
-			clientReq.URL.Host = clientReq.URL.Hostname() + ":" + "443"
+	if obj.schema == "" {
+		if clientReq.URL.Scheme == "" {
+			if clientReq.Method == http.MethodConnect {
+				obj.schema = "https"
+			} else {
+				obj.schema = "http"
+			}
+			clientReq.URL.Scheme = obj.schema
 		} else {
-			clientReq.URL.Host = clientReq.URL.Hostname() + ":" + "80"
+			obj.schema = clientReq.URL.Scheme
 		}
+	} else if clientReq.URL.Scheme == "" {
+		clientReq.URL.Scheme = obj.schema
 	}
-	if clientReq.URL.Scheme == "" {
-		if clientReq.Method == http.MethodConnect {
-			clientReq.URL.Scheme = "https"
+	if obj.port == "" {
+		if clientReq.URL.Port() == "" {
+			if obj.schema == "https" {
+				obj.port = "443"
+			} else {
+				obj.port = "80"
+			}
+			clientReq.URL.Host = clientReq.URL.Hostname() + ":" + obj.port
 		} else {
-			clientReq.URL.Scheme = "http"
+			obj.port = clientReq.URL.Port()
 		}
+	} else if clientReq.URL.Port() == "" {
+		clientReq.URL.Host = clientReq.URL.Hostname() + ":" + obj.port
 	}
 	if strings.HasPrefix(clientReq.Host, "127.0.0.1") || strings.HasPrefix(clientReq.Host, "localhost") {
-		return clientReq, false, errors.New("loop addr error")
+		return clientReq, errors.New("loop addr error")
 	}
-	return clientReq, clientReq.Header.Get("Upgrade") == "websocket", err
+	return clientReq, err
 }
-func (obj *ProxyConn) WriteRequest(clientReq *http.Request, w io.Writer, ipUrl *url.URL) error {
-	for key := range clientReq.Header {
-		if strings.HasPrefix(key, "Proxy-") {
-			clientReq.Header.Del(key)
-		}
-	}
-	if ipUrl != nil && ipUrl.User != nil { //添加代理密码
-		if _, ok := ipUrl.User.Password(); ok {
-			clientReq.Header.Set("Proxy-Authorization", "Basic "+tools.Base64Encode(ipUrl.User.String()))
-		}
-	}
-	return clientReq.Write(w)
+
+func (obj *ProxyConn) WriteResponse(response *http.Response) error {
+	return response.Write(obj.conn)
+}
+func (obj *ProxyConn) WriteRequest(clientReq *http.Request) error {
+	return clientReq.Write(obj.conn)
 }
 
 func (obj *Client) httpsHandle(ctx context.Context, client *ProxyConn) error {
@@ -279,15 +359,13 @@ func (obj *Client) httpsHandle(ctx context.Context, client *ProxyConn) error {
 		Certificates:       []tls.Certificate{obj.cert},
 	})
 	defer tlsClient.Close()
-	return obj.httpHandle(ctx, &ProxyConn{
-		conn:   tlsClient,
-		reader: bufio.NewReader(tlsClient),
-	})
+	return obj.httpHandle(ctx, NewProxyCon(tlsClient, bufio.NewReader(tlsClient), client.schema, client.port, client.isWs, client.host, client.http2))
 }
 func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	defer client.Close()
 	var err error
-	clientReq, _, err := client.ReadRequest()
+
+	clientReq, err := obj.ReadRequest(client)
 	if err != nil {
 		return err
 	}
@@ -300,28 +378,294 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	}
 	var server net.Conn
 	network := "tcp"
+	host := clientReq.Host
 	addr := net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())
-	if server, err = obj.dialer.DialContextForProxy(ctx, network, clientReq.URL.Scheme, addr, clientReq.Host, proxyUrl); err != nil {
+	if server, err = obj.dialer.DialContextForProxy(ctx, network, client.schema, addr, host, proxyUrl); err != nil {
 		return err
 	}
 	defer server.Close()
+	proxyServer := NewProxyCon(server, bufio.NewReader(server), client.schema, client.port, client.isWs, client.host, client.http2)
 	if clientReq.Method == http.MethodConnect {
 		if _, err = client.Write([]byte(fmt.Sprintf("%s 200 Connection established\r\n\r\n", clientReq.Proto))); err != nil {
 			return err
 		}
 	} else {
-		if err = client.WriteRequest(clientReq, server, nil); err != nil {
+		if err = proxyServer.WriteRequest(clientReq); err != nil {
+			return err
+		}
+		if obj.ResponseCallBack != nil {
+			response, err := obj.ReadResponse(proxyServer, clientReq)
+			if err != nil {
+				return err
+			}
+			if err = client.WriteResponse(response); err != nil {
+				return err
+			}
+		}
+	}
+	return obj.copyMain(ctx, client, proxyServer)
+}
+func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
+	defer client.Close()
+	var err error
+	if err = obj.verifySocket(client); err != nil {
+		return err
+	}
+	//获取serverAddr
+	addr, err := obj.getSocketAddr(client)
+	if err != nil {
+		return err
+	}
+	//获取host
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+	//获取代理
+	proxyUrl, err := obj.dialer.GetProxy(ctx, nil)
+	if err != nil {
+		log.Print(err)
+		return err
+	}
+	//获取schema
+	httpsBytes, err := client.reader.Peek(1)
+	if err != nil {
+		return err
+	}
+	client.schema = "http"
+	if httpsBytes[0] == 22 {
+		client.schema = "https"
+	}
+	netword := "tcp"
+	server, err := obj.dialer.DialContextForProxy(ctx, netword, client.schema, addr, host, proxyUrl)
+	if err != nil {
+		return err
+	}
+	defer server.Close()
+	return obj.copyMain(ctx, client, NewProxyCon(server, bufio.NewReader(server), client.schema, client.port, client.isWs, client.host, client.http2))
+}
+
+func (obj *Client) copyMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+	if client.schema == "http" {
+		return obj.copyHttpMain(ctx, client, server)
+	} else if client.schema == "https" {
+		return obj.copyHttpsMain(ctx, client, server)
+	} else {
+		return errors.New("schema error")
+	}
+}
+
+type MsgData struct {
+	MsgType websocket.MessageType
+	Data    []byte
+}
+
+func (obj *Client) ReadRequest(conn *ProxyConn) (*http.Request, error) {
+	rs, err := conn.readRequest()
+	if err != nil || obj.RequestCallBack == nil {
+		return rs, err
+	}
+	obj.RequestCallBack(rs)
+	return rs, err
+}
+func (obj *Client) ReadResponse(conn *ProxyConn, req *http.Request) (*http.Response, error) {
+	rs, err := conn.readResponse(req)
+	if err != nil || obj.ResponseCallBack == nil {
+		return rs, err
+	}
+	obj.ResponseCallBack(req, rs)
+	return rs, err
+}
+func (obj *Client) WsSend(ctx context.Context, conn *websocket.Conn, msgData *MsgData) error {
+	if obj.WsSendCallBack != nil {
+		obj.WsSendCallBack(msgData)
+	}
+	return conn.WriteMsg(ctx, msgData.MsgType, msgData.Data)
+}
+func (obj *Client) WsRecv(ctx context.Context, conn *websocket.Conn) (*MsgData, error) {
+	msgType, msgData, err := conn.ReadMsg(ctx)
+	rs := &MsgData{
+		MsgType: msgType,
+		Data:    msgData,
+	}
+	if obj.WsRecvCallBack != nil {
+		obj.WsRecvCallBack(rs)
+	}
+	return rs, err
+}
+
+func (obj *Client) httpSend(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+	var req *http.Request
+	for !server.isWs {
+		if req, err = obj.ReadRequest(client); err != nil {
+			return err
+		}
+		if err = server.WriteRequest(req); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+func (obj *Client) httpRecv(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+	var req *http.Request
+	var rsp *http.Response
+	for !server.isWs {
+		if req, err = obj.ReadRequest(client); err != nil {
+			return err
+		}
+		if err = server.WriteRequest(req); err != nil {
+			return err
+		}
+		if rsp, err = obj.ReadResponse(server, req); err != nil {
+			return err
+		}
+		if err = client.WriteResponse(rsp); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	go func() { //服务端到客户端
-		defer server.Close()
-		defer client.Close()
-		io.Copy(client, server)
-	}()
-	_, err = io.Copy(server, client) //客户端发送服务端
+func (obj *Client) wsSend(ctx context.Context, wsClient *websocket.Conn, wsServer *websocket.Conn) (err error) {
+	defer wsServer.Close("close")
+	defer wsClient.Close("close")
+	var msgType websocket.MessageType
+	var msgData []byte
+	for {
+		if msgType, msgData, err = wsClient.ReadMsg(ctx); err != nil {
+			return
+		}
+		if err = obj.WsSend(ctx, wsServer, &MsgData{MsgType: msgType, Data: msgData}); err != nil {
+			return
+		}
+	}
+}
+func (obj *Client) wsRecv(ctx context.Context, wsClient *websocket.Conn, wsServer *websocket.Conn) (err error) {
+	defer wsServer.Close("close")
+	defer wsClient.Close("close")
+	var msgData *MsgData
+	for {
+		obj.WsRecv(ctx, wsServer)
+		if msgData, err = obj.WsRecv(ctx, wsServer); err != nil {
+			return
+		}
+		if err = wsClient.WriteMsg(ctx, msgData.MsgType, msgData.Data); err != nil {
+			return
+		}
+	}
+}
+func (obj *Client) httpCopy(ctx context.Context, writer *ProxyConn, reader *ProxyConn) (err error) {
+	defer reader.Close()
+	defer writer.Close()
+	_, err = io.Copy(writer, reader)
 	return err
+}
+
+func (obj *Client) httpCopyAll(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+	defer client.Close()
+	defer server.Close()
+	go obj.httpCopy(ctx, client, server)
+	return obj.httpCopy(ctx, server, client)
+}
+func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+	defer server.Close()
+	defer client.Close()
+	log.Print(client.http2, server.http2)
+	if client.http2 || server.http2 {
+		return obj.httpCopyAll(ctx, client, server)
+	}
+	if obj.ResponseCallBack == nil && obj.WsRecvCallBack == nil { //排除 全部回调
+		go obj.httpCopy(ctx, client, server)
+		if obj.RequestCallBack == nil && obj.WsSendCallBack == nil { //排除发送回调
+			return obj.httpCopy(ctx, server, client)
+		} else { //有发送回调
+			if err = obj.httpSend(ctx, client, server); err != nil {
+				return err
+			}
+			if obj.WsSendCallBack == nil { //没有ws 回调直接返回
+				return obj.httpCopy(ctx, server, client)
+			} else { //有ws 发送回调
+				option := websocket.Option{Subprotocols: server.subprotocols, CompressionOptions: client.compressionOptions}
+				wsClient := websocket.NewConn(client, false, option)
+				wsServer := websocket.NewConn(server, true, option)
+				return obj.wsSend(ctx, wsClient, wsServer)
+			}
+		}
+	} else { //有接受回调，则发送也要处理
+		if err = obj.httpRecv(ctx, client, server); err != nil {
+			return err
+		}
+		if obj.WsRecvCallBack == nil && obj.WsSendCallBack == nil { //没有ws 回调直接返回
+			return obj.httpCopyAll(ctx, client, server)
+		}
+		option := websocket.Option{Subprotocols: server.subprotocols, CompressionOptions: client.compressionOptions}
+		wsClient := websocket.NewConn(client, false, option)
+		wsServer := websocket.NewConn(server, true, option)
+		defer wsServer.Close("close")
+		defer wsClient.Close("close")
+		go func() {
+			if obj.WsRecvCallBack == nil {
+				err = obj.httpCopy(ctx, client, server)
+				return
+			}
+			obj.wsRecv(ctx, wsClient, wsServer)
+			return
+		}()
+		if obj.WsSendCallBack == nil {
+			return obj.httpCopy(ctx, server, client)
+		}
+		return obj.wsSend(ctx, wsClient, wsServer)
+	}
+}
+
+func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+	if obj.RequestCallBack == nil && obj.ResponseCallBack == nil && obj.WsSendCallBack == nil && obj.WsRecvCallBack == nil && !obj.ja3 {
+		return obj.copyHttpMain(ctx, client, server)
+	}
+	defer server.Close()
+	defer client.Close()
+	return obj.copyTlsHttpsMain(ctx, client, server)
+}
+func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, http2 bool) (tlsConn *tls.Conn, err error) {
+	protos := "http/1.1"
+	if http2 {
+		protos = "h2"
+	}
+	tlsConn = tls.Server(conn, &tls.Config{
+		InsecureSkipVerify: true,
+		Certificates:       []tls.Certificate{obj.cert},
+		NextProtos:         []string{protos},
+	})
+	return tlsConn, tlsConn.HandshakeContext(ctx)
+}
+func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string) (net.Conn, bool, error) {
+	if obj.ja3 {
+		if tlsConn, err := ja3.Client(ctx, conn, obj.ja3Id, addr); err != nil {
+			return tlsConn, false, err
+		} else {
+			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
+		}
+	} else {
+		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"h2", "http/1.1"}})
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			return tlsConn, false, err
+		} else {
+			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
+		}
+	}
+}
+func (obj *Client) copyTlsHttpsMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+	defer server.Close()
+	defer client.Close()
+	tlsServer, http2, err := obj.tlsServer(ctx, server, client.host)
+	if err != nil {
+		return err
+	}
+	tlsClient, err := obj.tlsClient(ctx, client, http2)
+	if err != nil {
+		return err
+	}
+	return obj.copyHttpMain(ctx, NewProxyCon(tlsClient, bufio.NewReader(tlsClient), client.schema, client.port, client.isWs, client.host, http2), NewProxyCon(tlsServer, bufio.NewReader(tlsServer), client.schema, client.port, client.isWs, client.host, http2))
 }
 func (obj *Client) getSocketAddr(client *ProxyConn) (string, error) {
 	buf := make([]byte, 4)
@@ -423,51 +767,5 @@ func (obj *Client) verifySocket(client *ProxyConn) error {
 	if _, err = client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil { //响应客户端连接成功
 		return err
 	}
-	return err
-}
-func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
-	defer client.Close()
-	var err error
-	if err = obj.verifySocket(client); err != nil {
-		return err
-	}
-	//获取serverAddr
-	addr, err := obj.getSocketAddr(client)
-	if err != nil {
-		return err
-	}
-	//获取host
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return err
-	}
-	//获取代理
-	proxyUrl, err := obj.dialer.GetProxy(ctx, nil)
-	if err != nil {
-		log.Print(err)
-		return err
-	}
-	//获取schema
-	httpsBytes, err := client.reader.Peek(1)
-	if err != nil {
-		return err
-	}
-	schema := "http"
-	if httpsBytes[0] == 22 {
-		schema = "https"
-	}
-	netword := "tcp"
-	server, err := obj.dialer.DialContextForProxy(ctx, netword, schema, addr, host, proxyUrl)
-	if err != nil {
-		return err
-	}
-
-	defer server.Close()
-	go func() { //服务端到客户端
-		defer server.Close()
-		defer client.Close()
-		io.Copy(client, server)
-	}()
-	_, err = io.Copy(server, client) //客户端发送服务端
 	return err
 }

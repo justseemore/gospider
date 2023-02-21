@@ -59,7 +59,7 @@ var (
 	HelloQQ_11_1 = utls.HelloQQ_11_1
 )
 
-func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, serverName string) (utlsConn *utls.UConn, err error) {
+func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, addr string) (utlsConn *utls.UConn, err error) {
 	defer func() {
 		if err != nil {
 			conn.Close()
@@ -68,17 +68,8 @@ func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, serverName 
 			}
 		}
 	}()
-	var spec utls.ClientHelloSpec
-	if spec, err = utls.UTLSIdToSpec(ja3Id); err != nil {
-		return
-	}
-	utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: serverName, NextProtos: []string{"h2", "http/1.1"}}, utls.HelloCustom)
-	if err = utlsConn.ApplyPreset(&spec); err != nil {
-		return
-	}
-	if err = utlsConn.HandshakeContext(ctx); err != nil {
-		return
-	}
+	utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"h2", "http/1.1"}}, ja3Id)
+	err = utlsConn.HandshakeContext(ctx)
 	return
 }
 

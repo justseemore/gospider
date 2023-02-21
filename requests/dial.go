@@ -128,10 +128,6 @@ func (obj *DialClient) AddrToIp(addr string) string {
 	return net.JoinHostPort(host, port)
 }
 
-type proxyDialer interface {
-	DialContext(context.Context, string, string) (net.Conn, error)
-}
-
 func (obj *DialClient) clientVerifySocks5(proxyUrl *url.URL, addr string, conn net.Conn) (err error) {
 	if _, err = conn.Write([]byte{5, 2, 0, 2}); err != nil {
 		return
@@ -249,47 +245,6 @@ func (obj *DialClient) clientVerifySocks5(proxyUrl *url.URL, addr string, conn n
 	_, err = io.ReadFull(conn, readCon[:2])
 	return
 }
-func Http2HttpsConn(ctx context.Context, proxyUrl *url.URL, addr string, host string, conn net.Conn) (err error) {
-	hdr := make(http.Header)
-	hdr.Set("User-Agent", UserAgent)
-	if proxyUrl.User != nil {
-		if password, ok := proxyUrl.User.Password(); ok {
-			hdr.Set("Proxy-Authorization", "Basic "+tools.Base64Encode(proxyUrl.User.Username()+":"+password))
-		}
-	}
-	didReadResponse := make(chan struct{}) // closed after CONNECT write+read is done or fails
-	var resp *http.Response
-	go func() {
-		defer close(didReadResponse)
-		connectReq := &http.Request{
-			Method: http.MethodConnect,
-			URL:    &url.URL{Opaque: addr},
-			Host:   host,
-			Header: hdr,
-		}
-		if err = connectReq.Write(conn); err != nil {
-			return
-		}
-		resp, err = http.ReadResponse(bufio.NewReader(conn), connectReq)
-	}()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-didReadResponse:
-	}
-	if err != nil {
-		return
-	}
-	if resp.StatusCode != 200 {
-		_, text, ok := strings.Cut(resp.Status, " ")
-		if !ok {
-			return errors.New("unknown status code")
-		}
-		return errors.New(text)
-	}
-	return
-}
-
 func cloneUrl(u *url.URL) *url.URL {
 	r := *u
 	return &r
@@ -303,7 +258,7 @@ func (obj *DialClient) DialTlsProxyContext(ctx context.Context, netword string, 
 		return nil, err
 	}
 	conn, err := obj.DialContext(ctx, netword, addr)
-	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: host, NextProtos: []string{"h2", "http/1.1"}}), err
+	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(host), NextProtos: []string{"h2", "http/1.1"}}), err
 }
 
 func (obj *DialClient) newPwdConn(conn net.Conn, proxyUrl *url.URL) net.Conn {
@@ -376,7 +331,7 @@ func (obj *DialClient) clientVerifyHttps(ctx context.Context, proxyUrl *url.URL,
 		connectReq := &http.Request{
 			Method: http.MethodConnect,
 			URL:    &url.URL{Opaque: obj.AddrToIp(addr)},
-			Host:   addr,
+			Host:   host,
 			Header: hdr,
 		}
 		if err = connectReq.Write(conn); err != nil {
@@ -517,14 +472,18 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
 	host := reqData.host
 	if host == "" {
-		if host, _, err = net.SplitHostPort(addr); err != nil {
-			return
-		}
+		addr = host
 	}
 	if reqData.ja3 {
-		tlsConn, err = ja3.Client(ctx, conn, reqData.ja3Id, host)
+		if utlsConn, err := ja3.Client(ctx, conn, reqData.ja3Id, host); err != nil {
+			return utlsConn, err
+		} else if reqData.h2 != (utlsConn.ConnectionState().NegotiatedProtocol == "h2") {
+			return utlsConn, tools.WrapError(ErrFatal, "请强制设置http2")
+		} else {
+			tlsConn = utlsConn
+		}
 	} else {
-		tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: host, NextProtos: []string{"h2", "http/1.1"}})
+		tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(host), NextProtos: []string{"h2", "http/1.1"}})
 	}
 	if reqData.isCallback && reqData.proxyUser != nil && reqData.proxy.Scheme == "https" && reqData.url.Scheme == "http" { //官方代理,有账号密码，代理为https,url 为http ，添加账号
 		nowProxy := cloneUrl(reqData.proxy)

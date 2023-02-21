@@ -780,3 +780,10 @@ func GetCertFile(addr string) (*bytes.Buffer, *bytes.Buffer, error) {
 		return certOut, keyOut, err
 	}
 }
+func GetHostName(addr string) string {
+	colonPos := strings.LastIndex(addr, ":")
+	if colonPos == -1 {
+		colonPos = len(addr)
+	}
+	return addr[:colonPos]
+}
