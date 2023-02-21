@@ -463,6 +463,9 @@ func ZipDecode(r *bytes.Buffer, encoding string) (*bytes.Buffer, error) {
 
 // 字节串转字符串
 func BytesToString(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
 	return unsafe.String(&b[0], len(b))
 }
 

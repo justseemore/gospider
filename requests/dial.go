@@ -444,7 +444,7 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 		}
 	} else if tempProxy, err := obj.GetProxy(ctx, reqData.url); err != nil {
 		return nil, err
-	} else {
+	} else if tempProxy != nil {
 		nowProxy = cloneUrl(tempProxy)
 	}
 	if nowProxy != nil { //走自实现代理
