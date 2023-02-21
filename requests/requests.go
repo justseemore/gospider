@@ -38,6 +38,15 @@ var defaultHeaders = http.Header{
 	"User-Agent":      []string{UserAgent},
 }
 
+var defaultWsHeaders = http.Header{
+	"Accept-encoding": []string{"gzip, deflate, br"},
+	"Accept":          []string{"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"},
+	"Accept-Language": []string{"zh-CN,zh;q=0.9"},
+	"User-Agent":      []string{UserAgent},
+	"Connection":      []string{"Upgrade"},
+	"Upgrade":         []string{"websocket"},
+}
+
 const keyPrincipalID = "gospiderContextData"
 
 var (
@@ -64,17 +73,17 @@ type File struct {
 }
 
 type RequestOption struct {
-	Method        string //method
-	Url           string //url
-	Host          string //host
-	Proxy         string //代理,http,socks5
-	Timeout       int64  //请求超时时间
-	Headers       any    //请求头
-	Cookies       any    // cookies
-	Files         []File //文件
-	Params        any    //url params,url 参数key,val
-	Form          any    //multipart/form-data,适用于文件上传
-	Data          any    //application/x-www-form-urlencoded,适用于key,val
+	Method        string   //method
+	Url           *url.URL //url
+	Host          string   //host
+	Proxy         string   //代理,http,socks5
+	Timeout       int64    //请求超时时间
+	Headers       any      //请求头
+	Cookies       any      // cookies
+	Files         []File   //文件
+	Params        any      //url params,url 参数key,val
+	Form          any      //multipart/form-data,适用于文件上传
+	Data          any      //application/x-www-form-urlencoded,适用于key,val
 	body          io.Reader
 	Body          io.Reader
 	Json          any                        //application/json
@@ -158,7 +167,11 @@ func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reade
 }
 func (obj *RequestOption) newHeaders() error {
 	if obj.Headers == nil {
-		obj.Headers = defaultHeaders.Clone()
+		if obj.Url.Scheme == "ws" || obj.Url.Scheme == "wss" {
+			obj.Headers = defaultWsHeaders.Clone()
+		} else {
+			obj.Headers = defaultHeaders.Clone()
+		}
 		return nil
 	}
 	switch headers := obj.Headers.(type) {
@@ -224,7 +237,7 @@ func (obj *RequestOption) newCookies() error {
 	}
 }
 func (obj *RequestOption) optionInit() error {
-	obj.converUrl = obj.Url
+	obj.converUrl = obj.Url.String()
 	var err error
 	//构造body
 	if obj.Bytes != nil {
@@ -285,10 +298,7 @@ func (obj *RequestOption) optionInit() error {
 		if _, err = newBody(obj.Params, "params", dataMap); err != nil {
 			return err
 		}
-		pu, err := url.Parse(obj.Url)
-		if err != nil {
-			return err
-		}
+		pu := cloneUrl(obj.Url)
 		puValues := pu.Query()
 		for kk, vvs := range dataMap {
 			for _, vv := range vvs {
@@ -325,7 +335,11 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	}
 	if option.Headers == nil {
 		if obj.Headers == nil {
-			option.Headers = defaultHeaders.Clone()
+			if option.Url.Scheme == "ws" || option.Url.Scheme == "wss" {
+				option.Headers = defaultWsHeaders.Clone()
+			} else {
+				option.Headers = defaultHeaders.Clone()
+			}
 		} else {
 			option.Headers = obj.Headers
 		}
@@ -396,8 +410,10 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	if rawOption.Method == "" {
 		rawOption.Method = method
 	}
-	if rawOption.Url == "" {
-		rawOption.Url = href
+	if rawOption.Url == nil {
+		if rawOption.Url, err = url.Parse(href); err != nil {
+			return
+		}
 	}
 	if rawOption.Body != nil {
 		if rawOption.Bytes, err = io.ReadAll(rawOption.Body); err != nil {
