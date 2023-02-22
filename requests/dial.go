@@ -478,7 +478,11 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		if utlsConn, err := ja3.Client(ctx, conn, reqData.ja3Id, reqData.ws, host); err != nil {
 			return utlsConn, err
 		} else if reqData.h2 != (utlsConn.ConnectionState().NegotiatedProtocol == "h2") {
-			return utlsConn, tools.WrapError(ErrFatal, "请强制设置http2")
+			if utlsConn.ConnectionState().NegotiatedProtocol == "h2" {
+				return utlsConn, tools.WrapError(ErrFatal, "请强制设置http2")
+			} else {
+				return utlsConn, tools.WrapError(ErrFatal, "请关闭http2设置")
+			}
 		} else {
 			tlsConn = utlsConn
 		}
