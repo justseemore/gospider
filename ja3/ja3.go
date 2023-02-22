@@ -59,7 +59,7 @@ var (
 	HelloQQ_11_1 = utls.HelloQQ_11_1
 )
 
-func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, addr string) (utlsConn *utls.UConn, err error) {
+func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, ws bool, addr string) (utlsConn *utls.UConn, err error) {
 	defer func() {
 		if err != nil {
 			conn.Close()
@@ -68,7 +68,27 @@ func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, addr string
 			}
 		}
 	}()
-	utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"h2", "http/1.1"}}, ja3Id)
+	if ws {
+		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"h2", "http/1.1"}}, utls.HelloCustom)
+		var spec utls.ClientHelloSpec
+		if spec, err = utls.UTLSIdToSpec(ja3Id); err != nil {
+			return
+		}
+		for _, Extension := range spec.Extensions {
+			alpns, ok := Extension.(*utls.ALPNExtension)
+			if ok {
+				if i := slices.Index(alpns.AlpnProtocols, "h2"); i != -1 {
+					alpns.AlpnProtocols = slices.Delete(alpns.AlpnProtocols, i, i+1)
+				}
+				break
+			}
+		}
+		if err = utlsConn.ApplyPreset(&spec); err != nil {
+			return
+		}
+	} else {
+		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"h2", "http/1.1"}}, ja3Id)
+	}
 	err = utlsConn.HandshakeContext(ctx)
 	return
 }

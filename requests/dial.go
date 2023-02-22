@@ -475,7 +475,7 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		addr = host
 	}
 	if reqData.ja3 {
-		if utlsConn, err := ja3.Client(ctx, conn, reqData.ja3Id, host); err != nil {
+		if utlsConn, err := ja3.Client(ctx, conn, reqData.ja3Id, reqData.ws, host); err != nil {
 			return utlsConn, err
 		} else if reqData.h2 != (utlsConn.ConnectionState().NegotiatedProtocol == "h2") {
 			return utlsConn, tools.WrapError(ErrFatal, "请强制设置http2")
@@ -483,7 +483,11 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 			tlsConn = utlsConn
 		}
 	} else {
-		tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(host), NextProtos: []string{"h2", "http/1.1"}})
+		if reqData.ws {
+			tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(host), NextProtos: []string{"http/1.1"}})
+		} else {
+			tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(host), NextProtos: []string{"h2", "http/1.1"}})
+		}
 	}
 	if reqData.isCallback && reqData.proxyUser != nil && reqData.proxy.Scheme == "https" && reqData.url.Scheme == "http" { //官方代理,有账号密码，代理为https,url 为http ，添加账号
 		nowProxy := cloneUrl(reqData.proxy)

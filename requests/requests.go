@@ -38,15 +38,6 @@ var defaultHeaders = http.Header{
 	"User-Agent":      []string{UserAgent},
 }
 
-var defaultWsHeaders = http.Header{
-	"Accept-encoding": []string{"gzip, deflate, br"},
-	"Accept":          []string{"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"},
-	"Accept-Language": []string{"zh-CN,zh;q=0.9"},
-	"User-Agent":      []string{UserAgent},
-	"Connection":      []string{"Upgrade"},
-	"Upgrade":         []string{"websocket"},
-}
-
 const keyPrincipalID = "gospiderContextData"
 
 var (
@@ -63,6 +54,7 @@ type reqCtxData struct {
 	redirectNum int
 	disProxy    bool
 	h2          bool
+	ws          bool
 	ja3         bool
 }
 type File struct {
@@ -167,11 +159,7 @@ func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reade
 }
 func (obj *RequestOption) newHeaders() error {
 	if obj.Headers == nil {
-		if obj.Url.Scheme == "ws" || obj.Url.Scheme == "wss" {
-			obj.Headers = defaultWsHeaders.Clone()
-		} else {
-			obj.Headers = defaultHeaders.Clone()
-		}
+		obj.Headers = defaultHeaders.Clone()
 		return nil
 	}
 	switch headers := obj.Headers.(type) {
@@ -335,11 +323,7 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	}
 	if option.Headers == nil {
 		if obj.Headers == nil {
-			if option.Url.Scheme == "ws" || option.Url.Scheme == "wss" {
-				option.Headers = defaultWsHeaders.Clone()
-			} else {
-				option.Headers = defaultHeaders.Clone()
-			}
+			option.Headers = defaultHeaders.Clone()
 		} else {
 			option.Headers = obj.Headers
 		}
@@ -489,7 +473,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	method := strings.ToUpper(request_option.Method)
 	href := request_option.converUrl
 	var reqs *http.Request
-	var isWs bool
 	//构造ctxData
 	ctxData := new(reqCtxData)
 	ctxData.disProxy = request_option.DisProxy
@@ -532,21 +515,23 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	}
 	ctxData.url = reqs.URL
 	ctxData.host = reqs.Host
-	if request_option.Http2 { //根据scheme判断是否启动http2
+
+	//判断ws
+	switch reqs.URL.Scheme {
+	case "ws":
+		ctxData.ws = true
+		reqs.URL.Scheme = "http"
+	case "wss":
+		ctxData.ws = true
+		reqs.URL.Scheme = "https"
+	}
+	//根据scheme判断是否启动http2
+	if request_option.Http2 {
 		if reqs.URL.Scheme == "https" {
 			ctxData.h2 = request_option.Http2
 		} else {
 			request_option.Http2 = false
 		}
-	}
-	//判断ws
-	switch reqs.URL.Scheme {
-	case "ws":
-		isWs = true
-		reqs.URL.Scheme = "http"
-	case "wss":
-		isWs = true
-		reqs.URL.Scheme = "https"
 	}
 	//添加headers
 	var headOk bool
@@ -554,7 +539,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		return response, tools.WrapError(ErrFatal, "headers 转换错误")
 	}
 
-	if !isWs && reqs.Header.Get("Content-type") == "" && request_option.contentType != "" {
+	if !ctxData.ws && reqs.Header.Get("Content-type") == "" && request_option.contentType != "" {
 		reqs.Header.Add("Content-Type", request_option.contentType)
 	}
 	//host构造
@@ -579,14 +564,14 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	//开始发送请求
 	var r *http.Response
 	var err2 error
-	if isWs {
+	if ctxData.ws {
 		if err = websocket.SetClientHeaders(reqs.Header, &request_option.WsOption); err != nil {
 			return response, tools.WrapError(ErrFatal, err.Error())
 		}
 	}
 	r, err = obj.getClient(request_option).Do(reqs)
 	if r != nil {
-		if isWs {
+		if ctxData.ws {
 			request_option.DisRead = true
 			if r.StatusCode != 101 && err == nil {
 				err = errors.New("statusCode not 101")
@@ -596,7 +581,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		if response, err2 = obj.newResponse(r, cancel, request_option); err2 != nil { //创建 response
 			return response, err2
 		}
-		if isWs && r.StatusCode == 101 {
+		if ctxData.ws && r.StatusCode == 101 {
 			if response.webSocket, err2 = websocket.NewClientConn(r, request_option.WsOption); err2 != nil { //创建 websocket
 				return response, err2
 			}

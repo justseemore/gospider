@@ -638,9 +638,9 @@ func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, http2 bool) (tl
 	})
 	return tlsConn, tlsConn.HandshakeContext(ctx)
 }
-func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string) (net.Conn, bool, error) {
+func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws bool) (net.Conn, bool, error) {
 	if obj.ja3 {
-		if tlsConn, err := ja3.Client(ctx, conn, obj.ja3Id, addr); err != nil {
+		if tlsConn, err := ja3.Client(ctx, conn, obj.ja3Id, ws, addr); err != nil {
 			return tlsConn, false, err
 		} else {
 			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
@@ -657,7 +657,7 @@ func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string) (n
 func (obj *Client) copyTlsHttpsMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	defer server.Close()
 	defer client.Close()
-	tlsServer, http2, err := obj.tlsServer(ctx, server, client.host)
+	tlsServer, http2, err := obj.tlsServer(ctx, server, client.host, client.isWs || server.isWs)
 	if err != nil {
 		return err
 	}
