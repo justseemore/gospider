@@ -488,6 +488,9 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		}
 	} else {
 		if reqData.ws {
+			if reqData.h2 {
+				return tlsConn, tools.WrapError(ErrFatal, "请关闭http2设置")
+			}
 			tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(host), NextProtos: []string{"http/1.1"}})
 		} else {
 			tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(host), NextProtos: []string{"h2", "http/1.1"}})
