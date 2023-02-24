@@ -2,9 +2,16 @@ package cdp
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"strconv"
+	"time"
 
+	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/tools"
+	"golang.org/x/exp/maps"
 )
 
 type RequestOption struct {
@@ -69,6 +76,29 @@ func (obj *Route) Headers() map[string]string {
 	return obj.recvData.Request.Headers
 }
 
+func keyMd5(key RequestOption, resourceType string) [16]byte {
+	var md5Str string
+	nt := strconv.Itoa(int(time.Now().Unix() / 1000))
+	key.Url = re.Sub(fmt.Sprintf(`=%s\d*?&`, nt), "=&", key.Url)
+	key.Url = re.Sub(fmt.Sprintf(`=%s\d*?$`, nt), "=", key.Url)
+
+	key.Url = re.Sub(fmt.Sprintf(`=%s\d*?\.\d+?&`, nt), "=&", key.Url)
+	key.Url = re.Sub(fmt.Sprintf(`=%s\d*?\.\d+?$`, nt), "=", key.Url)
+
+	key.Url = re.Sub(`=0\.\d{10,}&`, "=&", key.Url)
+	key.Url = re.Sub(`=0\.\d{10,}$`, "=", key.Url)
+
+	md5Str += fmt.Sprintf("%s,%s,%s", key.Method, key.Url, key.PostData)
+
+	if resourceType == "Document" || "resourceType" == "XHR" {
+		kks := maps.Keys(key.Headers)
+		sort.Strings(kks)
+		for _, k := range kks {
+			md5Str += fmt.Sprintf("%s,%s", k, key.Headers[k])
+		}
+	}
+	return tools.Md5(md5Str)
+}
 func (obj *Route) Request(ctx context.Context, routeOption RequestOption, options ...requests.RequestOption) (FulData, error) {
 	var option requests.RequestOption
 	if len(options) > 0 {
@@ -82,12 +112,18 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	if resourceType == "Document" || "resourceType" == "XHR" {
 		option.TryNum = 1
 	}
+	switch resourceType {
+	case "Document", "XHR":
+		option.TryNum = 1
+	case "Font":
+		return FulData{}, errors.New("filter")
+	}
 	var fulData FulData
 	var err error
-	routeKey := obj.webSock.db.keyMd5(routeOption, resourceType)
-	if !obj.webSock.filterKeys.Has(routeKey) {
-		if fulData, err = obj.webSock.db.get(routeKey); err == nil {
-			if resourceType == "Document" || "resourceType" == "XHR" {
+	routeKey := keyMd5(routeOption, resourceType)
+	if !obj.webSock.filterKeys.Has(routeKey) { //如果存在
+		if fulData, err = obj.webSock.db.Get(routeKey); err == nil { //如果有緩存
+			if resourceType == "Document" || "resourceType" == "XHR" { //第一次走緩存，第二次不走緩存
 				obj.webSock.filterKeys.Add(routeKey)
 			}
 			return fulData, err
@@ -110,7 +146,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	fulData.Body = rs.Text()
 	fulData.Headers = headers
 	fulData.ResponsePhrase = rs.Status()
-	obj.webSock.db.put(routeKey, fulData)
+	obj.webSock.db.Put(routeKey, fulData)
 	return fulData, nil
 }
 
@@ -128,12 +164,17 @@ func (obj *Route) FulFill(ctx context.Context, fulDatas ...FulData) error {
 	return nil
 }
 func (obj *Route) Continue(ctx context.Context) error {
-	if fulData, err := obj.Request(ctx, obj.NewRequestOption()); err != nil {
-		return err
-	} else if err = obj.FulFill(ctx, fulData); err != nil {
+	fulData, err := obj.Request(ctx, obj.NewRequestOption())
+	var err2 error
+	if err != nil {
+		err2 = obj.Fail(ctx)
+	} else {
+		err = obj.FulFill(ctx, fulData)
+	}
+	if err != nil {
 		return err
 	}
-	return nil
+	return err2
 }
 
 // Failed, Aborted, TimedOut, AccessDenied, ConnectionClosed, ConnectionReset, ConnectionRefused, ConnectionAborted, ConnectionFailed, NameNotResolved, InternetDisconnected, AddressUnreachable, BlockedByClient, BlockedByResponse

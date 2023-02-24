@@ -19,6 +19,7 @@ import (
 	"gitee.com/baixudong/gospider/cdp"
 	"gitee.com/baixudong/gospider/cmd"
 	"gitee.com/baixudong/gospider/conf"
+	"gitee.com/baixudong/gospider/db"
 	"gitee.com/baixudong/gospider/proxy"
 	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/requests"
@@ -110,7 +111,7 @@ var stealth string
 var stealth2 string
 
 type Client struct {
-	db       *cdp.DbClient
+	db       *db.Client[cdp.FulData]
 	cmdCli   *cmd.Client
 	reqCli   *requests.Client
 	port     int
@@ -473,7 +474,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 		ctx:      ctx,
 		cnl:      cnl,
 		cmdCli:   cli,
-		db:       cdp.NewDbClient(ctx, cnl),
+		db:       db.NewClient[cdp.FulData](ctx, cnl),
 		host:     option.Host,
 		port:     option.Port,
 		reqCli:   reqCli,

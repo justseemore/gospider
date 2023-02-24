@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"gitee.com/baixudong/gospider/db"
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/thread"
@@ -39,7 +40,7 @@ type RecvData struct {
 }
 
 type WebSock struct {
-	db         *DbClient
+	db         *db.Client[FulData]
 	ids        map[int64]*event
 	methods    map[string]*event
 	methodLock sync.RWMutex
@@ -161,7 +162,7 @@ func (obj *WebSock) recvMain() (err error) {
 	}
 }
 
-func NewWebSock(preCtx context.Context, ws, href, proxy string, getProxy func() (string, error), db *DbClient) (*WebSock, error) {
+func NewWebSock(preCtx context.Context, ws, href, proxy string, getProxy func() (string, error), db *db.Client[FulData]) (*WebSock, error) {
 	reqOption := requests.ClientOption{Proxy: proxy}
 	if getProxy != nil {
 		reqOption.GetProxy = func(ctx context.Context, url *url.URL) (string, error) { return getProxy() }

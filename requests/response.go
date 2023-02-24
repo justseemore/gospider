@@ -125,7 +125,7 @@ func (obj *Response) barRead() (*bytes.Buffer, error) {
 		bar:  bar.NewClient(obj.response.ContentLength),
 		body: bytes.NewBuffer(nil),
 	}
-	_, err := io.Copy(barData, obj.response.Body)
+	err := tools.CopyWitchContext(obj.response.Request.Context(), barData, obj.response.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (obj *Response) read(bar bool) error { //读取body,对body 解压，解码
 		bBody, err = obj.barRead()
 	} else {
 		bBody = bytes.NewBuffer(nil)
-		_, err = io.Copy(bBody, obj.response.Body)
+		err = tools.CopyWitchContext(obj.response.Request.Context(), bBody, obj.response.Body)
 	}
 	if err != nil {
 		return errors.New("io.Copy error: " + err.Error())

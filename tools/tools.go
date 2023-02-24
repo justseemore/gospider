@@ -670,47 +670,18 @@ func WrapError(err error, val ...any) error {
 	return fmt.Errorf("%w,%s", err, fmt.Sprint(val...))
 }
 
-func CopyWitchContext(preCtx context.Context, writer io.Writer, reader io.Reader, timeOut int64) error {
-	if preCtx == nil {
-		preCtx = context.TODO()
-	}
-	ctx, cnl := context.WithCancel(preCtx)
-	var endErr error
-	t := time.Now().Unix()
+func CopyWitchContext(ctx context.Context, writer io.Writer, reader io.Reader) (err error) {
+	p := make(chan struct{})
 	go func() {
-		defer cnl()
-		maxSize := 1024
-		con := make([]byte, maxSize)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				size, err := io.ReadFull(reader, con)
-				t = time.Now().Unix()
-				if err != nil {
-					endErr = err
-					return
-				}
-				if _, endErr = writer.Write(con[:size]); endErr != nil {
-					return
-				}
-				if size < maxSize {
-					return
-				}
-			}
-		}
+		defer close(p)
+		_, err = io.Copy(writer, reader)
 	}()
-	for {
-		select {
-		case <-ctx.Done():
-			return endErr
-		case <-time.After(time.Second * time.Duration(timeOut)):
-			if time.Now().Unix()-t >= timeOut {
-				return endErr
-			}
-		}
+	select {
+	case <-ctx.Done():
+		err = ctx.Err()
+	case <-p:
 	}
+	return
 }
 func ParseIp(host string) (net.IP, int) {
 	if ip := net.ParseIP(host); ip != nil {

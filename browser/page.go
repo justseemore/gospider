@@ -11,6 +11,7 @@ import (
 
 	"gitee.com/baixudong/gospider/bs4"
 	"gitee.com/baixudong/gospider/cdp"
+	"gitee.com/baixudong/gospider/db"
 	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/tools"
@@ -39,7 +40,7 @@ type PageOption struct {
 	GetProxy func() (string, error)
 }
 
-func (obj *Page) init(proxy string, getProxy func() (string, error), db *cdp.DbClient) error {
+func (obj *Page) init(proxy string, getProxy func() (string, error), db *db.Client[cdp.FulData]) error {
 	var err error
 	if obj.webSock, err = cdp.NewWebSock(
 		obj.ctx,
