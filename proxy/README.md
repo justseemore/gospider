@@ -1,6 +1,6 @@
 # 功能概述
 * 快如闪电的正向代理
-* 支持https,http,socks5
+* 支持https,http,https,socks5
 * 支持隧道代理的开发
 * 支持白名单，用户名密码
 

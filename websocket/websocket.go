@@ -253,9 +253,15 @@ func (obj *Conn) Option() Option {
 }
 
 func (obj *Conn) ReadJson(ctx context.Context, v interface{}) error {
+	if ctx == nil {
+		ctx = context.TODO()
+	}
 	return wsjson.Read(ctx, obj.conn, v)
 }
 func (obj *Conn) WriteJson(ctx context.Context, v interface{}) error {
+	if ctx == nil {
+		ctx = context.TODO()
+	}
 	return wsjson.Write(ctx, obj.conn, v)
 }
 func (obj *Conn) Read(p []byte) (n int, err error) {
@@ -266,9 +272,15 @@ func (obj *Conn) Write(p []byte) (n int, err error) {
 }
 
 func (obj *Conn) ReadMsg(ctx context.Context) (MessageType, []byte, error) {
+	if ctx == nil {
+		ctx = context.TODO()
+	}
 	return obj.conn.Read(ctx)
 }
 func (obj *Conn) WriteMsg(ctx context.Context, typ MessageType, p []byte) error {
+	if ctx == nil {
+		ctx = context.TODO()
+	}
 	return obj.conn.Write(ctx, typ, p)
 }
 func (obj *Conn) Close(reason string) error {
@@ -276,5 +288,8 @@ func (obj *Conn) Close(reason string) error {
 	return obj.conn.Close(websocket.StatusInternalError, reason)
 }
 func (obj *Conn) Ping(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.TODO()
+	}
 	return obj.conn.Ping(ctx)
 }

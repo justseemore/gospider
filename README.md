@@ -1,10 +1,14 @@
-# gospider
-
-## golang 爬虫工具集合
-1. 支持ja3 反爬,http2 协议,websocket 协议,socks五,http 代理的请求库 [requests](https://gitee.com/baixudong/gospider/tree/master/requests)
-2. 支持浏览器检测，随机浏览器指纹，cpd 原生协议 的浏览器控制库 [browser](https://gitee.com/baixudong/gospider/tree/master/browser)
-3. golang 高性能协程池 [thread](https://gitee.com/baixudong/gospider/tree/master/thread) 实现对协程完美控制
-
-
-
+# 简介
+python到golang爬虫过渡的所有必需库.
+1. 请求库：支持ja3,http2 协议,各种主流代理协议,覆盖python requests 所有的功能
+2. 浏览器：使用原生cdp 操控浏览器,无任何三方依赖，快速，高度自定义
+3. 代理库：对数据抓包拦截修改,聚合代理池为隧道代理,作为网关拦截爬虫请求,作为代理突破ja3反爬
+4. 并发库：自实现高性能并发库
+5. 执行js: 通过管道调用js 方法
+6. 执行python: 通过管道调用python 方法
+7. 更多功能...
+# 教程
+1. [知乎](https://www.zhihu.com/people/xiao-bai-shu-87-3/posts)
+2. [掘金](https://juejin.cn/user/4098624347452359/posts)
+3. [csdn](https://blog.csdn.net/Mr_bai_404?type=blog)
 
