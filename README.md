@@ -12,3 +12,4 @@ python到golang爬虫过渡的所有必需库.
 2. [掘金](https://juejin.cn/user/4098624347452359/posts)
 3. [csdn](https://blog.csdn.net/Mr_bai_404?type=blog)
 
+![](https://gitee.com/baixudong/gospider/blob/master/im.jpg)
