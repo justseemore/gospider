@@ -50,7 +50,7 @@ func (obj Cookies) String() string {
 	return strings.Join(cooks, "&")
 }
 
-func (obj Cookies) Gets(name string) []*http.Cookie {
+func (obj Cookies) Gets(name string) Cookies {
 	var result []*http.Cookie
 	for _, cook := range obj {
 		if cook.Name == name {

@@ -13,6 +13,7 @@ import (
 	"gitee.com/baixudong/gospider/blog"
 	"gitee.com/baixudong/gospider/browser"
 	"gitee.com/baixudong/gospider/cdp"
+	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/thread"
 	"gitee.com/baixudong/gospider/tools"
 
@@ -234,7 +235,7 @@ type RendOption struct {
 	WaitSelector string         `json:"waitSelector"`
 	Eval         string         `json:"eval"`
 	EvalParams   map[string]any `json:"evalParams"`
-	cookies      []*http.Cookie
+	cookies      requests.Cookies
 }
 type taskResult struct {
 	Content string       `json:"content"`

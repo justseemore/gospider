@@ -194,6 +194,9 @@ func (obj *RequestOption) newCookies() error {
 	switch cookies := obj.Cookies.(type) {
 	case []*http.Cookie:
 		return nil
+	case Cookies:
+		obj.Cookies = []*http.Cookie(cookies)
+		return nil
 	case string:
 		obj.Cookies = ReadCookies(cookies)
 		return nil
