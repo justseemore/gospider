@@ -147,7 +147,7 @@ func (obj *Client) clone(request_option RequestOption) *http.Client {
 	}
 	return cli
 }
-func (obj *Client) Clone(request_option RequestOption) *Client {
+func (obj *Client) Clone() *Client {
 	result := *obj
 	result.client.Transport = result.baseTransport.Clone()
 	result.client2.Transport = cloneTransport(result.baseTransport2)
