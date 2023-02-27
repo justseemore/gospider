@@ -24,7 +24,7 @@ import (
 //go:linkname readCookies net/http.readCookies
 func readCookies(h http.Header, filter string) []*http.Cookie
 
-func ReadCookies(cookies string) []*http.Cookie {
+func ReadCookies(cookies string) Cookies {
 	return readCookies(http.Header{"Cookie": []string{cookies}}, "")
 }
 

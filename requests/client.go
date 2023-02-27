@@ -174,7 +174,7 @@ func (obj *Client) Close() {
 func (obj *Client) CloseIdleConnections() {
 	obj.client.CloseIdleConnections()
 }
-func (obj *Client) Cookies(href string, cookies ...*http.Cookie) []*http.Cookie {
+func (obj *Client) Cookies(href string, cookies ...*http.Cookie) Cookies {
 	if obj.client.Jar == nil {
 		return nil
 	}

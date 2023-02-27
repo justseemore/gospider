@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -38,6 +39,52 @@ func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request
 	response.disDecode = request_option.DisDecode      //是否解码
 	return response, response.read(request_option.Bar) //读取内容
 }
+
+type Cookies []*http.Cookie
+
+func (obj Cookies) String() string {
+	cooks := []string{}
+	for _, cook := range obj {
+		cooks = append(cooks, fmt.Sprintf("%s=%s", cook.Name, cook.Value))
+	}
+	return strings.Join(cooks, "&")
+}
+
+func (obj Cookies) Gets(name string) []*http.Cookie {
+	var result []*http.Cookie
+	for _, cook := range obj {
+		if cook.Name == name {
+			result = append(result, cook)
+		}
+	}
+	return result
+}
+func (obj Cookies) Get(name string) *http.Cookie {
+	vals := obj.Gets(name)
+	if i := len(vals); i == 0 {
+		return nil
+	} else {
+		return vals[i-1]
+	}
+}
+func (obj Cookies) GetVals(name string) []string {
+	var result []string
+	for _, cook := range obj {
+		if cook.Name == name {
+			result = append(result, cook.Value)
+		}
+	}
+	return result
+}
+func (obj Cookies) GetVal(name string) string {
+	vals := obj.GetVals(name)
+	if i := len(vals); i == 0 {
+		return ""
+	} else {
+		return vals[i-1]
+	}
+}
+
 func (obj *Response) Response() *http.Response {
 	return obj.response
 }
@@ -47,9 +94,9 @@ func (obj *Response) WebSocket() *websocket.Conn {
 func (obj *Response) Location() (*url.URL, error) {
 	return obj.response.Location()
 }
-func (obj *Response) Cookies() []*http.Cookie {
+func (obj *Response) Cookies() Cookies {
 	if obj.response == nil {
-		return []*http.Cookie{}
+		return nil
 	}
 	return obj.response.Cookies()
 }
