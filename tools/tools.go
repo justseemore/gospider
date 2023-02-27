@@ -673,7 +673,12 @@ func WrapError(err error, val ...any) error {
 func CopyWitchContext(ctx context.Context, writer io.Writer, reader io.Reader) (err error) {
 	p := make(chan struct{})
 	go func() {
-		defer close(p)
+		defer func() {
+			if recErr := recover(); recErr != nil && err == nil {
+				err = errors.New(fmt.Sprint(recErr))
+			}
+			close(p)
+		}()
 		_, err = io.Copy(writer, reader)
 	}()
 	select {

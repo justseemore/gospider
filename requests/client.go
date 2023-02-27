@@ -124,6 +124,7 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 	}
 	return http.ErrUseLastResponse
 }
+
 func (obj *Client) clone(request_option RequestOption) *http.Client {
 	cli := &http.Client{
 		CheckRedirect: obj.client.CheckRedirect,
@@ -145,6 +146,12 @@ func (obj *Client) clone(request_option RequestOption) *http.Client {
 		}
 	}
 	return cli
+}
+func (obj *Client) Clone(request_option RequestOption) *Client {
+	result := *obj
+	result.client.Transport = result.baseTransport.Clone()
+	result.client2.Transport = cloneTransport(result.baseTransport2)
+	return &result
 }
 func (obj *Client) Reset() error {
 	if obj.client.Jar != nil {
