@@ -92,7 +92,6 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 	server.cnl = cnl
 	if option.Vpn {
 		server.vpn = option.Vpn
-		option.Ja3 = true
 	}
 	if option.Usr != "" && option.Pwd != "" {
 		server.basic = "Basic " + tools.Base64Encode(option.Usr+":"+option.Pwd)
@@ -197,9 +196,7 @@ func (obj *Client) whiteVerify(client net.Conn) bool {
 // 返回:请求所有内容,第一行的内容被" "分割的数组,第一行的内容,error
 func (obj *Client) verifyPwd(client net.Conn, clientReq *http.Request) error {
 	if obj.basic != "" && clientReq.Header.Get("Proxy-Authorization") != obj.basic && !obj.whiteVerify(client) { //验证密码是否正确
-		if !obj.vpn {
-			client.Write([]byte(fmt.Sprintf("%s 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic\r\n\r\n", clientReq.Proto)))
-		}
+		client.Write([]byte(fmt.Sprintf("%s 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic\r\n\r\n", clientReq.Proto)))
 		return errors.New("auth verify fail")
 	}
 	return nil
