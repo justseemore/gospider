@@ -252,13 +252,9 @@ func cloneUrl(u *url.URL) *url.URL {
 func (obj *DialClient) DialContext(ctx context.Context, netword string, addr string) (net.Conn, error) {
 	return obj.dialer.DialContext(ctx, netword, obj.AddrToIp(addr))
 }
-func (obj *DialClient) DialTlsProxyContext(ctx context.Context, netword string, addr string) (net.Conn, error) {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, err
-	}
+func (obj *DialClient) DialTlsProxyContext(ctx context.Context, netword string, addr string, host string) (net.Conn, error) {
 	conn, err := obj.DialContext(ctx, netword, addr)
-	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(host), NextProtos: []string{"h2", "http/1.1"}}), err
+	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"h2", "http/1.1"}}), err
 }
 
 func (obj *DialClient) newPwdConn(conn net.Conn, proxyUrl *url.URL) net.Conn {
@@ -282,13 +278,13 @@ func (obj *DialClient) Http2HttpProxy(ctx context.Context, network string, proxy
 	}
 	return
 }
-func (obj *DialClient) Http2HttpsProxy(ctx context.Context, network string, addr string, proxyUrl *url.URL) (conn net.Conn, err error) {
+func (obj *DialClient) Http2HttpsProxy(ctx context.Context, network string, addr string, host string, proxyUrl *url.URL) (conn net.Conn, err error) {
 	defer func() {
 		if err != nil && conn != nil {
 			conn.Close()
 		}
 	}()
-	conn, err = obj.DialTlsProxyContext(ctx, network, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port()))
+	conn, err = obj.DialTlsProxyContext(ctx, network, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port()), host)
 	if proxyUrl.User != nil {
 		return obj.newPwdConn(conn, proxyUrl), err
 	}
@@ -378,7 +374,7 @@ func (obj *DialClient) Https2HttpsProxy(ctx context.Context, network string, add
 			conn.Close()
 		}
 	}()
-	if conn, err = obj.DialTlsProxyContext(ctx, network, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port())); err != nil {
+	if conn, err = obj.DialTlsProxyContext(ctx, network, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port()), host); err != nil {
 		return
 	}
 	if err = obj.clientVerifyHttps(ctx, proxyUrl, addr, host, conn); err != nil {
@@ -387,10 +383,9 @@ func (obj *DialClient) Https2HttpsProxy(ctx context.Context, network string, add
 	return
 }
 
-func (obj *DialClient) Https2Socks5Proxy(ctx context.Context, network string, addr string, proxyUrl *url.URL) (conn net.Conn, err error) {
+func (obj *DialClient) Https2Socks5Proxy(ctx context.Context, network string, addr string, host string, proxyUrl *url.URL) (conn net.Conn, err error) {
 	return obj.Http2Socks5Proxy(ctx, network, addr, proxyUrl)
 }
-
 func (obj *DialClient) DialContextForProxy(ctx context.Context, netword string, scheme string, addr string, host string, proxyUrl *url.URL) (net.Conn, error) {
 	if proxyUrl == nil {
 		return obj.DialContext(ctx, netword, addr)
@@ -401,7 +396,7 @@ func (obj *DialClient) DialContextForProxy(ctx context.Context, netword string, 
 		case "http":
 			return obj.Http2HttpProxy(ctx, netword, proxyUrl)
 		case "https":
-			return obj.Http2HttpsProxy(ctx, netword, addr, proxyUrl)
+			return obj.Http2HttpsProxy(ctx, netword, addr, host, proxyUrl)
 		case "socks5":
 			return obj.Http2Socks5Proxy(ctx, netword, addr, proxyUrl)
 		default:
@@ -414,7 +409,7 @@ func (obj *DialClient) DialContextForProxy(ctx context.Context, netword string, 
 		case "https":
 			return obj.Https2HttpsProxy(ctx, netword, addr, host, proxyUrl)
 		case "socks5":
-			return obj.Https2Socks5Proxy(ctx, netword, addr, proxyUrl)
+			return obj.Https2Socks5Proxy(ctx, netword, addr, host, proxyUrl)
 		default:
 			return nil, errors.New("proxyUrl Scheme error")
 		}
@@ -427,6 +422,9 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
 	if reqData.url == nil {
 		return nil, tools.WrapError(ErrFatal, "not found reqData.url")
+	}
+	if reqData.host == "" {
+		reqData.host = tools.GetHostName(addr)
 	}
 	var nowProxy *url.URL
 	if reqData.disProxy { //关闭代理直接返回
@@ -448,14 +446,7 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 		nowProxy = cloneUrl(tempProxy)
 	}
 	if nowProxy != nil { //走自实现代理
-		host := reqData.host
-		if host == "" {
-			var err error
-			if host, _, err = net.SplitHostPort(addr); err != nil {
-				return nil, err
-			}
-		}
-		return obj.DialContextForProxy(ctx, network, reqData.url.Scheme, addr, host, nowProxy)
+		return obj.DialContextForProxy(ctx, network, reqData.url.Scheme, addr, reqData.host, nowProxy)
 	}
 	return obj.DialContext(ctx, network, addr)
 }
@@ -470,12 +461,8 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		return nil, err
 	}
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
-	host := reqData.host
-	if host == "" {
-		addr = host
-	}
 	if reqData.ja3 {
-		if utlsConn, err := ja3.Client(ctx, conn, reqData.ja3Id, reqData.ws, host); err != nil {
+		if utlsConn, err := ja3.Client(ctx, conn, reqData.ja3Id, reqData.ws, reqData.host); err != nil {
 			return utlsConn, err
 		} else if reqData.h2 != (utlsConn.ConnectionState().NegotiatedProtocol == "h2") {
 			if utlsConn.ConnectionState().NegotiatedProtocol == "h2" {
@@ -491,9 +478,9 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 			if reqData.h2 {
 				return tlsConn, tools.WrapError(ErrFatal, "请关闭http2设置")
 			}
-			tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(host), NextProtos: []string{"http/1.1"}})
+			tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: reqData.host, NextProtos: []string{"http/1.1"}})
 		} else {
-			tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(host), NextProtos: []string{"h2", "http/1.1"}})
+			tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: reqData.host, NextProtos: []string{"h2", "http/1.1"}})
 		}
 	}
 	if reqData.isCallback && reqData.proxyUser != nil && reqData.proxy.Scheme == "https" && reqData.url.Scheme == "http" { //官方代理,有账号密码，代理为https,url 为http ，添加账号
