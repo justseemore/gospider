@@ -236,14 +236,13 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) error {
 }
 
 type ProxyOption struct {
-	init               bool
-	http2              bool
-	host               string
-	schema             string
-	port               string
-	isWs               bool
-	subprotocols       []string
-	compressionOptions *websocket.CompressionOptions
+	init     bool
+	http2    bool
+	host     string
+	schema   string
+	port     string
+	isWs     bool
+	wsOption websocket.Option
 }
 type ProxyConn struct {
 	conn   net.Conn
@@ -288,7 +287,7 @@ func (obj *ProxyConn) readResponse(req *http.Request) (*http.Response, error) {
 	}
 	if response.StatusCode == 101 && response.Header.Get("Upgrade") == "websocket" {
 		obj.option.isWs = true
-		obj.option.subprotocols = response.Header["Sec-WebSocket-Protocol"]
+		obj.option.wsOption = websocket.GetHeaderOption(response.Header, false)
 	}
 	return response, err
 }
@@ -300,7 +299,7 @@ func (obj *ProxyConn) readRequest() (*http.Request, error) {
 	obj.option.init = true
 	if clientReq.Header.Get("Upgrade") == "websocket" {
 		obj.option.isWs = true
-		obj.option.compressionOptions = websocket.GetCompressionOptions(clientReq.Header)
+		obj.option.wsOption = websocket.GetHeaderOption(clientReq.Header, true)
 	}
 
 	hostName := clientReq.URL.Hostname()
@@ -495,10 +494,10 @@ func (obj *Client) WsSend(ctx context.Context, conn *websocket.Conn, msgData *Ms
 	if obj.WsSendCallBack != nil {
 		obj.WsSendCallBack(msgData)
 	}
-	return conn.WriteMsg(ctx, msgData.MsgType, msgData.Data)
+	return conn.Send(ctx, msgData.MsgType, msgData.Data)
 }
 func (obj *Client) WsRecv(ctx context.Context, conn *websocket.Conn) (*MsgData, error) {
-	msgType, msgData, err := conn.ReadMsg(ctx)
+	msgType, msgData, err := conn.Recv(ctx)
 	rs := &MsgData{
 		MsgType: msgType,
 		Data:    msgData,
@@ -547,7 +546,7 @@ func (obj *Client) wsSend(ctx context.Context, wsClient *websocket.Conn, wsServe
 	var msgType websocket.MessageType
 	var msgData []byte
 	for {
-		if msgType, msgData, err = wsClient.ReadMsg(ctx); err != nil {
+		if msgType, msgData, err = wsClient.Recv(ctx); err != nil {
 			return
 		}
 		if err = obj.WsSend(ctx, wsServer, &MsgData{MsgType: msgType, Data: msgData}); err != nil {
@@ -564,7 +563,7 @@ func (obj *Client) wsRecv(ctx context.Context, wsClient *websocket.Conn, wsServe
 		if msgData, err = obj.WsRecv(ctx, wsServer); err != nil {
 			return
 		}
-		if err = wsClient.WriteMsg(ctx, msgData.MsgType, msgData.Data); err != nil {
+		if err = wsClient.Send(ctx, msgData.MsgType, msgData.Data); err != nil {
 			return
 		}
 	}
@@ -599,9 +598,8 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 			if obj.WsSendCallBack == nil { //没有ws 回调直接返回
 				return obj.httpCopy(ctx, server, client)
 			} else { //有ws 发送回调
-				option := websocket.Option{Subprotocols: server.option.subprotocols, CompressionOptions: client.option.compressionOptions}
-				wsClient := websocket.NewConn(client, false, option)
-				wsServer := websocket.NewConn(server, true, option)
+				wsClient := websocket.NewConn(client, false, client.option.wsOption)
+				wsServer := websocket.NewConn(server, true, server.option.wsOption)
 				return obj.wsSend(ctx, wsClient, wsServer)
 			}
 		}
@@ -612,9 +610,8 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		if obj.WsRecvCallBack == nil && obj.WsSendCallBack == nil { //没有ws 回调直接返回
 			return obj.httpCopyAll(ctx, client, server)
 		}
-		option := websocket.Option{Subprotocols: server.option.subprotocols, CompressionOptions: client.option.compressionOptions}
-		wsClient := websocket.NewConn(client, false, option)
-		wsServer := websocket.NewConn(server, true, option)
+		wsClient := websocket.NewConn(client, false, client.option.wsOption)
+		wsServer := websocket.NewConn(server, true, server.option.wsOption)
 		defer wsServer.Close("close")
 		defer wsClient.Close("close")
 		go func() {

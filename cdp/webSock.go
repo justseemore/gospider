@@ -146,7 +146,7 @@ func (obj *WebSock) recvMain() (err error) {
 			return obj.ctx.Err()
 		default:
 			rd := RecvData{}
-			if err := obj.conn.ReadJson(obj.ctx, &rd); err != nil {
+			if err := obj.conn.RecvJson(obj.ctx, &rd); err != nil {
 				return err
 			}
 			if rd.Id == 0 {
@@ -235,7 +235,7 @@ func (obj *WebSock) send(ctx context.Context, cmd commend) (RecvData, error) {
 		cmd.Id = obj.id.Add(1)
 		idEvent := obj.regId(ctx, cmd.Id)
 		defer idEvent.Cnl()
-		if err := obj.conn.WriteJson(ctx, cmd); err != nil {
+		if err := obj.conn.SendJson(ctx, cmd); err != nil {
 			return RecvData{}, err
 		}
 		select {

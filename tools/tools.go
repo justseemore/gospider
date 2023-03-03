@@ -569,21 +569,17 @@ func (obj *bidclient) bidDecode(str string) (int64, error) {
 func NewBonId() BonId {
 	bidClient.lock.Lock()
 	defer bidClient.lock.Unlock()
-	curTime := time.Now().Unix()
 	var result BonId
-	result.Timestamp = curTime
-	if bidClient.curTime != curTime {
-		bidClient.curTime = curTime
-		bidClient.curNum = 0
-		result.String = bidClient.bidEncode(curTime, 5) + "!!!!" + bidClient.bidPid + NaoId(4)
-		return result
-	}
-	if bidClient.curNum >= bidClient.bidMax {
+	result.Timestamp = time.Now().Unix()
+	if bidClient.curTime != result.Timestamp {
+		bidClient.curTime = result.Timestamp
+		bidClient.curNum = -1
+	} else if bidClient.curNum >= bidClient.bidMax {
 		panic("too max num")
 	}
 	bidClient.curNum++
 	result.Count = bidClient.curNum
-	result.String = bidClient.bidEncode(curTime, 5) + bidClient.bidEncode(bidClient.curNum, 4) + bidClient.bidPid + NaoId(4)
+	result.String = bidClient.bidEncode(result.Timestamp, 5) + bidClient.bidEncode(bidClient.curNum, 4) + bidClient.bidPid + NaoId(4)
 	return result
 }
 func BonIdFromString(val string) (BonId, error) {

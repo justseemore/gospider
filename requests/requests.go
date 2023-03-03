@@ -568,9 +568,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	var r *http.Response
 	var err2 error
 	if ctxData.ws {
-		if err = websocket.SetClientHeaders(reqs.Header, &request_option.WsOption); err != nil {
-			return response, tools.WrapError(ErrFatal, err.Error())
-		}
+		websocket.SetClientHeaders(reqs.Header, request_option.WsOption)
 	}
 	r, err = obj.getClient(request_option).Do(reqs)
 	if r != nil {
@@ -585,7 +583,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			return response, err2
 		}
 		if ctxData.ws && r.StatusCode == 101 {
-			if response.webSocket, err2 = websocket.NewClientConn(r, request_option.WsOption); err2 != nil { //创建 websocket
+			if response.webSocket, err2 = websocket.NewClientConn(r); err2 != nil { //创建 websocket
 				return response, err2
 			}
 		}

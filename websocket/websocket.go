@@ -12,6 +12,7 @@ import (
 
 	_ "unsafe"
 
+	"gitee.com/baixudong/gospider/tools"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 )
@@ -41,44 +42,8 @@ func getBufioReader(r io.Reader) *bufio.Reader
 //go:linkname getBufioWriter nhooyr.io/websocket.getBufioWriter
 func getBufioWriter(w io.Writer) *bufio.Writer
 
-//go:linkname secWebSocketKey nhooyr.io/websocket.secWebSocketKey
-func secWebSocketKey(rr io.Reader) (string, error)
-
-//go:linkname secWebSocketAccept nhooyr.io/websocket.secWebSocketAccept
-func secWebSocketAccept(string) string
-
 //go:linkname selectSubprotocol nhooyr.io/websocket.selectSubprotocol
 func selectSubprotocol(r *http.Request, subprotocols []string) string
-
-//go:linkname acceptCompression nhooyr.io/websocket.acceptCompression
-func acceptCompression(r *http.Request, w http.ResponseWriter, mode websocket.CompressionMode) (*compressionOptions, error)
-
-//go:linkname verifyServerExtensions nhooyr.io/websocket.verifyServerExtensions
-func verifyServerExtensions(copts *compressionOptions, h http.Header) (*compressionOptions, error)
-
-type websocketExtension struct {
-	name   string
-	params []string
-}
-
-//go:linkname websocketExtensions nhooyr.io/websocket.websocketExtensions
-func websocketExtensions(h http.Header) []websocketExtension
-
-func GetCompressionOptions(h http.Header) *compressionOptions {
-	exts := websocketExtensions(h)
-	var copts compressionOptions
-	for _, ext := range exts {
-		for _, p := range ext.params {
-			switch p {
-			case "client_no_context_takeover":
-				copts.clientNoContextTakeover = true
-			case "server_no_context_takeover":
-				copts.serverNoContextTakeover = true
-			}
-		}
-	}
-	return &copts
-}
 
 type Conn struct {
 	rwc    io.ReadWriteCloser
@@ -107,36 +72,76 @@ const (
 	CompressionNoContextTakeover CompressionMode = websocket.CompressionNoContextTakeover
 )
 
-func optsHook(m CompressionMode) *compressionOptions {
-	return &compressionOptions{
-		clientNoContextTakeover: m == CompressionNoContextTakeover,
-		serverNoContextTakeover: m == CompressionNoContextTakeover,
-	}
+func secWebSocketAccept(secWebSocketKey string) string {
+	return tools.Base64Encode(secWebSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 }
 
-//go:linkname setHeaderHook nhooyr.io/websocket.(*compressionOptions).setHeader
-func setHeaderHook(val *compressionOptions, h http.Header)
+func secWebSocketKey() string {
+	return tools.Base64Encode(tools.NewBonId().String)
+}
 
-func SetClientHeaders(headers http.Header, option *Option) error {
-	secWebSocketKey, err := secWebSocketKey(nil)
-	if err != nil {
-		return fmt.Errorf("failed to generate Sec-WebSocket-Key: %w", err)
-	}
-	if option.CompressionMode != CompressionDisabled {
-		option.CompressionOptions = optsHook(option.CompressionMode)
+func SetClientHeaders(headers http.Header, options ...Option) {
+	var option Option
+	if len(options) > 0 {
+		option = options[0]
 	}
 	headers.Set("Connection", "Upgrade")
 	headers.Set("Upgrade", "websocket")
 	headers.Set("Sec-WebSocket-Version", "13")
-	headers.Set("Sec-WebSocket-Key", secWebSocketKey)
+	headers.Set("Sec-WebSocket-Key", secWebSocketKey())
 	if len(option.Subprotocols) > 0 {
 		headers.Set("Sec-WebSocket-Protocol", strings.Join(option.Subprotocols, ","))
 	}
 	if option.CompressionOptions != nil {
-		setHeaderHook(option.CompressionOptions, headers)
+		s := "permessage-deflate"
+		if option.CompressionOptions.clientNoContextTakeover {
+			s += "; client_no_context_takeover"
+		}
+		if option.CompressionOptions.serverNoContextTakeover {
+			s += "; server_no_context_takeover"
+		}
+		headers.Set("Sec-WebSocket-Extensions", s)
+	} else if option.CompressionMode == CompressionNoContextTakeover {
+		headers.Set("Sec-WebSocket-Extensions", "permessage-deflate; client_no_context_takeover; server_no_context_takeover")
+	} else if option.CompressionMode == CompressionContextTakeover {
+		headers.Set("Sec-WebSocket-Extensions", "permessage-deflate")
 	}
-	return nil
 }
+
+func GetHeaderOption(header http.Header, client bool) Option {
+	var copts compressionOptions
+	for _, extentsions := range header["Sec-WebSocket-Extensions"] {
+		if strings.Contains(extentsions, "client_no_context_takeover") {
+			copts.clientNoContextTakeover = true
+		} else if strings.Contains(extentsions, "server_no_context_takeover") {
+			copts.serverNoContextTakeover = true
+		}
+	}
+	var model CompressionMode
+	if copts.clientNoContextTakeover && copts.serverNoContextTakeover {
+		model = CompressionNoContextTakeover
+	} else if !copts.clientNoContextTakeover && !copts.serverNoContextTakeover {
+		model = CompressionContextTakeover
+	} else if client {
+		if copts.clientNoContextTakeover {
+			model = CompressionNoContextTakeover
+		} else {
+			model = CompressionContextTakeover
+		}
+	} else {
+		if copts.serverNoContextTakeover {
+			model = CompressionNoContextTakeover
+		} else {
+			model = CompressionContextTakeover
+		}
+	}
+	return Option{
+		Subprotocols:       header["Sec-WebSocket-Protocol"],
+		CompressionMode:    model,
+		CompressionOptions: &copts,
+	}
+}
+
 func NewConn(conn io.ReadWriteCloser, client bool, options ...Option) *Conn {
 	var option Option
 	if len(options) > 0 {
@@ -161,49 +166,37 @@ func NewConn(conn io.ReadWriteCloser, client bool, options ...Option) *Conn {
 	}
 }
 func NewClientConn(resp *http.Response, options ...Option) (*Conn, error) {
-	var option *Option
+	var option Option
 	if len(options) > 0 {
-		option = &options[0]
+		option = options[0]
 	} else {
-		option = new(Option)
-	}
-	var err error
-	if option.CompressionOptions, err = verifyServerExtensions(option.CompressionOptions, resp.Header); err != nil {
-		return nil, err
+		option = GetHeaderOption(resp.Header, true)
 	}
 	rwc, ok := resp.Body.(io.ReadWriteCloser)
 	if !ok {
 		return nil, fmt.Errorf("response body is not a io.ReadWriteCloser")
 	}
-	option.Subprotocols = resp.Header["Sec-WebSocket-Protocol"]
-	return NewConn(rwc, true, *option), nil
+	return NewConn(rwc, true, option), nil
 }
 
 func NewServerConn(w http.ResponseWriter, r *http.Request, options ...Option) (_ *Conn, err error) {
-	var option *Option
+	var option Option
 	if len(options) > 0 {
-		option = &options[0]
+		option = options[0]
 	} else {
-		option = new(Option)
+		option = GetHeaderOption(r.Header, false)
 	}
 	hj, ok := w.(http.Hijacker)
 	if !ok {
-		err = errors.New("http.ResponseWriter does not implement http.Hijacker")
 		http.Error(w, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
-		return nil, err
+		return nil, errors.New("http.ResponseWriter does not implement http.Hijacker")
 	}
 	w.Header().Set("Upgrade", "websocket")
 	w.Header().Set("Connection", "Upgrade")
-	key := r.Header.Get("Sec-WebSocket-Key")
-	w.Header().Set("Sec-WebSocket-Accept", secWebSocketAccept(key))
-
+	w.Header().Set("Sec-WebSocket-Accept", secWebSocketAccept(r.Header.Get("Sec-WebSocket-Key")))
 	subproto := selectSubprotocol(r, option.Subprotocols)
 	if subproto != "" {
 		w.Header().Set("Sec-WebSocket-Protocol", subproto)
-	}
-	option.CompressionOptions, err = acceptCompression(r, w, option.CompressionMode)
-	if err != nil {
-		return nil, err
 	}
 	w.WriteHeader(http.StatusSwitchingProtocols)
 	// See https://github.com/nhooyr/websocket/issues/166
@@ -223,16 +216,15 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, options ...Option) (_
 	brw.Reader.Reset(io.MultiReader(bytes.NewReader(b), netConn))
 	return &Conn{
 		rwc:    netConn,
-		option: *option,
+		option: option,
 		conn: newConn(connConfig{
-			subprotocol:    w.Header().Get("Sec-WebSocket-Protocol"),
+			subprotocol:    subproto,
 			rwc:            netConn,
 			client:         false,
 			copts:          option.CompressionOptions,
 			flateThreshold: option.CompressionThreshold,
-
-			br: brw.Reader,
-			bw: brw.Writer,
+			br:             brw.Reader,
+			bw:             brw.Writer,
 		}),
 	}, nil
 }
@@ -252,13 +244,13 @@ func (obj *Conn) Option() Option {
 	return obj.option
 }
 
-func (obj *Conn) ReadJson(ctx context.Context, v interface{}) error {
+func (obj *Conn) RecvJson(ctx context.Context, v interface{}) error {
 	if ctx == nil {
 		ctx = context.TODO()
 	}
 	return wsjson.Read(ctx, obj.conn, v)
 }
-func (obj *Conn) WriteJson(ctx context.Context, v interface{}) error {
+func (obj *Conn) SendJson(ctx context.Context, v interface{}) error {
 	if ctx == nil {
 		ctx = context.TODO()
 	}
@@ -271,19 +263,23 @@ func (obj *Conn) Write(p []byte) (n int, err error) {
 	return obj.rwc.Write(p)
 }
 
-func (obj *Conn) ReadMsg(ctx context.Context) (MessageType, []byte, error) {
+func (obj *Conn) Recv(ctx context.Context) (MessageType, []byte, error) {
 	if ctx == nil {
 		ctx = context.TODO()
 	}
 	return obj.conn.Read(ctx)
 }
-func (obj *Conn) WriteMsg(ctx context.Context, typ MessageType, p []byte) error {
+func (obj *Conn) Send(ctx context.Context, typ MessageType, p []byte) error {
 	if ctx == nil {
 		ctx = context.TODO()
 	}
 	return obj.conn.Write(ctx, typ, p)
 }
-func (obj *Conn) Close(reason string) error {
+func (obj *Conn) Close(reasons ...string) error {
+	var reason string
+	if len(reasons) > 0 {
+		reason = reasons[0]
+	}
 	defer obj.rwc.Close()
 	return obj.conn.Close(websocket.StatusInternalError, reason)
 }
