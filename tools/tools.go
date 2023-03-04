@@ -684,7 +684,7 @@ func CopyWitchContext(ctx context.Context, writer io.Writer, reader io.Reader) (
 	}
 	return
 }
-func ParseIp(host string) (net.IP, int) {
+func ParseHost(host string) (net.IP, int) {
 	if ip := net.ParseIP(host); ip != nil {
 		if ip4 := ip.To4(); ip4 != nil {
 			return ip4, 4
@@ -693,6 +693,16 @@ func ParseIp(host string) (net.IP, int) {
 		}
 	}
 	return nil, 0
+}
+func ParseIp(ip net.IP) int {
+	if ip != nil {
+		if ip4 := ip.To4(); ip4 != nil {
+			return 4
+		} else if ip6 := ip.To16(); ip6 != nil {
+			return 6
+		}
+	}
+	return 0
 }
 func SplitHostPort(address string) (string, int, error) {
 	host, port, err := net.SplitHostPort(address)
@@ -761,4 +771,24 @@ func GetHostName(addr string) string {
 		colonPos = len(addr)
 	}
 	return addr[:colonPos]
+}
+
+func LookupIP(host string, addrType int) (net.IP, error) {
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return nil, err
+	}
+	for _, ip := range ips {
+		if ipType := ParseIp(ip); ipType == 4 || ipType == 6 {
+			if addrType == 0 || addrType == ipType {
+				return ip, nil
+			}
+		}
+	}
+	for _, ip := range ips {
+		if ipType := ParseIp(ip); ipType == 4 || ipType == 6 {
+			return ip, nil
+		}
+	}
+	return nil, errors.New("解析host 失败")
 }

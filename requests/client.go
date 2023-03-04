@@ -14,15 +14,16 @@ import (
 type ClientOption struct {
 	GetProxy              func(ctx context.Context, url *url.URL) (string, error)
 	Proxy                 string
-	TLSHandshakeTimeout   int64  //tls 超时时间,default:15
-	ResponseHeaderTimeout int64  //第一个response headers 接收超时时间,default:30
-	DisCookie             bool   //关闭cookies管理
-	DisAlive              bool   //关闭长连接
-	DisCompression        bool   //关闭请求头中的压缩功能
-	LocalAddr             string //本地网卡出口ip
-	IdleConnTimeout       int64  //空闲连接在连接池中的超时时间,default:30
-	KeepAlive             int64  //keepalive保活检测定时,default:15
-	DnsCacheTime          int64  //dns解析缓存时间60*30
+	TLSHandshakeTimeout   int64    //tls 超时时间,default:15
+	ResponseHeaderTimeout int64    //第一个response headers 接收超时时间,default:30
+	DisCookie             bool     //关闭cookies管理
+	DisAlive              bool     //关闭长连接
+	DisCompression        bool     //关闭请求头中的压缩功能
+	LocalAddr             string   //本地网卡出口ip
+	IdleConnTimeout       int64    //空闲连接在连接池中的超时时间,default:30
+	KeepAlive             int64    //keepalive保活检测定时,default:15
+	DnsCacheTime          int64    //dns解析缓存时间60*30
+	AddrType              AddrType //优先使用的addr 类型
 }
 type Client struct {
 	RedirectNum   int                        //重定向次数
@@ -86,6 +87,7 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		Proxy:               session_option.Proxy,
 		KeepAlive:           session_option.KeepAlive,
 		LocalAddr:           session_option.LocalAddr,
+		AddrType:            session_option.AddrType,
 	})
 	if err != nil {
 		cnl()

@@ -24,19 +24,28 @@ type DialClient struct {
 	dnsIpData  map[string]msgClient
 	lock       sync.RWMutex
 	dnsTimeout int64
+	addrType   AddrType //使用ipv4,ipv6 ,或自动选项
 }
 type msgClient struct {
 	time int64
 	host string
 }
+type AddrType int
+
+const (
+	Auto AddrType = 0
+	Ipv4 AddrType = 4
+	Ipv6 AddrType = 6
+)
 
 type DialOption struct {
 	TLSHandshakeTimeout int64
 	DnsCacheTime        int64
 	KeepAlive           int64
 	GetProxy            func(ctx context.Context, url *url.URL) (string, error)
-	Proxy               string
-	LocalAddr           string
+	Proxy               string   //代理
+	LocalAddr           string   //使用本地网卡
+	AddrType            AddrType //优先使用的地址类型,ipv4,ipv6 ,或自动选项
 }
 
 func NewDail(option DialOption) (*DialClient, error) {
@@ -55,6 +64,7 @@ func NewDail(option DialOption) (*DialClient, error) {
 		dialer:     &net.Dialer{Timeout: time.Second * time.Duration(option.TLSHandshakeTimeout)},
 		dnsTimeout: option.DnsCacheTime,
 		getProxy:   option.GetProxy,
+		addrType:   option.AddrType,
 	}
 	if option.Proxy != "" {
 		if dialCli.proxy, err = verifyProxy(option.Proxy); err != nil {
@@ -112,17 +122,17 @@ func (obj *DialClient) AddrToIp(addr string) string {
 	if err != nil {
 		return addr
 	}
-	_, ipInt := tools.ParseIp(host)
+	_, ipInt := tools.ParseHost(host)
 	if ipInt == 4 || ipInt == 6 {
 		return addr
 	}
 	host, ok := obj.loadHost(host)
 	if !ok {
-		names, err := net.LookupIP(host)
-		if err != nil || len(names) == 0 {
+		ip, err := tools.LookupIP(host, int(obj.addrType))
+		if err != nil {
 			return addr
 		}
-		host = names[0].String()
+		host = ip.String()
 		obj.setIpData(addr, msgClient{time: time.Now().Unix(), host: host})
 	}
 	return net.JoinHostPort(host, port)
@@ -185,7 +195,7 @@ func (obj *DialClient) clientVerifySocks5(proxyUrl *url.URL, addr string, conn n
 		return
 	}
 	writeCon := []byte{5, 1, 0}
-	ip, ipInt := tools.ParseIp(host)
+	ip, ipInt := tools.ParseHost(host)
 	switch ipInt {
 	case 4:
 		writeCon = append(writeCon, 1)

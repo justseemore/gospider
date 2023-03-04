@@ -63,10 +63,10 @@ func main() {
 	}
 	defer response.Close()
 	wsCli := response.WebSocket()
-	if err = wsCli.WriteMsg(context.TODO(), websocket.MessageText, []byte("测试")); err != nil { //发送txt 消息
+	if err = wsCli.Send(context.TODO(), websocket.MessageText, []byte("测试")); err != nil { //发送txt 消息
 		log.Panic(err)
 	}
-	msgType, con, err := wsCli.ReadMsg(context.TODO()) //接收消息
+	msgType, con, err := wsCli.Recv(context.TODO()) //接收消息
 	if err != nil {
 		log.Panic(err)
 	}
@@ -74,3 +74,22 @@ func main() {
 	log.Print(string(con)) //消息内容
 }
 ```
+# ipv4,ipv6 地址控制解析
+```go
+func main() {
+	reqCli, err := requests.NewClient(nil, requests.ClientOption{
+		AddrType: requests.Ipv4, //优先解析ipv4地址
+		// AddrType: requests.Ipv6,//优先解析ipv6地址
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	href := "https://test.ipw.cn"
+	resp, err := reqCli.Request(nil, "get", href)
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Print(resp.Text())
+	log.Print(resp.StatusCode())
+}
+``` 
