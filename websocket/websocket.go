@@ -58,6 +58,24 @@ type Option struct {
 	CompressionOptions   *compressionOptions
 }
 
+func (obj *Option) Extensions() string {
+	if obj.CompressionMode == CompressionDisabled {
+		return ""
+	}
+	extensions := "permessage-deflate"
+	if obj.CompressionOptions != nil {
+		if obj.CompressionOptions.clientNoContextTakeover {
+			extensions += "; client_no_context_takeover"
+		}
+		if obj.CompressionOptions.serverNoContextTakeover {
+			extensions += "; server_no_context_takeover"
+		}
+	} else if obj.CompressionMode == CompressionNoContextTakeover {
+		extensions += "; client_no_context_takeover; server_no_context_takeover"
+	}
+	return extensions
+}
+
 type MessageType = websocket.MessageType
 type CompressionMode = websocket.CompressionMode
 
@@ -103,7 +121,7 @@ func SetClientHeaders(headers http.Header, options ...Option) {
 		headers.Set("Sec-WebSocket-Protocol", strings.Join(option.Subprotocols, ","))
 	}
 
-	if headers.Get("Sec-WebSocket-Extensions") == "" {
+	if headers.Get("Sec-WebSocket-Extensions") == "" && option.CompressionMode != CompressionDisabled {
 		extensions := "permessage-deflate"
 		if option.CompressionOptions != nil {
 			if option.CompressionOptions.clientNoContextTakeover {
@@ -120,19 +138,22 @@ func SetClientHeaders(headers http.Header, options ...Option) {
 }
 
 func GetHeaderOption(header http.Header, client bool) Option {
-	var copts compressionOptions
+	var copts *compressionOptions
 	for _, extentsions := range header["Sec-WebSocket-Extensions"] {
-		if strings.Contains(extentsions, "client_no_context_takeover") {
-			copts.clientNoContextTakeover = true
-		} else if strings.Contains(extentsions, "server_no_context_takeover") {
-			copts.serverNoContextTakeover = true
+		if strings.Contains(extentsions, "permessage-deflate") {
+			if copts == nil {
+				copts = new(compressionOptions)
+			}
+			if strings.Contains(extentsions, "client_no_context_takeover") {
+				copts.clientNoContextTakeover = true
+			} else if strings.Contains(extentsions, "server_no_context_takeover") {
+				copts.serverNoContextTakeover = true
+			}
 		}
 	}
 	var model CompressionMode
-	if copts.clientNoContextTakeover && copts.serverNoContextTakeover {
-		model = CompressionNoContextTakeover
-	} else if !copts.clientNoContextTakeover && !copts.serverNoContextTakeover {
-		model = CompressionContextTakeover
+	if copts == nil {
+		model = CompressionDisabled
 	} else if client {
 		if copts.clientNoContextTakeover {
 			model = CompressionNoContextTakeover
@@ -149,7 +170,7 @@ func GetHeaderOption(header http.Header, client bool) Option {
 	return Option{
 		Subprotocols:       header["Sec-WebSocket-Protocol"],
 		CompressionMode:    model,
-		CompressionOptions: &copts,
+		CompressionOptions: copts,
 	}
 }
 
@@ -205,6 +226,9 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, options ...Option) (_
 	w.Header().Set("Upgrade", "websocket")
 	w.Header().Set("Connection", "Upgrade")
 	w.Header().Set("Sec-WebSocket-Accept", secWebSocketAccept(r.Header.Get("Sec-WebSocket-Key")))
+	if extensions := option.Extensions(); extensions != "" {
+		w.Header().Set("Sec-WebSocket-Extensions", extensions)
+	}
 	subproto := selectSubprotocol(r, option.Subprotocols)
 	if subproto != "" {
 		w.Header().Set("Sec-WebSocket-Protocol", subproto)
