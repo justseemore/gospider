@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -75,9 +76,10 @@ const (
 func secWebSocketAccept(secWebSocketKey string) string {
 	return tools.Base64Encode(secWebSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 }
-
 func secWebSocketKey() string {
-	return tools.Base64Encode(tools.NewBonId().String)
+	b := make([]byte, 16)
+	io.ReadFull(rand.Reader, b)
+	return tools.Base64Encode(b)
 }
 
 func SetClientHeaders(headers http.Header, options ...Option) {
@@ -85,26 +87,35 @@ func SetClientHeaders(headers http.Header, options ...Option) {
 	if len(options) > 0 {
 		option = options[0]
 	}
-	headers.Set("Connection", "Upgrade")
-	headers.Set("Upgrade", "websocket")
-	headers.Set("Sec-WebSocket-Version", "13")
-	headers.Set("Sec-WebSocket-Key", secWebSocketKey())
-	if len(option.Subprotocols) > 0 {
+	if headers.Get("Connection") == "" {
+		headers.Set("Connection", "Upgrade")
+	}
+	if headers.Get("Upgrade") == "" {
+		headers.Set("Upgrade", "websocket")
+	}
+	if headers.Get("Sec-WebSocket-Version") == "" {
+		headers.Set("Sec-WebSocket-Version", "13")
+	}
+	if headers.Get("Sec-WebSocket-Key") == "" {
+		headers.Set("Sec-WebSocket-Key", secWebSocketKey())
+	}
+	if headers.Get("Sec-WebSocket-Protocol") == "" && len(option.Subprotocols) > 0 {
 		headers.Set("Sec-WebSocket-Protocol", strings.Join(option.Subprotocols, ","))
 	}
-	if option.CompressionOptions != nil {
-		s := "permessage-deflate"
-		if option.CompressionOptions.clientNoContextTakeover {
-			s += "; client_no_context_takeover"
+
+	if headers.Get("Sec-WebSocket-Extensions") == "" {
+		extensions := "permessage-deflate"
+		if option.CompressionOptions != nil {
+			if option.CompressionOptions.clientNoContextTakeover {
+				extensions += "; client_no_context_takeover"
+			}
+			if option.CompressionOptions.serverNoContextTakeover {
+				extensions += "; server_no_context_takeover"
+			}
+		} else if option.CompressionMode == CompressionNoContextTakeover {
+			extensions += "; client_no_context_takeover; server_no_context_takeover"
 		}
-		if option.CompressionOptions.serverNoContextTakeover {
-			s += "; server_no_context_takeover"
-		}
-		headers.Set("Sec-WebSocket-Extensions", s)
-	} else if option.CompressionMode == CompressionNoContextTakeover {
-		headers.Set("Sec-WebSocket-Extensions", "permessage-deflate; client_no_context_takeover; server_no_context_takeover")
-	} else if option.CompressionMode == CompressionContextTakeover {
-		headers.Set("Sec-WebSocket-Extensions", "permessage-deflate")
+		headers.Set("Sec-WebSocket-Extensions", extensions)
 	}
 }
 
