@@ -33,15 +33,18 @@ var CrtFile []byte
 var KeyFile []byte
 
 type ClientOption struct {
-	Ja3     bool              //是否开启ja3
-	Ja3Id   ja3.ClientHelloId //指定ja3id
-	Usr     string            //用户名
-	Pwd     string            //密码
-	IpWhite []net.IP          //白名单 192.168.1.1,192.168.1.2
-	Port    int               //代理端口
-	Host    string            //代理host
-	CrtFile []byte            //公钥,根证书
-	KeyFile []byte            //私钥
+	Ja3        bool              //是否开启ja3
+	Ja3Id      ja3.ClientHelloId //指定ja3id
+	ProxyJa3   bool              //proxy是否开启ja3
+	ProxyJa3Id ja3.ClientHelloId //proxy指定ja3id
+
+	Usr     string   //用户名
+	Pwd     string   //密码
+	IpWhite []net.IP //白名单 192.168.1.1,192.168.1.2
+	Port    int      //代理端口
+	Host    string   //代理host
+	CrtFile []byte   //公钥,根证书
+	KeyFile []byte   //私钥
 
 	TLSHandshakeTimeout int64
 	DnsCacheTime        int64
@@ -98,7 +101,6 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		server.usr = option.Usr
 		server.pwd = option.Pwd
 	}
-
 	if option.Ja3 {
 		server.ja3 = true
 		if option.Ja3Id.IsSet() {
@@ -124,6 +126,8 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		Proxy:               option.Proxy,
 		KeepAlive:           option.KeepAlive,
 		LocalAddr:           option.LocalAddr,
+		Ja3:                 option.ProxyJa3,
+		Ja3Id:               option.ProxyJa3Id,
 	}); err != nil {
 		return nil, err
 	}
@@ -371,6 +375,7 @@ func (obj *Client) httpsHandle(ctx context.Context, client *ProxyConn) error {
 	tlsClient := tls.Server(client, &tls.Config{
 		InsecureSkipVerify: true,
 		Certificates:       []tls.Certificate{obj.cert},
+		NextProtos:         []string{"http/1.1"},
 	})
 	defer tlsClient.Close()
 	return obj.httpHandle(ctx, NewProxyCon(tlsClient, bufio.NewReader(tlsClient), client.option))

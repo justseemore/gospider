@@ -14,6 +14,7 @@ import (
 	_ "unsafe"
 
 	"gitee.com/baixudong/gospider/tools"
+	"golang.org/x/exp/slices"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 )
@@ -43,8 +44,17 @@ func getBufioReader(r io.Reader) *bufio.Reader
 //go:linkname getBufioWriter nhooyr.io/websocket.getBufioWriter
 func getBufioWriter(w io.Writer) *bufio.Writer
 
-//go:linkname selectSubprotocol nhooyr.io/websocket.selectSubprotocol
-func selectSubprotocol(r *http.Request, subprotocols []string) string
+func selectSubprotocol(r *http.Request, subprotocols []string) string {
+	for _, protocols := range r.Header["Sec-WebSocket-Protocol"] {
+		for _, protocol := range strings.Split(protocols, ",") {
+			protocol = strings.TrimSpace(protocol)
+			if len(subprotocols) == 0 || slices.Index(subprotocols, protocol) != -1 {
+				return protocol
+			}
+		}
+	}
+	return ""
+}
 
 type Conn struct {
 	rwc    io.ReadWriteCloser
@@ -58,6 +68,33 @@ type Option struct {
 	CompressionOptions   *compressionOptions
 }
 
+func (obj *Option) Init(client bool) {
+	if obj.CompressionOptions != nil {
+		if client {
+			if obj.CompressionOptions.clientNoContextTakeover {
+				obj.CompressionMode = CompressionNoContextTakeover
+			} else {
+				obj.CompressionMode = CompressionContextTakeover
+			}
+		} else {
+			if obj.CompressionOptions.serverNoContextTakeover {
+				obj.CompressionMode = CompressionNoContextTakeover
+			} else {
+				obj.CompressionMode = CompressionContextTakeover
+			}
+		}
+	} else if obj.CompressionMode == CompressionContextTakeover {
+		obj.CompressionOptions = &compressionOptions{
+			clientNoContextTakeover: false,
+			serverNoContextTakeover: false,
+		}
+	} else if obj.CompressionMode == CompressionNoContextTakeover {
+		obj.CompressionOptions = &compressionOptions{
+			clientNoContextTakeover: true,
+			serverNoContextTakeover: true,
+		}
+	}
+}
 func (obj *Option) Extensions() string {
 	if obj.CompressionMode == CompressionDisabled {
 		return ""
@@ -104,6 +141,8 @@ func SetClientHeaders(headers http.Header, options ...Option) {
 	var option Option
 	if len(options) > 0 {
 		option = options[0]
+	} else {
+		option.Init(true)
 	}
 	if headers.Get("Connection") == "" {
 		headers.Set("Connection", "Upgrade")
@@ -201,6 +240,7 @@ func NewClientConn(resp *http.Response, options ...Option) (*Conn, error) {
 	var option Option
 	if len(options) > 0 {
 		option = options[0]
+		option.Init(true)
 	} else {
 		option = GetHeaderOption(resp.Header, true)
 	}
@@ -215,6 +255,7 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, options ...Option) (_
 	var option Option
 	if len(options) > 0 {
 		option = options[0]
+		option.Init(false)
 	} else {
 		option = GetHeaderOption(r.Header, false)
 	}

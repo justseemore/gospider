@@ -25,6 +25,8 @@ type DialClient struct {
 	lock       sync.RWMutex
 	dnsTimeout int64
 	addrType   AddrType //使用ipv4,ipv6 ,或自动选项
+	ja3        bool     //是否启用ja3
+	ja3Id      ja3.ClientHelloId
 }
 type msgClient struct {
 	time int64
@@ -46,6 +48,8 @@ type DialOption struct {
 	Proxy               string   //代理
 	LocalAddr           string   //使用本地网卡
 	AddrType            AddrType //优先使用的地址类型,ipv4,ipv6 ,或自动选项
+	Ja3                 bool     //是否启用ja3
+	Ja3Id               ja3.ClientHelloId
 }
 
 func NewDail(option DialOption) (*DialClient, error) {
@@ -58,6 +62,13 @@ func NewDail(option DialOption) (*DialClient, error) {
 	if option.DnsCacheTime == 0 {
 		option.DnsCacheTime = 60 * 30
 	}
+	if option.Ja3 {
+		if option.Ja3Id.IsSet() {
+			option.Ja3Id = ja3.HelloChrome_Auto
+		}
+	} else if !option.Ja3Id.IsSet() {
+		option.Ja3 = true
+	}
 	var err error
 	dialCli := &DialClient{
 		dnsIpData:  make(map[string]msgClient),
@@ -65,6 +76,8 @@ func NewDail(option DialOption) (*DialClient, error) {
 		dnsTimeout: option.DnsCacheTime,
 		getProxy:   option.GetProxy,
 		addrType:   option.AddrType,
+		ja3:        option.Ja3,
+		ja3Id:      option.Ja3Id,
 	}
 	if option.Proxy != "" {
 		if dialCli.proxy, err = verifyProxy(option.Proxy); err != nil {
@@ -264,7 +277,13 @@ func (obj *DialClient) DialContext(ctx context.Context, netword string, addr str
 }
 func (obj *DialClient) DialTlsProxyContext(ctx context.Context, netword string, addr string, host string) (net.Conn, error) {
 	conn, err := obj.DialContext(ctx, netword, addr)
-	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"h2", "http/1.1"}}), err
+	if err != nil {
+		return conn, err
+	}
+	if obj.ja3 {
+		return ja3.Client(ctx, conn, obj.ja3Id, true, tools.GetHostName(addr))
+	}
+	return tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"http/1.1"}}), err
 }
 
 func (obj *DialClient) newPwdConn(conn net.Conn, proxyUrl *url.URL) net.Conn {
