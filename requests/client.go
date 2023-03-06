@@ -23,7 +23,9 @@ type ClientOption struct {
 	IdleConnTimeout       int64    //空闲连接在连接池中的超时时间,default:30
 	KeepAlive             int64    //keepalive保活检测定时,default:15
 	DnsCacheTime          int64    //dns解析缓存时间60*30
+	DisDnsCache           bool     //是否关闭dns 缓存
 	AddrType              AddrType //优先使用的addr 类型
+	Dns                   string   //dns
 }
 type Client struct {
 	RedirectNum   int                        //重定向次数
@@ -88,6 +90,8 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		KeepAlive:           session_option.KeepAlive,
 		LocalAddr:           session_option.LocalAddr,
 		AddrType:            session_option.AddrType,
+		DisDnsCache:         session_option.DisDnsCache,
+		Dns:                 session_option.Dns,
 	})
 	if err != nil {
 		cnl()

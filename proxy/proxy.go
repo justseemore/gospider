@@ -33,10 +33,11 @@ var CrtFile []byte
 var KeyFile []byte
 
 type ClientOption struct {
-	Ja3        bool              //是否开启ja3
-	Ja3Id      ja3.ClientHelloId //指定ja3id
-	ProxyJa3   bool              //proxy是否开启ja3
-	ProxyJa3Id ja3.ClientHelloId //proxy指定ja3id
+	Ja3         bool              //是否开启ja3
+	Ja3Id       ja3.ClientHelloId //指定ja3id
+	ProxyJa3    bool              //proxy是否开启ja3
+	ProxyJa3Id  ja3.ClientHelloId //proxy指定ja3id
+	DisDnsCache bool              //是否关闭dns 缓存
 
 	Usr     string   //用户名
 	Pwd     string   //密码
@@ -53,6 +54,7 @@ type ClientOption struct {
 	KeepAlive           int64
 	LocalAddr           string //本地网卡出口
 	Vpn                 bool   //是否是vpn
+	Dns                 string //dns
 }
 
 //go:linkname readRequest net/http.readRequest
@@ -128,6 +130,8 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		LocalAddr:           option.LocalAddr,
 		Ja3:                 option.ProxyJa3,
 		Ja3Id:               option.ProxyJa3Id,
+		DisDnsCache:         option.DisDnsCache,
+		Dns:                 option.Dns,
 	}); err != nil {
 		return nil, err
 	}
@@ -209,7 +213,15 @@ func (obj *Client) getHttpProxyConn(ctx context.Context, ipUrl *url.URL) (net.Co
 	return obj.dialer.DialContext(ctx, "tcp", net.JoinHostPort(ipUrl.Hostname(), ipUrl.Port()))
 }
 
-func (obj *Client) mainHandle(ctx context.Context, client net.Conn) error {
+func (obj *Client) mainHandle(ctx context.Context, client net.Conn) (err error) {
+	if obj.Debug {
+		defer func() {
+			if err != nil {
+				log.Print("proxy debugger:\n", err)
+			}
+		}()
+	}
+
 	if client == nil {
 		return errors.New("client is nil")
 	}
@@ -217,7 +229,6 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) error {
 	if obj.basic == "" && !obj.whiteVerify(client) {
 		return errors.New("auth verify false")
 	}
-	var err error
 	clientReader := bufio.NewReader(client)
 	firstCons, err := clientReader.Peek(1)
 	if err != nil {
@@ -375,7 +386,7 @@ func (obj *Client) httpsHandle(ctx context.Context, client *ProxyConn) error {
 	tlsClient := tls.Server(client, &tls.Config{
 		InsecureSkipVerify: true,
 		Certificates:       []tls.Certificate{obj.cert},
-		NextProtos:         []string{"http/1.1"},
+		NextProtos:         []string{"h2", "http/1.1"},
 	})
 	defer tlsClient.Close()
 	return obj.httpHandle(ctx, NewProxyCon(tlsClient, bufio.NewReader(tlsClient), client.option))
@@ -383,7 +394,6 @@ func (obj *Client) httpsHandle(ctx context.Context, client *ProxyConn) error {
 func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	defer client.Close()
 	var err error
-
 	clientReq, err := obj.ReadRequest(client)
 	if err != nil {
 		return err
@@ -399,6 +409,7 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	network := "tcp"
 	host := clientReq.Host
 	addr := net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())
+	log.Print(addr, proxyUrl)
 	if server, err = obj.dialer.DialContextForProxy(ctx, network, client.option.schema, addr, host, proxyUrl); err != nil {
 		return err
 	}

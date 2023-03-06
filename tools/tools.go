@@ -772,23 +772,3 @@ func GetHostName(addr string) string {
 	}
 	return addr[:colonPos]
 }
-
-func LookupIP(host string, addrType int) (net.IP, error) {
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return nil, err
-	}
-	for _, ip := range ips {
-		if ipType := ParseIp(ip); ipType == 4 || ipType == 6 {
-			if addrType == 0 || addrType == ipType {
-				return ip, nil
-			}
-		}
-	}
-	for _, ip := range ips {
-		if ipType := ParseIp(ip); ipType == 4 || ipType == 6 {
-			return ip, nil
-		}
-	}
-	return nil, errors.New("解析host 失败")
-}
