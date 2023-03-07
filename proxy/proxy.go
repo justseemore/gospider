@@ -404,25 +404,25 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	if err != nil {
 		return err
 	}
-	var server net.Conn
+	var proxyServer net.Conn
 	network := "tcp"
 	host := clientReq.Host
 	addr := net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())
-	if server, err = obj.dialer.DialContextForProxy(ctx, network, client.option.schema, addr, host, proxyUrl); err != nil {
+	if proxyServer, err = obj.dialer.DialContextForProxy(ctx, network, client.option.schema, addr, host, proxyUrl); err != nil {
 		return err
 	}
+	server := NewProxyCon(proxyServer, bufio.NewReader(proxyServer), client.option)
 	defer server.Close()
-	proxyServer := NewProxyCon(server, bufio.NewReader(server), client.option)
 	if clientReq.Method == http.MethodConnect {
 		if _, err = client.Write([]byte(fmt.Sprintf("%s 200 Connection established\r\n\r\n", clientReq.Proto))); err != nil {
 			return err
 		}
 	} else {
-		if err = proxyServer.WriteRequest(clientReq); err != nil {
+		if err = server.WriteRequest(clientReq); err != nil {
 			return err
 		}
 		if obj.ResponseCallBack != nil {
-			response, err := obj.ReadResponse(proxyServer, clientReq)
+			response, err := obj.ReadResponse(server, clientReq)
 			if err != nil {
 				return err
 			}
@@ -431,7 +431,7 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 			}
 		}
 	}
-	return obj.copyMain(ctx, client, proxyServer)
+	return obj.copyMain(ctx, client, server)
 }
 func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
 	defer client.Close()
@@ -464,12 +464,13 @@ func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
 		client.option.schema = "https"
 	}
 	netword := "tcp"
-	server, err := obj.dialer.DialContextForProxy(ctx, netword, client.option.schema, addr, host, proxyUrl)
+	proxyServer, err := obj.dialer.DialContextForProxy(ctx, netword, client.option.schema, addr, host, proxyUrl)
 	if err != nil {
 		return err
 	}
+	server := NewProxyCon(proxyServer, bufio.NewReader(proxyServer), client.option)
 	defer server.Close()
-	return obj.copyMain(ctx, client, NewProxyCon(server, bufio.NewReader(server), client.option))
+	return obj.copyMain(ctx, client, server)
 }
 
 func (obj *Client) copyMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
@@ -581,22 +582,18 @@ func (obj *Client) wsRecv(ctx context.Context, wsClient *websocket.Conn, wsServe
 		}
 	}
 }
-func (obj *Client) httpCopy(ctx context.Context, writer *ProxyConn, reader *ProxyConn) (err error) {
-	defer reader.Close()
-	defer writer.Close()
-	_, err = io.Copy(writer, reader)
+func (obj *Client) httpCopy(ctx context.Context, client io.WriteCloser, server io.ReadCloser) (err error) {
+	defer client.Close()
+	defer server.Close()
+	_, err = io.Copy(client, server)
 	return err
 }
 
-func (obj *Client) httpCopyAll(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
-	defer client.Close()
-	defer server.Close()
+func (obj *Client) httpCopyAll(ctx context.Context, client io.ReadWriteCloser, server io.ReadWriteCloser) (err error) {
 	go obj.httpCopy(ctx, client, server)
 	return obj.httpCopy(ctx, server, client)
 }
 func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
-	defer server.Close()
-	defer client.Close()
 	if client.option.http2 || server.option.http2 {
 		return obj.httpCopyAll(ctx, client, server)
 	}
@@ -632,7 +629,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 				err = obj.httpCopy(ctx, client, server)
 				return
 			}
-			obj.wsRecv(ctx, wsClient, wsServer)
+			err = obj.wsRecv(ctx, wsClient, wsServer)
 			return
 		}()
 		if obj.WsSendCallBack == nil {
@@ -646,8 +643,6 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 	if obj.RequestCallBack == nil && obj.ResponseCallBack == nil && obj.WsSendCallBack == nil && obj.WsRecvCallBack == nil && !obj.ja3 {
 		return obj.copyHttpMain(ctx, client, server)
 	}
-	defer server.Close()
-	defer client.Close()
 	return obj.copyTlsHttpsMain(ctx, client, server)
 }
 func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, http2 bool) (tlsConn *tls.Conn, err error) {
@@ -679,8 +674,6 @@ func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws
 	}
 }
 func (obj *Client) copyTlsHttpsMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
-	defer server.Close()
-	defer client.Close()
 	tlsServer, http2, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
 	if err != nil {
 		return err
