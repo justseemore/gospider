@@ -765,10 +765,13 @@ func GetCertFile(addr string) (*bytes.Buffer, *bytes.Buffer, error) {
 		return certOut, keyOut, err
 	}
 }
-func GetHostName(addr string) string {
+func GetServerName(addr string) string {
 	colonPos := strings.LastIndex(addr, ":")
 	if colonPos == -1 {
 		colonPos = len(addr)
 	}
-	return addr[:colonPos]
+	if _, ipType := ParseHost(addr[:colonPos]); ipType == 0 {
+		return addr[:colonPos]
+	}
+	return ""
 }

@@ -409,7 +409,6 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	network := "tcp"
 	host := clientReq.Host
 	addr := net.JoinHostPort(clientReq.URL.Hostname(), clientReq.URL.Port())
-	log.Print(addr, proxyUrl)
 	if server, err = obj.dialer.DialContextForProxy(ctx, network, client.option.schema, addr, host, proxyUrl); err != nil {
 		return err
 	}
@@ -454,7 +453,6 @@ func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
 	//获取代理
 	proxyUrl, err := obj.dialer.GetProxy(ctx, nil)
 	if err != nil {
-		log.Print(err)
 		return err
 	}
 	//获取schema
@@ -673,7 +671,7 @@ func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws
 			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
 		}
 	} else {
-		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"h2", "http/1.1"}})
+		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}})
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
 			return tlsConn, false, err
 		} else {

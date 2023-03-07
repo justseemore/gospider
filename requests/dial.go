@@ -336,9 +336,9 @@ func (obj *DialClient) DialTlsProxyContext(ctx context.Context, netword string, 
 		return conn, err
 	}
 	if obj.ja3 {
-		return ja3.Client(ctx, conn, obj.ja3Id, true, tools.GetHostName(addr))
+		return ja3.Client(ctx, conn, obj.ja3Id, false, tools.GetServerName(addr))
 	}
-	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"h2", "http/1.1"}})
+	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}})
 	return tlsConn, tlsConn.HandshakeContext(ctx)
 }
 
@@ -520,7 +520,7 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 		return nil, tools.WrapError(ErrFatal, "not found reqData.url")
 	}
 	if reqData.host == "" {
-		reqData.host = tools.GetHostName(addr)
+		reqData.host = tools.GetServerName(addr)
 	}
 	var nowProxy *url.URL
 	if reqData.disProxy { //关闭代理直接返回
@@ -528,6 +528,9 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 	} else if reqData.proxy != nil { //单独代理设置优先级最高
 		nowProxy = cloneUrl(reqData.proxy)
 		if reqData.isCallback { //走官方代理
+			if nowProxy.Scheme == "https" {
+				reqData.host = tools.GetServerName(nowProxy.Hostname())
+			}
 			if reqData.proxyUser != nil { //需要隐藏用户密码
 				nowProxy.User = reqData.proxyUser
 				if nowProxy.Scheme == "http" && reqData.url.Scheme == "http" { //这种情况添加用户密码

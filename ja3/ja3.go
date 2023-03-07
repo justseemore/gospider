@@ -69,7 +69,7 @@ func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, ws bool, ad
 		}
 	}()
 	if ws {
-		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"http/1.1"}}, utls.HelloCustom)
+		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"http/1.1"}}, utls.HelloCustom)
 		var spec utls.ClientHelloSpec
 		if spec, err = utls.UTLSIdToSpec(ja3Id); err != nil {
 			return
@@ -87,7 +87,7 @@ func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, ws bool, ad
 			return
 		}
 	} else {
-		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetHostName(addr), NextProtos: []string{"h2", "http/1.1"}}, ja3Id)
+		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}}, ja3Id)
 	}
 	err = utlsConn.HandshakeContext(ctx)
 	return
