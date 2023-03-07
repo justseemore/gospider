@@ -386,7 +386,6 @@ func (obj *Client) httpsHandle(ctx context.Context, client *ProxyConn) error {
 	tlsClient := tls.Server(client, &tls.Config{
 		InsecureSkipVerify: true,
 		Certificates:       []tls.Certificate{obj.cert},
-		NextProtos:         []string{"h2", "http/1.1"},
 	})
 	defer tlsClient.Close()
 	return obj.httpHandle(ctx, NewProxyCon(tlsClient, bufio.NewReader(tlsClient), client.option))
