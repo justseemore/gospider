@@ -12,20 +12,20 @@ import (
 )
 
 type ClientOption struct {
-	GetProxy              func(ctx context.Context, url *url.URL) (string, error)
-	Proxy                 string
-	TLSHandshakeTimeout   int64    //tls 超时时间,default:15
-	ResponseHeaderTimeout int64    //第一个response headers 接收超时时间,default:30
-	DisCookie             bool     //关闭cookies管理
-	DisAlive              bool     //关闭长连接
-	DisCompression        bool     //关闭请求头中的压缩功能
-	LocalAddr             string   //本地网卡出口ip
-	IdleConnTimeout       int64    //空闲连接在连接池中的超时时间,default:30
-	KeepAlive             int64    //keepalive保活检测定时,default:15
-	DnsCacheTime          int64    //dns解析缓存时间60*30
-	DisDnsCache           bool     //是否关闭dns 缓存
-	AddrType              AddrType //优先使用的addr 类型
-	Dns                   string   //dns
+	GetProxy              func(ctx context.Context, url *url.URL) (string, error) //根据url 返回代理，支持https,http,socks5 代理协议
+	Proxy                 string                                                  //设置代理,支持https,http,socks5 代理协议
+	TLSHandshakeTimeout   int64                                                   //tls 超时时间,default:15
+	ResponseHeaderTimeout int64                                                   //第一个response headers 接收超时时间,default:30
+	DisCookie             bool                                                    //关闭cookies管理
+	DisAlive              bool                                                    //关闭长连接
+	DisCompression        bool                                                    //关闭请求头中的压缩功能
+	LocalAddr             string                                                  //本地网卡出口ip
+	IdleConnTimeout       int64                                                   //空闲连接在连接池中的超时时间,default:30
+	KeepAlive             int64                                                   //keepalive保活检测定时,default:15
+	DnsCacheTime          int64                                                   //dns解析缓存时间60*30
+	DisDnsCache           bool                                                    //是否关闭dns 缓存,影响dns 解析
+	AddrType              AddrType                                                //优先使用的addr 类型
+	Dns                   string                                                  //dns
 }
 type Client struct {
 	RedirectNum   int                        //重定向次数
@@ -40,23 +40,20 @@ type Client struct {
 	Http2         bool                       //开启http2 transport
 	Ja3           bool                       //开启ja3
 	Ja3Id         ja3.ClientHelloId          //客户端helloID
+	Headers       any                        //请求头
+	Bar           bool                       //是否开启bar
 
-	Headers any  //请求头
-	Bar     bool //是否开启bar
-
-	disCookie bool //关闭cookies管理
-	disAlive  bool //关闭长连接
-
-	client        *http.Client
-	baseTransport *http.Transport
-
+	disCookie      bool
+	disAlive       bool
+	client         *http.Client
+	baseTransport  *http.Transport
 	client2        *http.Client
 	baseTransport2 *http2.Transport
-
-	ctx context.Context
-	cnl context.CancelFunc
+	ctx            context.Context
+	cnl            context.CancelFunc
 }
 
+// 新建一个请求客户端,发送请求必须创建哈
 func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client, error) {
 	if preCtx == nil {
 		preCtx = context.TODO()
@@ -153,12 +150,16 @@ func (obj *Client) clone(request_option RequestOption) *http.Client {
 	}
 	return cli
 }
+
+// 克隆请求客户端,返回一个由相同option 构造的客户端，但是不会克隆:连接池,ookies
 func (obj *Client) Clone() *Client {
 	result := *obj
 	result.client.Transport = result.baseTransport.Clone()
 	result.client2.Transport = cloneTransport(result.baseTransport2)
 	return &result
 }
+
+// 重置客户端至初始状态
 func (obj *Client) Reset() error {
 	if obj.client.Jar != nil {
 		jar, err := cookiejar.New(&cookiejar.Options{
@@ -173,13 +174,19 @@ func (obj *Client) Reset() error {
 	obj.client.Transport = obj.baseTransport.Clone()
 	return nil
 }
+
+// 关闭客户端
 func (obj *Client) Close() {
 	obj.CloseIdleConnections()
 	obj.cnl()
 }
+
+// 关闭客户端中的空闲连接
 func (obj *Client) CloseIdleConnections() {
 	obj.client.CloseIdleConnections()
 }
+
+// 返回url 的cookies,也可以设置url 的cookies
 func (obj *Client) Cookies(href string, cookies ...*http.Cookie) Cookies {
 	if obj.client.Jar == nil {
 		return nil
@@ -191,6 +198,8 @@ func (obj *Client) Cookies(href string, cookies ...*http.Cookie) Cookies {
 	obj.client.Jar.SetCookies(u, cookies)
 	return obj.client.Jar.Cookies(u)
 }
+
+// 清除cookies
 func (obj *Client) ClearCookies() error {
 	var jar *cookiejar.Jar
 	var err error

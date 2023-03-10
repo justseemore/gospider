@@ -42,6 +42,7 @@ func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request
 
 type Cookies []*http.Cookie
 
+// 返回cookies 的字符串形式
 func (obj Cookies) String() string {
 	cooks := []string{}
 	for _, cook := range obj {
@@ -50,6 +51,7 @@ func (obj Cookies) String() string {
 	return strings.Join(cooks, "&")
 }
 
+// 获取符合key 条件的所有cookies
 func (obj Cookies) Gets(name string) Cookies {
 	var result []*http.Cookie
 	for _, cook := range obj {
@@ -59,6 +61,8 @@ func (obj Cookies) Gets(name string) Cookies {
 	}
 	return result
 }
+
+// 获取符合key 条件的cookies
 func (obj Cookies) Get(name string) *http.Cookie {
 	vals := obj.Gets(name)
 	if i := len(vals); i == 0 {
@@ -67,6 +71,8 @@ func (obj Cookies) Get(name string) *http.Cookie {
 		return vals[i-1]
 	}
 }
+
+// 获取符合key 条件的所有cookies的值
 func (obj Cookies) GetVals(name string) []string {
 	var result []string
 	for _, cook := range obj {
@@ -76,6 +82,8 @@ func (obj Cookies) GetVals(name string) []string {
 	}
 	return result
 }
+
+// 获取符合key 条件的cookies的值
 func (obj Cookies) GetVal(name string) string {
 	vals := obj.GetVals(name)
 	if i := len(vals); i == 0 {
@@ -85,74 +93,106 @@ func (obj Cookies) GetVal(name string) string {
 	}
 }
 
+// 返回原始http.Response
 func (obj *Response) Response() *http.Response {
 	return obj.response
 }
+
+// 返回websocket 对象,当发送websocket 请求时使用
 func (obj *Response) WebSocket() *websocket.Conn {
 	return obj.webSocket
 }
+
+// 返回当前的Location
 func (obj *Response) Location() (*url.URL, error) {
 	return obj.response.Location()
 }
+
+// 返回这个请求的cookies
 func (obj *Response) Cookies() Cookies {
 	if obj.response == nil {
 		return nil
 	}
 	return obj.response.Cookies()
 }
+
+// 返回这个请求的状态码
 func (obj *Response) StatusCode() int {
 	return obj.response.StatusCode
 }
+
+// 返回这个请求的状态
 func (obj *Response) Status() string {
 	return obj.response.Status
 }
+
+// 返回这个请求的url
 func (obj *Response) Url() *url.URL {
 	if obj.response == nil {
 		return nil
 	}
 	return obj.response.Request.URL
 }
+
+// 返回response 的请求头
 func (obj *Response) Headers() http.Header {
 	return obj.response.Header
 }
 
+// 对内容进行解码
 func (obj *Response) Decode(encoding string) {
 	if obj.encoding != encoding {
 		obj.encoding = encoding
 		obj.content = tools.Decode(obj.content, encoding)
 	}
 }
-func (obj *Response) Map(path ...string) map[string]any {
+
+// 尝试将内容解析成map
+func (obj *Response) Map() map[string]any {
 	var data map[string]any
 	if err := json.Unmarshal(obj.content, &data); err != nil {
 		return nil
 	}
 	return data
 }
+
+// 尝试将请求解析成json
 func (obj *Response) Json(path ...string) gjson.Result {
 	return tools.Any2json(obj.content, path...)
 }
+
+// 返回内容的字符串形式，也可设置内容
 func (obj *Response) Text(val ...string) string {
 	if len(val) > 0 {
 		obj.content = tools.StringToBytes(val[0])
 	}
 	return tools.BytesToString(obj.content)
 }
+
+// 返回内容的二进制，也可设置内容
 func (obj *Response) Content(val ...[]byte) []byte {
 	if len(val) > 0 {
 		obj.content = val[0]
 	}
 	return obj.content
 }
+
+// 尝试解析成dom 对象
 func (obj *Response) Html() *bs4.Client {
 	return bs4.NewClient(obj.Text(), obj.Url().String())
 }
+
+// 获取headers 的Content-Type
 func (obj *Response) ContentType() string {
 	return obj.response.Header.Get("Content-Type")
 }
+
+// 获取headers 的Content-Encoding
 func (obj *Response) ContentEncoding() string {
 	return obj.response.Header.Get("Content-Encoding")
 }
+
+// 获取response 的内容长度
 func (obj *Response) ContentLength() int64 {
 	return obj.response.ContentLength
 }
@@ -211,6 +251,8 @@ func (obj *Response) read(bar bool) error { //读取body,对body 解压，解码
 	}
 	return nil
 }
+
+// 关闭response ,当disRead 为true 请一定要手动关闭
 func (obj *Response) Close() error {
 	if obj.cnl != nil {
 		defer obj.cnl()

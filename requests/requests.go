@@ -21,11 +21,11 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-//go:linkname readCookies net/http.readCookies
-func readCookies(h http.Header, filter string) []*http.Cookie
+//go:linkname readCookiesLink net/http.readCookies
+func readCookiesLink(h http.Header, filter string) []*http.Cookie
 
-func ReadCookies(cookies string) Cookies {
-	return readCookies(http.Header{"Cookie": []string{cookies}}, "")
+func readCookies(cookies string) Cookies {
+	return readCookiesLink(http.Header{"Cookie": []string{cookies}}, "")
 }
 
 var UserAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36`
@@ -57,6 +57,8 @@ type reqCtxData struct {
 	ws          bool
 	ja3         bool
 }
+
+// 构造一个文件
 type File struct {
 	Key     string //字段的key
 	Name    string //文件名
@@ -64,42 +66,44 @@ type File struct {
 	Type    string //文件类型
 }
 
+// 请求参数选项
 type RequestOption struct {
 	Method        string   //method
-	Url           *url.URL //url
-	Host          string   //host
-	Proxy         string   //代理,http,socks5
+	Url           *url.URL //请求的url
+	Host          string   //网站的host
+	Proxy         string   //代理,支持http,https,socks5协议代理,例如：http://127.0.0.1:7005
 	Timeout       int64    //请求超时时间
-	Headers       any      //请求头
-	Cookies       any      // cookies
+	Headers       any      //请求头,支持：json,map，header
+	Cookies       any      // cookies,支持json,map,cookie
 	Files         []File   //文件
-	Params        any      //url params,url 参数key,val
-	Form          any      //multipart/form-data,适用于文件上传
-	Data          any      //application/x-www-form-urlencoded,适用于key,val
+	Params        any      //url 中的参数，用以拼接url,支持json,map,string
+	Form          any      //发送multipart/form-data,适用于文件上传,支持json,map
+	Data          any      //发送application/x-www-form-urlencoded,适用于key,val,支持json,map
 	body          io.Reader
 	Body          io.Reader
-	Json          any                        //application/json
-	Text          any                        //text/xml
-	TempData      any                        //临时变量
+	Json          any                        //发送application/json,支持：json,map
+	Text          any                        //发送text/xml,支持string,json,map
+	TempData      any                        //临时变量，用于回调存储或自由度更高的用法
 	Bytes         []byte                     //二进制内容
-	DisCookie     bool                       //关闭cookies管理
+	DisCookie     bool                       //关闭cookies管理,这个请求不用cookies池
 	DisDecode     bool                       //关闭自动解码
 	Bar           bool                       //是否开启bar
-	DisProxy      bool                       //是否关闭代理
+	DisProxy      bool                       //是否关闭代理,强制关闭代理
 	Ja3           bool                       //是否开启ja3
 	Ja3Id         ja3.ClientHelloId          //客户端helloID
 	TryNum        int64                      //重试次数
 	BeforCallBack func(*RequestOption) error //请求之前回调
 	AfterCallBack func(*Response) error      //请求之后回调
-	ErrCallBack   func(error) bool           //true 直接返回error,中断尝试
-	RedirectNum   int                        //重定向次数
-	DisAlive      bool                       //关闭长连接
-	DisRead       bool                       //关闭默认读取请求体
-	DisUnZip      bool                       //变比自动解压
-	Http2         bool                       //开启http2 transport
-	WsOption      websocket.Option           //websocket option
-	converUrl     string
-	contentType   string
+	ErrCallBack   func(error) bool           //返回true 中断重试请求
+	RedirectNum   int                        //重定向次数,小于零 关闭重定向
+	DisAlive      bool                       //关闭长连接,这次请求不会复用之前的连接
+	DisRead       bool                       //关闭默认读取请求体,不会主动读取body里面的内容，需用你自己读取
+	DisUnZip      bool                       //关闭自动解压
+	Http2         bool                       //开启http2 transport,强制使用http2
+	WsOption      websocket.Option           //websocket option,使用websocket 请求的option
+
+	converUrl   string
+	contentType string
 }
 
 func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reader, error) {
@@ -198,7 +202,7 @@ func (obj *RequestOption) newCookies() error {
 		obj.Cookies = []*http.Cookie(cookies)
 		return nil
 	case string:
-		obj.Cookies = ReadCookies(cookies)
+		obj.Cookies = readCookies(cookies)
 		return nil
 	case gjson.Result:
 		if !cookies.IsObject() {
@@ -383,6 +387,7 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	return option, err
 }
 
+// 发送请求
 func (obj *Client) Request(preCtx context.Context, method string, href string, options ...RequestOption) (resp *Response, err error) {
 	if obj == nil {
 		return nil, errors.New("初始化client失败")
