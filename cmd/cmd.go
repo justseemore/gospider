@@ -35,6 +35,7 @@ type Client struct {
 	cnl context.CancelFunc
 }
 
+// 没有内存泄漏的cmd 客户端
 func NewLeakClient(preCtx context.Context, option ClientOption) *Client {
 	cliCmd := leakless.New()
 	name := leakless.GetLeaklessBin()
@@ -76,6 +77,8 @@ func NewLeakClient(preCtx context.Context, option ClientOption) *Client {
 	}()
 	return client
 }
+
+// 普通的cmd 客户端
 func NewClient(pre_ctx context.Context, option ClientOption) *Client {
 	var cmd *exec.Cmd
 	var ctx context.Context
@@ -162,6 +165,8 @@ func NewPyClient(pre_ctx context.Context, script string, name string, names ...s
 	}
 	return jsCli, nil
 }
+
+// 创建json解析器
 func NewJsClient(pre_ctx context.Context, script string, name string, names ...string) (*JsClient, error) {
 	names = append(names, name)
 	userDir, err := conf.GetMainDirPath()
@@ -220,7 +225,7 @@ func (obj *JsClient) run(con []byte) (gjson.Result, error) {
 	return tools.Any2json(data), err
 }
 
-// 执行函数
+// 执行函数,第一个参数是要调用的函数名称,后面的是传参
 func (obj *JsClient) Call(funcName string, values ...any) (jsonData gjson.Result, err error) {
 	scrJson, _ := json.Marshal(map[string]any{"Func": funcName, "Args": values})
 	if jsonData, err = obj.run(scrJson); err != nil {
@@ -240,7 +245,7 @@ func (obj *JsClient) Close() {
 	obj.client.Close()
 }
 
-// 运行
+// 运行命令
 func (obj *Client) Run() error {
 	defer obj.Close()
 	err := obj.cmd.Run()
@@ -259,22 +264,32 @@ func (obj *Client) Run() error {
 	return obj.Err
 }
 
+// 导出cmd 的 in管道
 func (obj *Client) StdInPipe() (io.WriteCloser, error) {
 	return obj.cmd.StdinPipe()
 }
+
+// 导出cmd 的 out管道
 func (obj *Client) StdOutPipe() (io.ReadCloser, error) {
 	return obj.cmd.StdoutPipe()
 }
+
+// 导出cmd 的error管道
 func (obj *Client) StdErrPipe() (io.ReadCloser, error) {
 	return obj.cmd.StderrPipe()
 }
 
+// 设置cmd 的 error管道
 func (obj *Client) SetStdErr(stderr io.WriteCloser) {
 	obj.cmd.Stderr = stderr
 }
+
+// 设置cmd 的 out管道
 func (obj *Client) SetStdOut(stdout io.WriteCloser) {
 	obj.cmd.Stdout = stdout
 }
+
+// 设置cmd 的 in管道
 func (obj *Client) SetStdIn(stdin io.ReadCloser) {
 	obj.cmd.Stdin = stdin
 }
@@ -292,6 +307,7 @@ func (obj *Client) Close() {
 	}
 }
 
+// 运行是否结束的 chan
 func (obj *Client) Done() <-chan struct{} {
 	return obj.ctx.Done()
 }
