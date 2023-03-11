@@ -45,7 +45,7 @@ func getBufioReader(r io.Reader) *bufio.Reader
 func getBufioWriter(w io.Writer) *bufio.Writer
 
 func selectSubprotocol(r *http.Request, subprotocols []string) string {
-	for _, protocols := range r.Header["Sec-WebSocket-Protocol"] {
+	for _, protocols := range r.Header.Values("Sec-WebSocket-Protocol") {
 		for _, protocol := range strings.Split(protocols, ",") {
 			protocol = strings.TrimSpace(protocol)
 			if len(subprotocols) == 0 || slices.Index(subprotocols, protocol) != -1 {
@@ -178,7 +178,7 @@ func SetClientHeaders(headers http.Header, options ...Option) {
 
 func GetHeaderOption(header http.Header, client bool) Option {
 	var copts *compressionOptions
-	for _, extentsions := range header["Sec-WebSocket-Extensions"] {
+	for _, extentsions := range header.Values("Sec-WebSocket-Extensions") {
 		if strings.Contains(extentsions, "permessage-deflate") {
 			if copts == nil {
 				copts = new(compressionOptions)
@@ -217,6 +217,8 @@ func NewConn(conn io.ReadWriteCloser, client bool, options ...Option) *Conn {
 	var option Option
 	if len(options) > 0 {
 		option = options[0]
+	} else {
+		option.Init(client)
 	}
 	var subprotocol string
 	if len(option.Subprotocols) > 0 {
@@ -244,6 +246,7 @@ func NewClientConn(resp *http.Response, options ...Option) (*Conn, error) {
 	} else {
 		option = GetHeaderOption(resp.Header, true)
 	}
+
 	rwc, ok := resp.Body.(io.ReadWriteCloser)
 	if !ok {
 		return nil, fmt.Errorf("response body is not a io.ReadWriteCloser")

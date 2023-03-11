@@ -300,21 +300,20 @@ var chromeArgs = []string{
 	"--disable-voice-input",
 	"--disable-wake-on-wifi",
 	"--disable-cookie-encryption",
+
 	"--ignore-gpu-blocklist",
 	"--enable-async-dns",
 	"--enable-simple-cache-backend",
 	"--enable-tcp-fast-open",
-	"--enable-webgl",
 	"--prerender-from-omnibox=disabled",
 	"--enable-web-bluetooth",
-	"--disable-site-isolation-trials",
+
 	"--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,TranslateUI,BlinkGenPropertyTrees", // do not disable UserAgentClientHint
 	"--aggressive-cache-discard",
 	"--disable-extensions",
 	"--disable-ipc-flooding-protection",
 	"--disable-default-apps",
-	"--disable-blink-features=AutomationControlled",
-	"--enable-features=NetworkService,NetworkServiceInProcess,TrustTokens,TrustTokensAlwaysAllowIssuance", // support ServiceWorkers
+	"--enable-webgl",
 	"--disable-breakpad",
 	"--disable-component-update",
 	"--disable-domain-reliability",
@@ -323,6 +322,7 @@ var chromeArgs = []string{
 	"--disable-hang-monitor",
 	"--disable-popup-blocking",
 	"--disable-crash-reporter",
+
 	"--disable-dev-shm-usage",
 	"--disable-background-networking",
 	"--disable-background-timer-throttling",
@@ -331,6 +331,7 @@ var chromeArgs = []string{
 	"--hide-scrollbars",
 	"--disable-prompt-on-repost",
 	"--metrics-recording-only",
+
 	"--safebrowsing-disable-auto-update",
 	"--use-mock-keychain",
 	"--force-webrtc-ip-handling-policy=default_public_interface_only",
@@ -343,10 +344,12 @@ var chromeArgs = []string{
 	"--disable-threaded-animation",
 	"--disable-threaded-scrolling",
 	"--disable-checker-imaging",
+
 	"--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
 	"--blink-settings=imagesEnabled=true",
 	"--ignore-ssl-errors=true",
 	"--ssl-protocol=any",
+
 	"--autoplay-policy=no-user-gesture-required",
 	"--force-color-profile=srgb",
 	"--disable-partial-raster",
