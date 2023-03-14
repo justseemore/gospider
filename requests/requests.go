@@ -45,7 +45,7 @@ var (
 )
 
 type reqCtxData struct {
-	ja3Id       ja3.ClientHelloId
+	ja3Spec     ja3.ClientHelloSpec
 	isCallback  bool
 	proxyUser   *url.Userinfo
 	proxy       *url.URL
@@ -90,7 +90,7 @@ type RequestOption struct {
 	Bar           bool                       //是否开启bar
 	DisProxy      bool                       //是否关闭代理,强制关闭代理
 	Ja3           bool                       //是否开启ja3
-	Ja3Id         ja3.ClientHelloId          //客户端helloID
+	Ja3Spec       ja3.ClientHelloSpec        //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	TryNum        int64                      //重试次数
 	BeforCallBack func(*RequestOption) error //请求之前回调
 	AfterCallBack func(*Response) error      //请求之后回调
@@ -307,10 +307,8 @@ func (obj *RequestOption) optionInit() error {
 	if err = obj.newHeaders(); err != nil {
 		return err
 	}
-	if !obj.Ja3Id.IsSet() { //有值
+	if obj.Ja3Spec.IsSet() { //有值
 		obj.Ja3 = true
-	} else if obj.Ja3 {
-		obj.Ja3Id = ja3.HelloChrome_Auto
 	}
 	//构造cookies
 	return obj.newCookies()
@@ -365,8 +363,8 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	if !option.Ja3 {
 		option.Ja3 = obj.Ja3
 	}
-	if option.Ja3Id.IsSet() {
-		option.Ja3Id = obj.Ja3Id
+	if !option.Ja3Spec.IsSet() {
+		option.Ja3Spec = obj.Ja3Spec
 	}
 	var err error
 	if con, ok := option.Json.(io.Reader); ok {
@@ -485,7 +483,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	ctxData := new(reqCtxData)
 	ctxData.disProxy = request_option.DisProxy
 	ctxData.ja3 = request_option.Ja3
-	ctxData.ja3Id = request_option.Ja3Id
+	ctxData.ja3Spec = request_option.Ja3Spec
 	if request_option.Proxy != "" { //代理相关构造
 		tempProxy, err := verifyProxy(request_option.Proxy)
 		if err != nil {

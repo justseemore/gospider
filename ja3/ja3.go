@@ -3,9 +3,12 @@ package ja3
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"gitee.com/baixudong/gospider/tools"
 	utls "github.com/refraction-networking/utls"
@@ -59,7 +62,7 @@ var (
 	HelloQQ_11_1 = utls.HelloQQ_11_1
 )
 
-func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, ws bool, addr string) (utlsConn *utls.UConn, err error) {
+func Client(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, ws bool, addr string) (utlsConn *utls.UConn, err error) {
 	defer func() {
 		if err != nil {
 			conn.Close()
@@ -68,28 +71,269 @@ func Client(ctx context.Context, conn net.Conn, ja3Id ClientHelloId, ws bool, ad
 			}
 		}
 	}()
-	if ws {
-		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"http/1.1"}}, utls.HelloCustom)
-		var spec utls.ClientHelloSpec
-		if spec, err = utls.UTLSIdToSpec(ja3Id); err != nil {
+	if !ja3Spec.IsSet() {
+		if ja3Spec, err = CreateSpecWithId(HelloChrome_Auto); err != nil {
 			return
 		}
-		for _, Extension := range spec.Extensions {
+	}
+	utlsSpec := utls.ClientHelloSpec(ja3Spec)
+	if ws {
+		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"http/1.1"}}, utls.HelloCustom)
+		for _, Extension := range utlsSpec.Extensions {
 			alpns, ok := Extension.(*utls.ALPNExtension)
 			if ok {
 				if i := slices.Index(alpns.AlpnProtocols, "h2"); i != -1 {
 					alpns.AlpnProtocols = slices.Delete(alpns.AlpnProtocols, i, i+1)
 				}
+				if i := slices.Index(alpns.AlpnProtocols, "http/1.1"); i == -1 {
+					alpns.AlpnProtocols = append([]string{"http/1.1"}, alpns.AlpnProtocols...)
+				}
 				break
 			}
 		}
-		if err = utlsConn.ApplyPreset(&spec); err != nil {
-			return
-		}
 	} else {
-		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}}, ja3Id)
+		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}}, utls.HelloCustom)
+	}
+	if err = utlsConn.ApplyPreset(&utlsSpec); err != nil {
+		return
 	}
 	err = utlsConn.HandshakeContext(ctx)
+	return
+}
+
+// https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
+var extMap = map[uint16]utls.TLSExtension{
+	0: &utls.SNIExtension{},
+	5: &utls.StatusRequestExtension{},
+	10: &utls.SupportedCurvesExtension{Curves: []utls.CurveID{
+		utls.GREASE_PLACEHOLDER,
+		utls.X25519,    //29
+		utls.CurveP256, //23
+		utls.CurveP384, //24
+	}},
+	11: &utls.SupportedPointsExtension{SupportedPoints: []byte{ //0
+		0x00, // pointFormatUncompressed
+	}},
+	13: &utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
+		utls.ECDSAWithP256AndSHA256,
+		utls.PSSWithSHA256,
+		utls.PKCS1WithSHA256,
+		utls.ECDSAWithP384AndSHA384,
+		utls.PSSWithSHA384,
+		utls.PKCS1WithSHA384,
+		utls.PSSWithSHA512,
+		utls.PKCS1WithSHA512,
+	}},
+	16: &utls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
+	17: &utls.StatusRequestV2Extension{},
+	18: &utls.SCTExtension{},
+	21: &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
+	23: &utls.UtlsExtendedMasterSecretExtension{},
+	24: &utls.FakeTokenBindingExtension{},
+	27: &utls.UtlsCompressCertExtension{Algorithms: []utls.CertCompressionAlgo{
+		utls.CertCompressionBrotli,
+	}},
+	28: &utls.FakeRecordSizeLimitExtension{}, //Limit: 0x4001
+	34: &utls.FakeDelegatedCredentialsExtension{},
+	35: &utls.SessionTicketExtension{},
+	41: nil,
+	43: &utls.SupportedVersionsExtension{Versions: []uint16{
+		utls.GREASE_PLACEHOLDER,
+		utls.VersionTLS13,
+		utls.VersionTLS12,
+		utls.VersionTLS11,
+		utls.VersionTLS10}},
+	44: &utls.CookieExtension{},
+	45: &utls.PSKKeyExchangeModesExtension{Modes: []uint8{
+		utls.PskModeDHE,
+	}},
+	50: &utls.SignatureAlgorithmsCertExtension{},
+	51: &utls.KeyShareExtension{KeyShares: []utls.KeyShare{
+		{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
+		{Group: utls.X25519},
+	}},
+	13172: &utls.NPNExtension{},
+	17513: &utls.ApplicationSettingsExtension{SupportedProtocols: []string{"h2"}},
+
+	30031: &utls.FakeChannelIDExtension{OldExtensionID: true}, //FIXME
+	30032: &utls.FakeChannelIDExtension{},                     //FIXME
+
+	65281: &utls.RenegotiationInfoExtension{Renegotiation: utls.RenegotiateOnceAsClient},
+}
+
+func isGREASEUint16(v uint16) bool {
+	// First byte is same as second byte
+	// and lowest nibble is 0xa
+	return ((v >> 8) == v&0xff) && v&0xf == 0xa
+}
+
+type ClientHelloSpec utls.ClientHelloSpec
+
+func (obj ClientHelloSpec) IsSet() bool {
+	if obj.CipherSuites == nil && obj.Extensions == nil && obj.CompressionMethods == nil && obj.TLSVersMax == 0 && obj.TLSVersMin == 0 {
+		return false
+	}
+	return true
+}
+
+// ja3 clientHelloId 生成 clientHello
+func CreateSpecWithId(ja3Id ClientHelloId) (clientHelloSpec ClientHelloSpec, err error) {
+	spec, err := utls.UTLSIdToSpec(ja3Id)
+	if err != nil {
+		return clientHelloSpec, err
+	}
+	return ClientHelloSpec(spec), nil
+}
+
+// TLSVersion，Ciphers，Extensions，EllipticCurves，EllipticCurvePointFormats
+func createTlsVersion(ver uint16, extensions []string) (tlsVersion uint16, tlsSuppor utls.TLSExtension, err error) {
+	if slices.Index(extensions, "43") == -1 {
+		err = errors.New("Extensions 缺少tlsVersion 扩展,检查ja3 字符串是否合法")
+	}
+	switch ver {
+	case utls.VersionTLS13:
+		tlsVersion = utls.VersionTLS13
+		tlsSuppor = &utls.SupportedVersionsExtension{
+			Versions: []uint16{
+				utls.GREASE_PLACEHOLDER,
+				utls.VersionTLS13,
+				utls.VersionTLS12,
+				utls.VersionTLS11,
+				utls.VersionTLS10,
+			},
+		}
+	case utls.VersionTLS12:
+		tlsVersion = utls.VersionTLS12
+		tlsSuppor = &utls.SupportedVersionsExtension{
+			Versions: []uint16{
+				utls.GREASE_PLACEHOLDER,
+				utls.VersionTLS12,
+				utls.VersionTLS11,
+				utls.VersionTLS10,
+			},
+		}
+	case utls.VersionTLS11:
+		tlsVersion = utls.VersionTLS11
+		tlsSuppor = &utls.SupportedVersionsExtension{
+			Versions: []uint16{
+				utls.GREASE_PLACEHOLDER,
+				utls.VersionTLS11,
+				utls.VersionTLS10,
+			},
+		}
+	default:
+		err = errors.New("ja3Str 字符串中tls 版本错误")
+	}
+	return
+}
+func createCiphers(ciphers []string) ([]uint16, error) {
+	cipherSuites := []uint16{utls.GREASE_PLACEHOLDER}
+	for _, val := range ciphers {
+		if n, err := strconv.ParseUint(val, 10, 16); err != nil {
+			return nil, errors.New("ja3Str 字符串中cipherSuites错误")
+		} else {
+			cipherSuites = append(cipherSuites, uint16(n))
+		}
+	}
+	return cipherSuites, nil
+}
+func createCurves(curves []string, extensions []string) (curvesExtension utls.TLSExtension, err error) {
+	if slices.Index(extensions, "10") == -1 {
+		err = errors.New("Extensions 缺少ellipticCurves 扩展,检查ja3 字符串是否合法")
+	}
+	curveIds := []utls.CurveID{utls.GREASE_PLACEHOLDER}
+	for _, val := range curves {
+		if n, err := strconv.ParseUint(val, 10, 16); err != nil {
+			return nil, errors.New("ja3Str 字符串中cipherSuites错误")
+		} else {
+			curveIds = append(curveIds, utls.CurveID(uint16(n)))
+		}
+	}
+	return &utls.SupportedCurvesExtension{Curves: curveIds}, nil
+}
+func createPointFormats(points []string, extensions []string) (curvesExtension utls.TLSExtension, err error) {
+	if slices.Index(extensions, "11") == -1 {
+		err = errors.New("Extensions 缺少pointFormats 扩展,检查ja3 字符串是否合法")
+	}
+	supportedPoints := []uint8{}
+	for _, val := range points {
+		if n, err := strconv.ParseUint(val, 10, 8); err != nil {
+			return nil, errors.New("ja3Str 字符串中cipherSuites错误")
+		} else {
+			supportedPoints = append(supportedPoints, uint8(n))
+		}
+	}
+	return &utls.SupportedPointsExtension{SupportedPoints: supportedPoints}, nil
+}
+func createExtensions(extensions []string, tlsExtension, curvesExtension, pointExtension utls.TLSExtension) ([]utls.TLSExtension, error) {
+	allExtensions := []utls.TLSExtension{&utls.UtlsGREASEExtension{}}
+	for _, extension := range extensions {
+		var extensionId uint16
+		if n, err := strconv.ParseUint(extension, 10, 16); err != nil {
+			return nil, errors.New("ja3Str 字符串中extension错误,utls不支持的扩展: " + extension)
+		} else {
+			extensionId = uint16(n)
+		}
+		switch extensionId {
+		case 10:
+			allExtensions = append(allExtensions, curvesExtension)
+		case 11:
+			allExtensions = append(allExtensions, pointExtension)
+		case 43:
+			allExtensions = append(allExtensions, tlsExtension)
+		default:
+			ext, ok := extMap[extensionId]
+			if !ok {
+				if isGREASEUint16(extensionId) {
+					allExtensions = append(allExtensions, &utls.UtlsGREASEExtension{})
+				} else {
+					allExtensions = append(allExtensions, &utls.GenericExtension{Id: extensionId})
+				}
+			} else {
+				if ext == nil {
+					return nil, errors.New("ja3Str 字符串中extension错误,utls不支持的扩展: " + extension)
+				}
+				allExtensions = append(allExtensions, ext)
+			}
+		}
+	}
+	allExtensions = append(allExtensions, &utls.UtlsGREASEExtension{}, &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle})
+	return allExtensions, nil
+}
+
+// ja3 字符串中生成 clientHello
+func CreateSpecWithStr(ja3Str string) (clientHelloSpec ClientHelloSpec, err error) {
+	tokens := strings.Split(ja3Str, ",")
+	if len(tokens) != 5 {
+		return clientHelloSpec, errors.New("ja3Str 字符串格式不正确")
+	}
+	ver, err := strconv.ParseUint(tokens[0], 10, 16)
+	if err != nil {
+		return clientHelloSpec, errors.New("ja3Str 字符串中tls 版本错误")
+	}
+	ciphers := strings.Split(tokens[1], "-")
+	extensions := strings.Split(tokens[2], "-")
+	curves := strings.Split(tokens[3], "-")
+	pointFormats := strings.Split(tokens[4], "-")
+	tlsVersion, tlsExtension, err := createTlsVersion(uint16(ver), extensions)
+	if err != nil {
+		return clientHelloSpec, err
+	}
+	clientHelloSpec.TLSVersMin = utls.VersionTLS10
+	clientHelloSpec.TLSVersMax = tlsVersion
+	if clientHelloSpec.CipherSuites, err = createCiphers(ciphers); err != nil {
+		return
+	}
+	curvesExtension, err := createCurves(curves, extensions)
+	if err != nil {
+		return clientHelloSpec, err
+	}
+	pointExtension, err := createPointFormats(pointFormats, extensions)
+	if err != nil {
+		return clientHelloSpec, err
+	}
+	clientHelloSpec.CompressionMethods = []byte{0x00}
+	clientHelloSpec.Extensions, err = createExtensions(extensions, tlsExtension, curvesExtension, pointExtension)
 	return
 }
 

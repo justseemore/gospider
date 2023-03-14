@@ -33,11 +33,11 @@ var CrtFile []byte
 var KeyFile []byte
 
 type ClientOption struct {
-	Ja3         bool              //是否开启ja3
-	Ja3Id       ja3.ClientHelloId //指定ja3id
-	ProxyJa3    bool              //proxy是否开启ja3
-	ProxyJa3Id  ja3.ClientHelloId //proxy指定ja3id
-	DisDnsCache bool              //是否关闭dns 缓存
+	Ja3          bool                //是否开启ja3
+	Ja3Spec      ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	ProxyJa3     bool                //proxy是否开启ja3
+	ProxyJa3Spec ja3.ClientHelloSpec //proxy指定ja3Spec,//指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	DisDnsCache  bool                //是否关闭dns 缓存
 
 	Usr     string   //用户名
 	Pwd     string   //密码
@@ -78,7 +78,7 @@ type Client struct {
 	vpn      bool
 	ipWhite  *kinds.Set[string]
 	ja3      bool
-	ja3Id    ja3.ClientHelloId
+	ja3Spec  ja3.ClientHelloSpec
 	ctx      context.Context
 	cnl      context.CancelFunc
 }
@@ -103,17 +103,13 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		server.usr = option.Usr
 		server.pwd = option.Pwd
 	}
+
 	if option.Ja3 {
 		server.ja3 = true
-		if option.Ja3Id.IsSet() {
-			server.ja3Id = ja3.HelloChrome_Auto
-		} else {
-			server.ja3Id = option.Ja3Id
-		}
-	} else if !option.Ja3Id.IsSet() {
+	} else if option.Ja3Spec.IsSet() {
 		server.ja3 = true
-		server.ja3Id = option.Ja3Id
 	}
+	server.ja3Spec = option.Ja3Spec
 	//白名单
 	server.ipWhite = kinds.NewSet[string]()
 	for _, ip_white := range option.IpWhite {
@@ -129,7 +125,7 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		KeepAlive:           option.KeepAlive,
 		LocalAddr:           option.LocalAddr,
 		Ja3:                 option.ProxyJa3,
-		Ja3Id:               option.ProxyJa3Id,
+		Ja3Spec:             option.ProxyJa3Spec,
 		DisDnsCache:         option.DisDnsCache,
 		Dns:                 option.Dns,
 	}); err != nil {
@@ -659,7 +655,7 @@ func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, http2 bool) (tl
 }
 func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws bool) (net.Conn, bool, error) {
 	if obj.ja3 {
-		if tlsConn, err := ja3.Client(ctx, conn, obj.ja3Id, ws, addr); err != nil {
+		if tlsConn, err := ja3.Client(ctx, conn, obj.ja3Spec, ws, addr); err != nil {
 			return tlsConn, false, err
 		} else {
 			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err

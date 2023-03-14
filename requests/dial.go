@@ -27,7 +27,7 @@ type DialClient struct {
 	dnsTimeout  int64
 	addrType    AddrType //使用ipv4,ipv6 ,或自动选项
 	ja3         bool     //是否启用ja3
-	ja3Id       ja3.ClientHelloId
+	ja3Spec     ja3.ClientHelloSpec
 	disDnsCache bool   //是否关闭dns 缓存
 	dns         string //dns
 	resolver    *net.Resolver
@@ -49,13 +49,13 @@ type DialOption struct {
 	DnsCacheTime        int64
 	KeepAlive           int64
 	GetProxy            func(ctx context.Context, url *url.URL) (string, error)
-	Proxy               string   //代理
-	LocalAddr           string   //使用本地网卡
-	AddrType            AddrType //优先使用的地址类型,ipv4,ipv6 ,或自动选项
-	Ja3                 bool     //是否启用ja3
-	Ja3Id               ja3.ClientHelloId
-	DisDnsCache         bool   //是否关闭dns 缓存
-	Dns                 string //dns
+	Proxy               string              //代理
+	LocalAddr           string              //使用本地网卡
+	AddrType            AddrType            //优先使用的地址类型,ipv4,ipv6 ,或自动选项
+	Ja3                 bool                //是否启用ja3
+	Ja3Spec             ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	DisDnsCache         bool                //是否关闭dns 缓存
+	Dns                 string              //dns
 }
 
 func NewDail(option DialOption) (*DialClient, error) {
@@ -68,11 +68,7 @@ func NewDail(option DialOption) (*DialClient, error) {
 	if option.DnsCacheTime == 0 {
 		option.DnsCacheTime = 60 * 30
 	}
-	if option.Ja3 {
-		if option.Ja3Id.IsSet() {
-			option.Ja3Id = ja3.HelloChrome_Auto
-		}
-	} else if !option.Ja3Id.IsSet() {
+	if option.Ja3Spec.IsSet() {
 		option.Ja3 = true
 	}
 	var err error
@@ -83,7 +79,7 @@ func NewDail(option DialOption) (*DialClient, error) {
 		getProxy:    option.GetProxy,
 		addrType:    option.AddrType,
 		ja3:         option.Ja3,
-		ja3Id:       option.Ja3Id,
+		ja3Spec:     option.Ja3Spec,
 		disDnsCache: option.DisDnsCache,
 		dns:         option.Dns,
 	}
@@ -336,7 +332,7 @@ func (obj *DialClient) DialTlsProxyContext(ctx context.Context, netword string, 
 		return conn, err
 	}
 	if obj.ja3 {
-		return ja3.Client(ctx, conn, obj.ja3Id, false, tools.GetServerName(addr))
+		return ja3.Client(ctx, conn, obj.ja3Spec, false, tools.GetServerName(addr))
 	}
 	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}})
 	return tlsConn, tlsConn.HandshakeContext(ctx)
@@ -565,7 +561,7 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		return tlsConn, tools.WrapError(ErrFatal, "请关闭http2设置")
 	}
 	if reqData.ja3 {
-		if utlsConn, err := ja3.Client(ctx, conn, reqData.ja3Id, reqData.ws, reqData.host); err != nil {
+		if utlsConn, err := ja3.Client(ctx, conn, reqData.ja3Spec, reqData.ws, reqData.host); err != nil {
 			return utlsConn, err
 		} else if reqData.h2 != (utlsConn.ConnectionState().NegotiatedProtocol == "h2") {
 			if utlsConn.ConnectionState().NegotiatedProtocol == "h2" {
