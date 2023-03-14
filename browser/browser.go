@@ -126,16 +126,16 @@ type Client struct {
 	getProxy func() (string, error)
 }
 type ClientOption struct {
-	EvalPath  string   //浏览器执行路径
-	Host      string   //连接host
-	Port      int      //连接port
-	UserDir   string   //设置用户目录
-	Args      []string //启动参数
-	Headless  bool     //是否使用无头
-	UserAgent string
-	Proxy     string                 //代理
-	GetProxy  func() (string, error) //代理
-	DisRoute  bool                   //关闭默认路由
+	ChromePath string   //chrome浏览器执行路径
+	Host       string   //连接host
+	Port       int      //连接port
+	UserDir    string   //设置用户目录
+	Args       []string //启动参数
+	Headless   bool     //是否使用无头
+	UserAgent  string
+	Proxy      string                 //代理
+	GetProxy   func() (string, error) //代理
+	DisRoute   bool                   //关闭默认路由
 }
 
 //go:embed browserCmd.exe
@@ -174,6 +174,16 @@ type downClient struct {
 
 var oneDown = &downClient{}
 
+func verifyEvalPath(path string) error {
+	if !tools.PathExist(path) {
+		return errors.New("路径不存在")
+	}
+
+	if strings.HasSuffix(path, "chrome.exe") || strings.HasSuffix(path, "Chromium.app") || strings.HasSuffix(path, "chrome") {
+		return nil
+	}
+	return errors.New("请输入正确的浏览器路径,如: c:/chrome.exe")
+}
 func (obj *downClient) getChromePath(preCtx context.Context) (string, error) {
 	obj.Lock()
 	defer obj.Unlock()
@@ -236,11 +246,14 @@ func runChrome(ctx context.Context, option *ClientOption) (*cmd.Client, error) {
 	if option.UserAgent == "" {
 		option.UserAgent = requests.UserAgent
 	}
-	if option.EvalPath == "" {
-		option.EvalPath, err = oneDown.getChromePath(ctx)
+	if option.ChromePath == "" {
+		option.ChromePath, err = oneDown.getChromePath(ctx)
 		if err != nil {
 			return nil, err
 		}
+	}
+	if err = verifyEvalPath(option.ChromePath); err != nil {
+		return nil, err
 	}
 	if option.UserDir == "" {
 		option.UserDir, err = os.MkdirTemp(os.TempDir(), conf.TempChromeDir)
@@ -271,7 +284,7 @@ func runChrome(ctx context.Context, option *ClientOption) (*cmd.Client, error) {
 	args = append(args, fmt.Sprintf("--remote-debugging-port=%d", option.Port))
 	args = append(args, option.Args...)
 	_, err = inP.Write(tools.StringToBytes(tools.Any2json(map[string]any{
-		"name": option.EvalPath,
+		"name": option.ChromePath,
 		"args": args,
 	}).Raw))
 	if err != nil {
