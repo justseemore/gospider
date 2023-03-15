@@ -2,6 +2,7 @@ package ja3
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -62,7 +63,7 @@ var (
 	HelloQQ_11_1 = utls.HelloQQ_11_1
 )
 
-func Client(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, ws bool, addr string) (utlsConn *utls.UConn, err error) {
+func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disHttp2 bool, addr string) (utlsConn *utls.UConn, err error) {
 	defer func() {
 		if err != nil {
 			conn.Close()
@@ -77,7 +78,7 @@ func Client(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, ws bool
 		}
 	}
 	utlsSpec := utls.ClientHelloSpec(ja3Spec)
-	if ws {
+	if disHttp2 {
 		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"http/1.1"}}, utls.HelloCustom)
 		for _, Extension := range utlsSpec.Extensions {
 			alpns, ok := Extension.(*utls.ALPNExtension)
@@ -105,15 +106,6 @@ func Client(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, ws bool
 var extMap = map[uint16]utls.TLSExtension{
 	0: &utls.SNIExtension{},
 	5: &utls.StatusRequestExtension{},
-	10: &utls.SupportedCurvesExtension{Curves: []utls.CurveID{
-		utls.GREASE_PLACEHOLDER,
-		utls.X25519,    //29
-		utls.CurveP256, //23
-		utls.CurveP384, //24
-	}},
-	11: &utls.SupportedPointsExtension{SupportedPoints: []byte{ //0
-		0x00, // pointFormatUncompressed
-	}},
 	13: &utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
 		utls.ECDSAWithP256AndSHA256,
 		utls.PSSWithSHA256,
@@ -130,13 +122,13 @@ var extMap = map[uint16]utls.TLSExtension{
 	21: &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
 	23: &utls.UtlsExtendedMasterSecretExtension{},
 	24: &utls.FakeTokenBindingExtension{},
-	27: &utls.UtlsCompressCertExtension{Algorithms: []utls.CertCompressionAlgo{
-		utls.CertCompressionBrotli,
-	}},
+	27: &utls.UtlsCompressCertExtension{
+		Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
+	},
 	28: &utls.FakeRecordSizeLimitExtension{}, //Limit: 0x4001
 	34: &utls.FakeDelegatedCredentialsExtension{},
 	35: &utls.SessionTicketExtension{},
-	41: nil,
+	41: &utls.FakePreSharedKeyExtension{},
 	43: &utls.SupportedVersionsExtension{Versions: []uint16{
 		utls.GREASE_PLACEHOLDER,
 		utls.VersionTLS13,
@@ -153,11 +145,9 @@ var extMap = map[uint16]utls.TLSExtension{
 		{Group: utls.X25519},
 	}},
 	13172: &utls.NPNExtension{},
-	17513: &utls.ApplicationSettingsExtension{SupportedProtocols: []string{"h2"}},
-
+	17513: &utls.ApplicationSettingsExtension{SupportedProtocols: []string{"h2", "http/1.1"}},
 	30031: &utls.FakeChannelIDExtension{OldExtensionID: true}, //FIXME
 	30032: &utls.FakeChannelIDExtension{},                     //FIXME
-
 	65281: &utls.RenegotiationInfoExtension{Renegotiation: utls.RenegotiateOnceAsClient},
 }
 
@@ -265,6 +255,7 @@ func createPointFormats(points []string, extensions []string) (curvesExtension u
 	}
 	return &utls.SupportedPointsExtension{SupportedPoints: supportedPoints}, nil
 }
+
 func createExtensions(extensions []string, tlsExtension, curvesExtension, pointExtension utls.TLSExtension) ([]utls.TLSExtension, error) {
 	allExtensions := []utls.TLSExtension{&utls.UtlsGREASEExtension{}}
 	for _, extension := range extensions {
@@ -293,11 +284,13 @@ func createExtensions(extensions []string, tlsExtension, curvesExtension, pointE
 				if ext == nil {
 					return nil, errors.New("ja3Str 字符串中extension错误,utls不支持的扩展: " + extension)
 				}
+				if extensionId == 21 {
+					allExtensions = append(allExtensions, &utls.UtlsGREASEExtension{})
+				}
 				allExtensions = append(allExtensions, ext)
 			}
 		}
 	}
-	allExtensions = append(allExtensions, &utls.UtlsGREASEExtension{}, &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle})
 	return allExtensions, nil
 }
 
@@ -333,6 +326,8 @@ func CreateSpecWithStr(ja3Str string) (clientHelloSpec ClientHelloSpec, err erro
 		return clientHelloSpec, err
 	}
 	clientHelloSpec.CompressionMethods = []byte{0x00}
+	clientHelloSpec.GetSessionID = sha256.Sum256
+
 	clientHelloSpec.Extensions, err = createExtensions(extensions, tlsExtension, curvesExtension, pointExtension)
 	return
 }

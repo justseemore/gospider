@@ -655,7 +655,7 @@ func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, http2 bool) (tl
 }
 func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws bool) (net.Conn, bool, error) {
 	if obj.ja3 {
-		if tlsConn, err := ja3.Client(ctx, conn, obj.ja3Spec, ws, addr); err != nil {
+		if tlsConn, err := ja3.NewClient(ctx, conn, obj.ja3Spec, ws, addr); err != nil {
 			return tlsConn, false, err
 		} else {
 			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err

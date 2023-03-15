@@ -332,7 +332,7 @@ func (obj *DialClient) DialTlsProxyContext(ctx context.Context, netword string, 
 		return conn, err
 	}
 	if obj.ja3 {
-		return ja3.Client(ctx, conn, obj.ja3Spec, false, tools.GetServerName(addr))
+		return ja3.NewClient(ctx, conn, obj.ja3Spec, false, tools.GetServerName(addr))
 	}
 	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}})
 	return tlsConn, tlsConn.HandshakeContext(ctx)
@@ -561,7 +561,7 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		return tlsConn, tools.WrapError(ErrFatal, "请关闭http2设置")
 	}
 	if reqData.ja3 {
-		if utlsConn, err := ja3.Client(ctx, conn, reqData.ja3Spec, reqData.ws, reqData.host); err != nil {
+		if utlsConn, err := ja3.NewClient(ctx, conn, reqData.ja3Spec, reqData.ws, reqData.host); err != nil {
 			return utlsConn, err
 		} else if reqData.h2 != (utlsConn.ConnectionState().NegotiatedProtocol == "h2") {
 			if utlsConn.ConnectionState().NegotiatedProtocol == "h2" {
