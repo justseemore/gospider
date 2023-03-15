@@ -26,11 +26,27 @@ import (
 	"gitee.com/baixudong/gospider/websocket"
 )
 
-//go:embed gospider.crt
+//go:embed interCert.crt
 var CrtFile []byte
 
-//go:embed gospider.key
+//go:embed rootCert.key
 var KeyFile []byte
+
+func getCert(serverName string) (tlsCert tls.Certificate, err error) {
+	crt, err := tools.LoadCertData(CrtFile)
+	if err != nil {
+		return tlsCert, err
+	}
+	key, err := tools.LoadCertKeyData(KeyFile)
+	if err != nil {
+		return tlsCert, err
+	}
+	cert, err := tools.GetCert(crt, key, serverName)
+	if err != nil {
+		return tlsCert, err
+	}
+	return tls.X509KeyPair(tools.GetCertData(cert), KeyFile)
+}
 
 type ClientOption struct {
 	Ja3          bool                //是否开启ja3
@@ -53,6 +69,7 @@ type ClientOption struct {
 	Proxy               string                                                  //代理ip http://192.168.1.50:8888
 	KeepAlive           int64
 	LocalAddr           string //本地网卡出口
+	ServerName          string
 	Vpn                 bool   //是否是vpn
 	Dns                 string //dns
 }
@@ -133,7 +150,10 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 	}
 	//证书
 	if option.CrtFile != nil && KeyFile != nil {
-		if server.cert, err = tls.X509KeyPair(option.CrtFile, option.KeyFile); err != nil {
+		if option.ServerName == "" {
+			option.ServerName = "gospider"
+		}
+		if server.cert, err = getCert(option.ServerName); err != nil {
 			return nil, err
 		}
 	} else {
@@ -641,40 +661,44 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 	}
 	return obj.copyTlsHttpsMain(ctx, client, server)
 }
-func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, http2 bool) (tlsConn *tls.Conn, err error) {
+func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, http2 bool, cert tls.Certificate) (tlsConn *tls.Conn, err error) {
 	protos := "http/1.1"
 	if http2 {
 		protos = "h2"
 	}
 	tlsConn = tls.Server(conn, &tls.Config{
 		InsecureSkipVerify: true,
-		Certificates:       []tls.Certificate{obj.cert},
+		Certificates:       []tls.Certificate{cert},
 		NextProtos:         []string{protos},
 	})
 	return tlsConn, tlsConn.HandshakeContext(ctx)
 }
-func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws bool) (net.Conn, bool, error) {
+func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws bool) (net.Conn, bool, string, error) {
 	if obj.ja3 {
 		if tlsConn, err := ja3.NewClient(ctx, conn, obj.ja3Spec, ws, addr); err != nil {
-			return tlsConn, false, err
+			return tlsConn, false, "", err
 		} else {
-			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
+			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().ServerName, err
 		}
 	} else {
 		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}})
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			return tlsConn, false, err
+			return tlsConn, false, "", err
 		} else {
-			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
+			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().ServerName, err
 		}
 	}
 }
 func (obj *Client) copyTlsHttpsMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
-	tlsServer, http2, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
+	tlsServer, http2, serverName, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
 	if err != nil {
 		return err
 	}
-	tlsClient, err := obj.tlsClient(ctx, client, http2)
+	cert, err := getCert(serverName)
+	if err != nil {
+		return err
+	}
+	tlsClient, err := obj.tlsClient(ctx, client, http2, cert)
 	if err != nil {
 		return err
 	}

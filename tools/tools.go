@@ -7,12 +7,12 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/md5"
 	rand2 "crypto/rand"
-	"crypto/rsa"
 	"crypto/sha1"
-	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
@@ -25,6 +25,7 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
+
 	"net"
 	"net/url"
 	"os"
@@ -718,53 +719,107 @@ func SplitHostPort(address string) (string, int, error) {
 	}
 	return host, portnum, nil
 }
-func GetCert(addr string) (cert tls.Certificate, err error) {
-	if addr == "" {
-		addr = "127.0.0.1"
-	}
-	if certOut, keyOut, err := GetCertFile(addr); err != nil {
-		return cert, err
-	} else {
-		return tls.X509KeyPair(certOut.Bytes(), keyOut.Bytes())
-	}
-}
-func GetCertFile(addr string) (*bytes.Buffer, *bytes.Buffer, error) {
-	rootCsr := &x509.Certificate{
-		Version:      3,                             //证书的版本，数字1,2,3。
-		SerialNumber: big.NewInt(time.Now().Unix()), //证书序列号，标识证书的唯一整数，重复的编号无法安装到系统里。
-		Subject: pkix.Name{
-			Country:            []string{"CN"},           // 国家
-			Province:           []string{"Shanghai"},     //省
-			Locality:           []string{"Shanghai"},     //市
-			Organization:       []string{"GoSpider"},     //证书持有者组织名称。
-			OrganizationalUnit: []string{"GoSpiderCert"}, //证书持有者组织唯一标识。
-			CommonName:         "GoSpider Root CA",       //证书持有者通用名，需保持唯一，否则验证会失败。
 
+func GetRootCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
+	rootCsr := &x509.Certificate{
+		Version:      3,
+		SerialNumber: big.NewInt(123456),
+		Subject: pkix.Name{
+			Country:            []string{"CN"},
+			Province:           []string{"Shanghai"},
+			Locality:           []string{"Shanghai"},
+			Organization:       []string{"JediLtd"},
+			OrganizationalUnit: []string{"JediProxy"},
+			CommonName:         "Jedi Root CA",
 		},
-		NotBefore:             time.Now(),                   //证书有效期开始时间。
-		NotAfter:              time.Now().AddDate(10, 0, 0), //证书过期时间。 10年
-		BasicConstraintsValid: true,                         //为true表示IsCA/MaxPathLen/MaxPathLenZero有效
-		IsCA:                  true,                         //
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(10, 0, 0),
+		BasicConstraintsValid: true,
+		IsCA:                  true,
 		MaxPathLen:            1,
 		MaxPathLenZero:        false,
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature, //定义了证书包含的密钥的用途。
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},                                                              //该扩展表示被认证的公钥的用途
-		IPAddresses:           []net.IP{net.ParseIP(addr)},                                                                                 //需要颁发证书的 IP 地址。
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 	}
-	certOut := bytes.NewBuffer(nil)
-	keyOut := bytes.NewBuffer(nil)
-	if pk, err := rsa.GenerateKey(rand2.Reader, 2048); err != nil {
-		return certOut, keyOut, err
-	} else if derBytes, err := x509.CreateCertificate(rand2.Reader, rootCsr, rootCsr, &pk.PublicKey, pk); err != nil {
-		return certOut, keyOut, err
-	} else if err = pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
-		return certOut, keyOut, err
-	} else if err = pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(pk)}); err != nil {
-		return certOut, keyOut, err
-	} else {
-		return certOut, keyOut, err
+	rootDer, err := x509.CreateCertificate(rand2.Reader, rootCsr, rootCsr, key.Public(), key)
+	if err != nil {
+		return nil, err
 	}
+	return x509.ParseCertificate(rootDer)
 }
+func GetInterCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey) (*x509.Certificate, error) {
+	interCsr := &x509.Certificate{
+		Version:      3,
+		SerialNumber: big.NewInt(123457),
+		Subject: pkix.Name{
+			Country:            []string{"CN"},
+			Province:           []string{"Shanghai"},
+			Locality:           []string{"Shanghai"},
+			Organization:       []string{"JediLtd"},
+			OrganizationalUnit: []string{"JediProxy"},
+			CommonName:         "Jedi Inter CA",
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(1, 0, 0),
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		MaxPathLen:            0,
+		MaxPathLenZero:        true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+	}
+	interDer, err := x509.CreateCertificate(rand2.Reader, interCsr, rootCert, key.Public(), key)
+	if err != nil {
+		return nil, err
+	}
+	return x509.ParseCertificate(interDer)
+}
+func GetCert(interCert *x509.Certificate, key *ecdsa.PrivateKey, serverName string) (*x509.Certificate, error) {
+	csr := &x509.Certificate{
+		Version:      3,
+		SerialNumber: big.NewInt(123458),
+		Subject: pkix.Name{
+			Country:            []string{"CN"},
+			Province:           []string{"Shanghai"},
+			Locality:           []string{"Shanghai"},
+			Organization:       []string{"JediLtd"},
+			OrganizationalUnit: []string{"JediProxy"},
+			CommonName:         serverName,
+		},
+		DNSNames:              []string{serverName},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(1, 0, 0),
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand2.Reader, csr, interCert, key.Public(), key)
+	if err != nil {
+		return nil, err
+	}
+	return x509.ParseCertificate(der)
+}
+func GetCertKey() (*ecdsa.PrivateKey, error) {
+	return ecdsa.GenerateKey(elliptic.P256(), rand2.Reader)
+}
+func GetCertData(cert *x509.Certificate) []byte {
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+}
+func GetCertKeyData(key *ecdsa.PrivateKey) ([]byte, error) {
+	keyDer, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDer}), nil
+}
+func LoadCertKeyData(data []byte) (*ecdsa.PrivateKey, error) {
+	block, _ := pem.Decode(data)
+	return x509.ParseECPrivateKey(block.Bytes)
+}
+func LoadCertData(data []byte) (*x509.Certificate, error) {
+	block, _ := pem.Decode(data)
+	return x509.ParseCertificate(block.Bytes)
+}
+
 func GetServerName(addr string) string {
 	colonPos := strings.LastIndex(addr, ":")
 	if colonPos == -1 {
