@@ -93,7 +93,14 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 			}
 		}
 	} else {
-		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}}, utls.HelloCustom)
+		utlsConn = utls.UClient(conn, &utls.Config{
+			InsecureSkipVerify:     true,
+			InsecureSkipTimeVerify: true,
+			ServerName:             tools.GetServerName(addr),
+			NextProtos:             []string{"h2", "http/1.1"},
+		},
+			utls.HelloCustom,
+		)
 	}
 	if err = utlsConn.ApplyPreset(&utlsSpec); err != nil {
 		return
@@ -108,13 +115,16 @@ var extMap = map[uint16]utls.TLSExtension{
 	5: &utls.StatusRequestExtension{},
 	13: &utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
 		utls.ECDSAWithP256AndSHA256,
-		utls.PSSWithSHA256,
-		utls.PKCS1WithSHA256,
 		utls.ECDSAWithP384AndSHA384,
+		utls.ECDSAWithP521AndSHA512,
+		utls.PSSWithSHA256,
 		utls.PSSWithSHA384,
-		utls.PKCS1WithSHA384,
 		utls.PSSWithSHA512,
+		utls.PKCS1WithSHA256,
+		utls.PKCS1WithSHA384,
 		utls.PKCS1WithSHA512,
+		utls.ECDSAWithSHA1,
+		utls.PKCS1WithSHA1,
 	}},
 	16: &utls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
 	17: &utls.StatusRequestV2Extension{},
@@ -129,20 +139,28 @@ var extMap = map[uint16]utls.TLSExtension{
 	34: &utls.FakeDelegatedCredentialsExtension{},
 	35: &utls.SessionTicketExtension{},
 	41: &utls.FakePreSharedKeyExtension{},
-	43: &utls.SupportedVersionsExtension{Versions: []uint16{
-		utls.GREASE_PLACEHOLDER,
-		utls.VersionTLS13,
-		utls.VersionTLS12,
-		utls.VersionTLS11,
-		utls.VersionTLS10}},
 	44: &utls.CookieExtension{},
 	45: &utls.PSKKeyExchangeModesExtension{Modes: []uint8{
 		utls.PskModeDHE,
 	}},
-	50: &utls.SignatureAlgorithmsCertExtension{},
+
+	50: &utls.SignatureAlgorithmsCertExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
+		utls.ECDSAWithP256AndSHA256,
+		utls.ECDSAWithP384AndSHA384,
+		utls.ECDSAWithP521AndSHA512,
+		utls.PSSWithSHA256,
+		utls.PSSWithSHA384,
+		utls.PSSWithSHA512,
+		utls.PKCS1WithSHA256,
+		utls.PKCS1WithSHA384,
+		utls.PKCS1WithSHA512,
+		utls.ECDSAWithSHA1,
+		utls.PKCS1WithSHA1,
+	}},
 	51: &utls.KeyShareExtension{KeyShares: []utls.KeyShare{
 		{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
 		{Group: utls.X25519},
+		{Group: utls.CurveP256},
 	}},
 	13172: &utls.NPNExtension{},
 	17513: &utls.ApplicationSettingsExtension{SupportedProtocols: []string{"h2", "http/1.1"}},
