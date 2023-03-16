@@ -348,6 +348,8 @@ func (obj *Page) querySelectorAll(ctx context.Context, selector string) ([]*Dom,
 	}
 	return doms, nil
 }
+
+// 移动操作
 func (obj *Page) baseMove(ctx context.Context, point cdp.Point, kind int, steps ...int) error {
 	if !obj.isMove {
 		obj.mouseX = point.X
@@ -392,6 +394,16 @@ func (obj *Page) baseMove(ctx context.Context, point cdp.Point, kind int, steps 
 
 func (obj *Page) Move(ctx context.Context, point cdp.Point, steps ...int) error {
 	return obj.baseMove(ctx, point, 0, steps...)
+}
+
+func (obj *Page) Wheel(ctx context.Context, point cdp.Point) error {
+	_, err := obj.webSock.EmulateTouchFromMouseEvent(ctx,
+		cdp.DispatchMouseEventOption{
+			Type:   "mouseWheel",
+			DeltaX: point.X,
+			DeltaY: point.Y,
+		})
+	return err
 }
 func (obj *Page) move(ctx context.Context, point cdp.Point) error {
 	_, err := obj.webSock.InputDispatchMouseEvent(ctx,
@@ -439,11 +451,17 @@ func (obj *Page) Click(ctx context.Context, point cdp.Point) error {
 	}
 	return obj.Up(ctx)
 }
+func (obj *Page) TouchClick(ctx context.Context, point cdp.Point) error {
+	if err := obj.TouchDown(ctx, point); err != nil {
+		return err
+	}
+	return obj.TouchUp(ctx)
+}
 
 func (obj *Page) TouchMove(ctx context.Context, point cdp.Point, steps ...int) error {
 	return obj.baseMove(ctx, point, 1, steps...)
 }
-func (obj *Page) touchMove(ctx context.Context, point cdp.Point) error {
+func (obj *Page) touchMove(ctx context.Context, point cdp.Point) error { //不需要delta
 	_, err := obj.webSock.InputDispatchTouchEvent(ctx, "touchMove", []cdp.Point{
 		{
 			X: point.X,
@@ -460,7 +478,10 @@ func (obj *Page) touchMove(ctx context.Context, point cdp.Point) error {
 func (obj *Page) TouchDown(ctx context.Context, point cdp.Point) error {
 	_, err := obj.webSock.InputDispatchTouchEvent(ctx, "touchStart",
 		[]cdp.Point{
-			point,
+			{
+				X: point.X,
+				Y: point.Y,
+			},
 		})
 	if err != nil {
 		return err
@@ -476,6 +497,7 @@ func (obj *Page) TouchUp(ctx context.Context) error {
 	return err
 }
 
+// 移动操作结束
 // 设置移动设备的属性
 func (obj *Page) SetDevice(ctx context.Context, device cdp.Device) error {
 	if err := obj.SetUserAgent(ctx, device.UserAgent); err != nil {
