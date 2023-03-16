@@ -24,37 +24,22 @@ func (obj *WebSock) InputDispatchKeyEvent(ctx context.Context, option DispatchKe
 }
 
 type DispatchMouseEventOption struct {
-	Type   string  `json:"type"`
-	Button string  `json:"button"`
-	X      float64 `json:"x"`
-	Y      float64 `json:"y"`
-	DeltaX float64 `json:"deltaX"`
-	DeltaY float64 `json:"deltaY"`
+	Type       string  `json:"type"`
+	Button     string  `json:"button"`
+	X          float64 `json:"x"`
+	Y          float64 `json:"y"`
+	ClickCount int64   `json:"clickCount"`
 }
 
-func (obj *WebSock) EmulateTouchFromMouseEvent(ctx context.Context, option DispatchMouseEventOption) (RecvData, error) {
-	return obj.send(ctx, commend{
-		Method: "Input.emulateTouchFromMouseEvent",
-		Params: map[string]any{
-			"type":   option.Type,
-			"button": option.Button,
-			"x":      option.X,
-			"y":      option.Y,
-			"deltaX": option.DeltaX,
-			"deltaY": option.DeltaY,
-		},
-	})
-}
 func (obj *WebSock) InputDispatchMouseEvent(ctx context.Context, option DispatchMouseEventOption) (RecvData, error) {
 	return obj.send(ctx, commend{
 		Method: "Input.dispatchMouseEvent",
 		Params: map[string]any{
-			"type":   option.Type,
-			"button": option.Button,
-			"x":      option.X,
-			"y":      option.Y,
-			"deltaX": option.DeltaX,
-			"deltaY": option.DeltaY,
+			"type":       option.Type,
+			"button":     option.Button,
+			"clickCount": option.ClickCount,
+			"x":          option.X,
+			"y":          option.Y,
 		},
 	})
 }

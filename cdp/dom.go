@@ -88,3 +88,11 @@ func (obj *WebSock) DOMGetDocument(ctx context.Context) (RecvData, error) {
 		},
 	})
 }
+func (obj *WebSock) DOMScrollIntoViewIfNeeded(ctx context.Context, nodeId int64) (RecvData, error) {
+	return obj.send(ctx, commend{
+		Method: "DOM.scrollIntoViewIfNeeded",
+		Params: map[string]any{
+			"nodeId": nodeId,
+		},
+	})
+}

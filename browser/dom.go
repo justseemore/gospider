@@ -235,3 +235,8 @@ func (obj *Dom) Box(ctx context.Context) (cdp.BoxData, error) {
 	}
 	return boxData, nil
 }
+
+func (obj *Dom) Show(ctx context.Context) error {
+	_, err := obj.webSock.DOMScrollIntoViewIfNeeded(ctx, obj.nodeId)
+	return err
+}

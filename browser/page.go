@@ -396,15 +396,6 @@ func (obj *Page) Move(ctx context.Context, point cdp.Point, steps ...int) error 
 	return obj.baseMove(ctx, point, 0, steps...)
 }
 
-func (obj *Page) Wheel(ctx context.Context, point cdp.Point) error {
-	_, err := obj.webSock.EmulateTouchFromMouseEvent(ctx,
-		cdp.DispatchMouseEventOption{
-			Type:   "mouseWheel",
-			DeltaX: point.X,
-			DeltaY: point.Y,
-		})
-	return err
-}
 func (obj *Page) move(ctx context.Context, point cdp.Point) error {
 	_, err := obj.webSock.InputDispatchMouseEvent(ctx,
 		cdp.DispatchMouseEventOption{
@@ -423,10 +414,11 @@ func (obj *Page) move(ctx context.Context, point cdp.Point) error {
 func (obj *Page) Down(ctx context.Context, point cdp.Point) error {
 	_, err := obj.webSock.InputDispatchMouseEvent(ctx,
 		cdp.DispatchMouseEventOption{
-			Type:   "mousePressed",
-			Button: "left",
-			X:      point.X,
-			Y:      point.Y,
+			Type:       "mousePressed",
+			Button:     "left",
+			X:          point.X,
+			Y:          point.Y,
+			ClickCount: 1,
 		})
 	if err != nil {
 		return err
@@ -438,10 +430,11 @@ func (obj *Page) Down(ctx context.Context, point cdp.Point) error {
 }
 func (obj *Page) Up(ctx context.Context) error {
 	_, err := obj.webSock.InputDispatchMouseEvent(ctx, cdp.DispatchMouseEventOption{
-		Type:   "mouseReleased",
-		Button: "left",
-		X:      obj.mouseX,
-		Y:      obj.mouseY,
+		Type:       "mouseReleased",
+		Button:     "left",
+		X:          obj.mouseX,
+		Y:          obj.mouseY,
+		ClickCount: 1,
 	})
 	return err
 }
