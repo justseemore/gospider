@@ -575,3 +575,16 @@ func (obj *Page) GetCookies(ctx context.Context, urls ...string) ([]cdp.Cookie, 
 	}
 	return result, nil
 }
+
+func (obj *Page) ClearCookies(ctx context.Context) (err error) {
+	_, err = obj.webSock.NetworkClearBrowserCookies(ctx)
+	return
+}
+func (obj *Page) ClearCache(ctx context.Context) (err error) {
+	_, err = obj.webSock.NetworkClearBrowserCache(ctx)
+	return
+}
+func (obj *Page) ClearStorage(ctx context.Context) (err error) {
+	_, err = obj.webSock.StorageClear(ctx, obj.baseUrl)
+	return
+}
