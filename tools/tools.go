@@ -634,7 +634,7 @@ func RanFloat64(val, val2 int64) float64 {
 func GetTrack(point0, point1 [2]float64, point_nums float64) [][2]float64 {
 	x1, y1 := point1[0], point1[1]
 	abs_x := math.Abs(point0[0]-x1) / 2 //两点横坐标相减绝对值/2
-	abs_y := math.Abs(point0[1]-y1) / 2 //两点横坐标相减绝对值/2
+	abs_y := math.Abs(point0[1]-y1) / 2 //两点纵坐标相减绝对值/2
 	pointList := [][2]float64{}
 	cx, cy := (point0[0]+x1)/2+RanFloat64(int64(abs_x*-1), int64(abs_x)), (point0[1]+y1)/2+RanFloat64(int64(abs_y*-1), int64(abs_y))
 	var i float64

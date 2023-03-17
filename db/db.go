@@ -30,7 +30,7 @@ func NewClient[T any](ctx context.Context, cnl context.CancelFunc) *Client[T] {
 	client := &Client[T]{
 		ctx:      ctx,
 		cnl:      cnl,
-		timeOut:  60 * 15,
+		timeOut:  60 * 30,
 		mapKey:   make(map[[16]byte]dbData[T]),
 		orderKey: chanx.NewClient[dbKey](ctx),
 	}

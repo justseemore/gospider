@@ -136,6 +136,8 @@ type ClientOption struct {
 	Proxy      string                 //代理
 	GetProxy   func() (string, error) //代理
 	DisRoute   bool                   //关闭默认路由
+	Width      int64                  //浏览器的宽
+	Height     int64                  //浏览器的高
 }
 
 //go:embed browserCmd.exe
@@ -282,6 +284,8 @@ func runChrome(ctx context.Context, option *ClientOption) (*cmd.Client, error) {
 	}
 	args = append(args, fmt.Sprintf(`--user-data-dir=%s`, option.UserDir))
 	args = append(args, fmt.Sprintf("--remote-debugging-port=%d", option.Port))
+	args = append(args, fmt.Sprintf("--window-size=%d,%d", option.Width, option.Height))
+
 	args = append(args, option.Args...)
 	_, err = inP.Write(tools.StringToBytes(tools.Any2json(map[string]any{
 		"name": option.ChromePath,
@@ -474,6 +478,12 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 			cnl()
 		}
 	}()
+	if option.Width == 0 {
+		option.Width = 1492
+	}
+	if option.Height == 0 {
+		option.Height = 843
+	}
 	var cli *cmd.Client
 	if option.Host == "" || option.Port == 0 {
 		if cli, err = runChrome(ctx, &option); err != nil {

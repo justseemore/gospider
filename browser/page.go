@@ -29,7 +29,6 @@ type Page struct {
 	cnl        context.CancelFunc
 	preWebSock *cdp.WebSock
 	ReqCli     *requests.Client
-	isMove     bool
 
 	nodeId  int64
 	baseUrl string
@@ -350,13 +349,7 @@ func (obj *Page) querySelectorAll(ctx context.Context, selector string) ([]*Dom,
 }
 
 // 移动操作
-func (obj *Page) baseMove(ctx context.Context, point cdp.Point, kind int, steps ...int) error {
-	if !obj.isMove {
-		obj.mouseX = point.X
-		obj.mouseY = point.Y
-		obj.isMove = true
-		return nil
-	}
+func (obj *Page) baseMove(ctx context.Context, x, y float64, kind int, steps ...int) error {
 	var step int
 	if len(steps) > 0 {
 		step = steps[0]
@@ -366,7 +359,7 @@ func (obj *Page) baseMove(ctx context.Context, point cdp.Point, kind int, steps 
 	}
 	for _, poi := range tools.GetTrack(
 		[2]float64{obj.mouseX, obj.mouseY},
-		[2]float64{point.X, point.Y},
+		[2]float64{obj.mouseX + x, obj.mouseY + y},
 		float64(step),
 	) {
 		switch kind {
@@ -388,12 +381,13 @@ func (obj *Page) baseMove(ctx context.Context, point cdp.Point, kind int, steps 
 			return errors.New("not found kind")
 		}
 	}
-	obj.isMove = true
+	obj.mouseX = obj.mouseX + x
+	obj.mouseY = obj.mouseY + y
 	return nil
 }
 
-func (obj *Page) Move(ctx context.Context, point cdp.Point, steps ...int) error {
-	return obj.baseMove(ctx, point, 0, steps...)
+func (obj *Page) Move(ctx context.Context, x, y float64, steps ...int) error {
+	return obj.baseMove(ctx, x, y, 0, steps...)
 }
 
 func (obj *Page) move(ctx context.Context, point cdp.Point) error {
@@ -411,6 +405,15 @@ func (obj *Page) move(ctx context.Context, point cdp.Point) error {
 	return nil
 }
 
+func (obj *Page) Wheel(ctx context.Context, x, y float64) error {
+	_, err := obj.webSock.InputDispatchMouseEvent(ctx,
+		cdp.DispatchMouseEventOption{
+			Type:   "mouseWheel",
+			DeltaX: x,
+			DeltaY: y,
+		})
+	return err
+}
 func (obj *Page) Down(ctx context.Context, point cdp.Point) error {
 	_, err := obj.webSock.InputDispatchMouseEvent(ctx,
 		cdp.DispatchMouseEventOption{
@@ -425,7 +428,6 @@ func (obj *Page) Down(ctx context.Context, point cdp.Point) error {
 	}
 	obj.mouseX = point.X
 	obj.mouseY = point.Y
-	obj.isMove = true
 	return err
 }
 func (obj *Page) Up(ctx context.Context) error {
@@ -451,8 +453,8 @@ func (obj *Page) TouchClick(ctx context.Context, point cdp.Point) error {
 	return obj.TouchUp(ctx)
 }
 
-func (obj *Page) TouchMove(ctx context.Context, point cdp.Point, steps ...int) error {
-	return obj.baseMove(ctx, point, 1, steps...)
+func (obj *Page) TouchMove(ctx context.Context, x, y float64, steps ...int) error {
+	return obj.baseMove(ctx, x, y, 1, steps...)
 }
 func (obj *Page) touchMove(ctx context.Context, point cdp.Point) error { //不需要delta
 	_, err := obj.webSock.InputDispatchTouchEvent(ctx, "touchMove", []cdp.Point{

@@ -29,6 +29,8 @@ type DispatchMouseEventOption struct {
 	X          float64 `json:"x"`
 	Y          float64 `json:"y"`
 	ClickCount int64   `json:"clickCount"`
+	DeltaX     float64 `json:"deltaX"`
+	DeltaY     float64 `json:"deltaY"`
 }
 
 func (obj *WebSock) InputDispatchMouseEvent(ctx context.Context, option DispatchMouseEventOption) (RecvData, error) {
@@ -40,6 +42,8 @@ func (obj *WebSock) InputDispatchMouseEvent(ctx context.Context, option Dispatch
 			"clickCount": option.ClickCount,
 			"x":          option.X,
 			"y":          option.Y,
+			"deltaX":     option.DeltaX,
+			"deltaY":     option.DeltaY,
 		},
 	})
 }
