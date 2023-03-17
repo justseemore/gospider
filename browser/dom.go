@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"gitee.com/baixudong/gospider/bs4"
@@ -134,6 +135,9 @@ func (obj *Dom) QuerySelector(ctx context.Context, selector string) (*Dom, error
 func (obj *Dom) querySelector(ctx context.Context, selector string) (*Dom, error) {
 	rs, err := obj.webSock.DOMQuerySelector(ctx, obj.nodeId, selector)
 	if err != nil {
+		if strings.Contains(err.Error(), "not find") {
+			return nil, nil
+		}
 		return nil, err
 	}
 	nodeId := int64(rs.Result["nodeId"].(float64))
@@ -177,6 +181,9 @@ func (obj *Dom) QuerySelectorAll(ctx context.Context, selector string) ([]*Dom, 
 func (obj *Dom) querySelectorAll(ctx context.Context, selector string) ([]*Dom, error) {
 	rs, err := obj.webSock.DOMQuerySelectorAll(ctx, obj.nodeId, selector)
 	if err != nil {
+		if strings.Contains(err.Error(), "not find") {
+			return nil, nil
+		}
 		return nil, err
 	}
 	doms := []*Dom{}
@@ -203,7 +210,7 @@ func (obj *Dom) WaitSelector(preCtx context.Context, selector string, timeouts .
 	startTime := time.Now().Unix()
 	for time.Now().Unix()-startTime <= timeout {
 		dom, err := obj.QuerySelector(preCtx, selector)
-		if err != nil {
+		if err != nil && !strings.Contains(err.Error(), "not find") {
 			return nil, err
 		}
 		if dom != nil {

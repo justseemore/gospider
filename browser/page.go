@@ -7,6 +7,7 @@ import (
 	"fmt"
 	uurl "net/url"
 	"os"
+	"strings"
 	"time"
 
 	"gitee.com/baixudong/gospider/bs4"
@@ -288,6 +289,9 @@ func (obj *Page) QuerySelector(ctx context.Context, selector string) (*Dom, erro
 func (obj *Page) querySelector(ctx context.Context, selector string) (*Dom, error) {
 	rs, err := obj.webSock.DOMQuerySelector(ctx, obj.nodeId, selector)
 	if err != nil {
+		if strings.Contains(err.Error(), "not find") {
+			return nil, nil
+		}
 		return nil, err
 	}
 	nodeId := int64(rs.Result["nodeId"].(float64))
@@ -335,6 +339,9 @@ func (obj *Page) QuerySelectorAll(ctx context.Context, selector string) ([]*Dom,
 func (obj *Page) querySelectorAll(ctx context.Context, selector string) ([]*Dom, error) {
 	rs, err := obj.webSock.DOMQuerySelectorAll(ctx, obj.nodeId, selector)
 	if err != nil {
+		if strings.Contains(err.Error(), "not find") {
+			return nil, nil
+		}
 		return nil, err
 	}
 	doms := []*Dom{}
