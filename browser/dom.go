@@ -196,7 +196,12 @@ func (obj *Dom) querySelectorAll(ctx context.Context, selector string) ([]*Dom, 
 	return doms, nil
 }
 func (obj *Dom) WaitSelector(preCtx context.Context, selector string, timeouts ...int64) (*Dom, error) {
-	for {
+	var timeout int64 = 30
+	if len(timeouts) > 0 {
+		timeout = timeouts[0]
+	}
+	startTime := time.Now().Unix()
+	for time.Now().Unix()-startTime <= timeout {
 		dom, err := obj.QuerySelector(preCtx, selector)
 		if err != nil {
 			return nil, err
@@ -206,6 +211,7 @@ func (obj *Dom) WaitSelector(preCtx context.Context, selector string, timeouts .
 		}
 		time.Sleep(time.Millisecond * 500)
 	}
+	return nil, errors.New("超时")
 }
 
 func (obj *Dom) Box(ctx context.Context) (cdp.BoxData, error) {
