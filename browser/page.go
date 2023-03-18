@@ -35,19 +35,13 @@ type Page struct {
 	baseUrl string
 	webSock *cdp.WebSock
 }
-type PageOption struct {
-	Proxy    string //代理
-	GetProxy func() (string, error)
-}
 
-func (obj *Page) init(proxy string, getProxy func() (string, error), db *db.Client[cdp.FulData]) error {
+func (obj *Page) init(option requests.ClientOption, db *db.Client[cdp.FulData]) error {
 	var err error
 	if obj.webSock, err = cdp.NewWebSock(
 		obj.ctx,
 		fmt.Sprintf("ws://%s:%d/devtools/page/%s", obj.host, obj.port, obj.id),
-		fmt.Sprintf("http://%s:%d/", obj.host, obj.port),
-		proxy,
-		getProxy,
+		option,
 		db,
 	); err != nil {
 		return err

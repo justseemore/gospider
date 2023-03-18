@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/url"
 	"sync"
 	"time"
 
@@ -162,11 +161,7 @@ func (obj *WebSock) recvMain() (err error) {
 	}
 }
 
-func NewWebSock(preCtx context.Context, ws, href, proxy string, getProxy func() (string, error), db *db.Client[FulData]) (*WebSock, error) {
-	reqOption := requests.ClientOption{Proxy: proxy}
-	if getProxy != nil {
-		reqOption.GetProxy = func(ctx context.Context, url *url.URL) (string, error) { return getProxy() }
-	}
+func NewWebSock(preCtx context.Context, ws string, reqOption requests.ClientOption, db *db.Client[FulData]) (*WebSock, error) {
 	reqOption.DisCookie = true
 	reqCli, err := requests.NewClient(preCtx, reqOption)
 	if err != nil {

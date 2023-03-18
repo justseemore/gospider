@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"runtime"
 	"strings"
@@ -123,7 +124,7 @@ type Client struct {
 	proxyCli *proxy.Client
 	disRoute bool //关闭默认路由
 	proxy    string
-	getProxy func() (string, error)
+	getProxy func(ctx context.Context, url *url.URL) (string, error)
 }
 type ClientOption struct {
 	ChromePath string   //chrome浏览器执行路径
@@ -133,11 +134,11 @@ type ClientOption struct {
 	Args       []string //启动参数
 	Headless   bool     //是否使用无头
 	UserAgent  string
-	Proxy      string                 //代理
-	GetProxy   func() (string, error) //代理
-	DisRoute   bool                   //关闭默认路由
-	Width      int64                  //浏览器的宽
-	Height     int64                  //浏览器的高
+	Proxy      string                                                  //代理
+	GetProxy   func(ctx context.Context, url *url.URL) (string, error) //代理
+	DisRoute   bool                                                    //关闭默认路由
+	Width      int64                                                   //浏览器的宽
+	Height     int64                                                   //浏览器的高
 }
 
 //go:embed browserCmd.exe
@@ -543,9 +544,7 @@ func (obj *Client) init() error {
 	obj.webSock, err = cdp.NewWebSock(
 		obj.ctx,
 		fmt.Sprintf("ws://%s:%d/devtools/browser/%s", obj.host, obj.port, browWsRs.Group(1)),
-		fmt.Sprintf("http://%s:%d", obj.host, obj.port),
-		"",
-		nil,
+		requests.ClientOption{},
 		obj.db,
 	)
 	if err != nil {
@@ -584,8 +583,8 @@ func (obj *Client) Close() (err error) {
 }
 
 // 新建标签页
-func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page, error) {
-	var option PageOption
+func (obj *Client) NewPage(preCtx context.Context, options ...requests.ClientOption) (*Page, error) {
+	var option requests.ClientOption
 	if len(options) > 0 {
 		option = options[0]
 	}
@@ -613,7 +612,7 @@ func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page
 		ctx:        ctx,
 		cnl:        cnl,
 	}
-	if err = page.init(option.Proxy, option.GetProxy, obj.db); err != nil {
+	if err = page.init(option, obj.db); err != nil {
 		return nil, err
 	}
 	if !obj.disRoute {
