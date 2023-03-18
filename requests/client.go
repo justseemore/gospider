@@ -27,24 +27,25 @@ type ClientOption struct {
 	DisDnsCache           bool                                                    //是否关闭dns 缓存,影响dns 解析
 	AddrType              AddrType                                                //优先使用的addr 类型
 	Dns                   string                                                  //dns
+	Ja3                   bool                                                    //开启ja3
+	Ja3Spec               ja3.ClientHelloSpec                                     //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 }
 type Client struct {
-	RedirectNum   int                        //重定向次数
-	DisDecode     bool                       //关闭自动编码
-	DisRead       bool                       //关闭默认读取请求体
-	DisUnZip      bool                       //变比自动解压
-	TryNum        int64                      //重试次数
-	BeforCallBack func(*RequestOption) error //请求前回调的方法
-	AfterCallBack func(*Response) error      //请求后回调的方法
-	ErrCallBack   func(error) bool           //请求error回调
-	Timeout       int64                      //请求超时时间
-	Http2         bool                       //开启http2 transport
-	Ja3           bool                       //开启ja3
-	Ja3Spec       ja3.ClientHelloSpec        //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
-	Headers       any                        //请求头
-	Bar           bool                       //是否开启bar
-	http2Keys     *kinds.Set[string]
-
+	RedirectNum    int                        //重定向次数
+	DisDecode      bool                       //关闭自动编码
+	DisRead        bool                       //关闭默认读取请求体
+	DisUnZip       bool                       //变比自动解压
+	TryNum         int64                      //重试次数
+	BeforCallBack  func(*RequestOption) error //请求前回调的方法
+	AfterCallBack  func(*Response) error      //请求后回调的方法
+	ErrCallBack    func(error) bool           //请求error回调
+	Timeout        int64                      //请求超时时间
+	Http2          bool                       //开启http2 transport
+	Headers        any                        //请求头
+	Bar            bool                       //是否开启bar
+	http2Keys      *kinds.Set[string]
+	ja3            bool                //开启ja3
+	ja3Spec        ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	disCookie      bool
 	disAlive       bool
 	client         *http.Client
@@ -127,6 +128,8 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		baseTransport2: baseTransport2,
 		disAlive:       session_option.DisAlive,
 		disCookie:      session_option.DisCookie,
+		ja3:            session_option.Ja3,
+		ja3Spec:        session_option.Ja3Spec,
 		http2Keys:      kinds.NewSet[string](),
 	}, nil
 }

@@ -361,10 +361,10 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 		option.Http2 = obj.Http2
 	}
 	if !option.Ja3 {
-		option.Ja3 = obj.Ja3
+		option.Ja3 = obj.ja3
 	}
 	if !option.Ja3Spec.IsSet() {
-		option.Ja3Spec = obj.Ja3Spec
+		option.Ja3Spec = obj.ja3Spec
 	}
 	var err error
 	if con, ok := option.Json.(io.Reader); ok {
