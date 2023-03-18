@@ -421,6 +421,7 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	}
 	//开始请求
 	var tryNum int64
+	var setHttp2Try bool
 	for tryNum = 0; tryNum <= optionBak.TryNum; tryNum++ {
 		select {
 		case <-preCtx.Done():
@@ -442,7 +443,13 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 			resp, err = obj.tempRequest(preCtx, option)
 			if err != nil { //有错误
 				if errors.Is(err, ErrFatal) { //致命错误直接返回
-					return
+					if option.Ja3 && !setHttp2Try && strings.Contains(err.Error(), "http2=true") {
+						obj.http2Keys.Add(option.Url.Host)
+						setHttp2Try = true
+						tryNum--
+					} else {
+						return
+					}
 				} else if option.ErrCallBack != nil && option.ErrCallBack(err) { //不是致命错误，有错误回调,错误回调true,直接返回
 					return
 				}
@@ -531,9 +538,15 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		ctxData.ws = true
 		reqs.URL.Scheme = "https"
 	}
+	if request_option.Ja3 && !request_option.Http2 && obj.http2Keys.Has(request_option.Url.Host) {
+		request_option.Http2 = true
+	}
+
 	//根据scheme判断是否启动http2
 	if request_option.Http2 {
-		if reqs.URL.Scheme == "https" {
+		if ctxData.ws {
+			request_option.Http2 = false
+		} else if reqs.URL.Scheme == "https" {
 			ctxData.h2 = request_option.Http2
 		} else {
 			request_option.Http2 = false

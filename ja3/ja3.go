@@ -72,12 +72,35 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 			}
 		}
 	}()
+	var utlsSpec utls.ClientHelloSpec
 	if !ja3Spec.IsSet() {
 		if ja3Spec, err = CreateSpecWithId(HelloChrome_Auto); err != nil {
 			return
 		}
+		utlsSpec = utls.ClientHelloSpec(ja3Spec)
+	} else {
+		utlsSpec = utls.ClientHelloSpec{
+			CipherSuites:       ja3Spec.CipherSuites,
+			CompressionMethods: ja3Spec.CompressionMethods,
+			TLSVersMin:         ja3Spec.TLSVersMin,
+			TLSVersMax:         ja3Spec.TLSVersMax,
+			GetSessionID:       ja3Spec.GetSessionID,
+		}
+		utlsSpec.Extensions = make([]utls.TLSExtension, len(ja3Spec.Extensions))
+		for i := 0; i < len(ja3Spec.Extensions); i++ {
+			extenId, ok := getIdWithExtension(ja3Spec.Extensions[i])
+			if ok {
+				ext := getExtensionWithId(extenId)
+				if ext != nil {
+					utlsSpec.Extensions[i] = ext
+				} else {
+					utlsSpec.Extensions[i] = ja3Spec.Extensions[i]
+				}
+			} else {
+				utlsSpec.Extensions[i] = ja3Spec.Extensions[i]
+			}
+		}
 	}
-	utlsSpec := utls.ClientHelloSpec(ja3Spec)
 	if disHttp2 {
 		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"http/1.1"}}, utls.HelloCustom)
 		for _, Extension := range utlsSpec.Extensions {
@@ -110,65 +133,141 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 }
 
 // https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
-var extMap = map[uint16]utls.TLSExtension{
-	0: &utls.SNIExtension{},
-	5: &utls.StatusRequestExtension{},
-	13: &utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
-		utls.ECDSAWithP256AndSHA256,
-		utls.ECDSAWithP384AndSHA384,
-		utls.ECDSAWithP521AndSHA512,
-		utls.PSSWithSHA256,
-		utls.PSSWithSHA384,
-		utls.PSSWithSHA512,
-		utls.PKCS1WithSHA256,
-		utls.PKCS1WithSHA384,
-		utls.PKCS1WithSHA512,
-		utls.ECDSAWithSHA1,
-		utls.PKCS1WithSHA1,
-	}},
-	16: &utls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
-	17: &utls.StatusRequestV2Extension{},
-	18: &utls.SCTExtension{},
-	21: &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
-	23: &utls.UtlsExtendedMasterSecretExtension{},
-	24: &utls.FakeTokenBindingExtension{},
-	27: &utls.UtlsCompressCertExtension{
-		Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
-	},
-	28: &utls.FakeRecordSizeLimitExtension{}, //Limit: 0x4001
-	34: &utls.FakeDelegatedCredentialsExtension{},
-	35: &utls.SessionTicketExtension{},
-	41: &utls.FakePreSharedKeyExtension{},
-	44: &utls.CookieExtension{},
-	45: &utls.PSKKeyExchangeModesExtension{Modes: []uint8{
-		utls.PskModeDHE,
-	}},
-
-	50: &utls.SignatureAlgorithmsCertExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
-		utls.ECDSAWithP256AndSHA256,
-		utls.ECDSAWithP384AndSHA384,
-		utls.ECDSAWithP521AndSHA512,
-		utls.PSSWithSHA256,
-		utls.PSSWithSHA384,
-		utls.PSSWithSHA512,
-		utls.PKCS1WithSHA256,
-		utls.PKCS1WithSHA384,
-		utls.PKCS1WithSHA512,
-		utls.ECDSAWithSHA1,
-		utls.PKCS1WithSHA1,
-	}},
-	51: &utls.KeyShareExtension{KeyShares: []utls.KeyShare{
-		{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
-		{Group: utls.X25519},
-		{Group: utls.CurveP256},
-	}},
-	13172: &utls.NPNExtension{},
-	17513: &utls.ApplicationSettingsExtension{SupportedProtocols: []string{"h2", "http/1.1"}},
-	30031: &utls.FakeChannelIDExtension{OldExtensionID: true}, //FIXME
-	30032: &utls.FakeChannelIDExtension{},                     //FIXME
-	65281: &utls.RenegotiationInfoExtension{Renegotiation: utls.RenegotiateOnceAsClient},
+func getExtensionWithId(extensionId uint16) utls.TLSExtension {
+	switch extensionId {
+	case 0:
+		return &utls.SNIExtension{}
+	case 5:
+		return &utls.StatusRequestExtension{}
+	case 13:
+		return &utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
+			utls.ECDSAWithP256AndSHA256,
+			utls.ECDSAWithP384AndSHA384,
+			utls.ECDSAWithP521AndSHA512,
+			utls.PSSWithSHA256,
+			utls.PSSWithSHA384,
+			utls.PSSWithSHA512,
+			utls.PKCS1WithSHA256,
+			utls.PKCS1WithSHA384,
+			utls.PKCS1WithSHA512,
+			utls.ECDSAWithSHA1,
+			utls.PKCS1WithSHA1,
+		}}
+	case 16:
+		return &utls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}}
+	case 17:
+		return &utls.StatusRequestV2Extension{}
+	case 18:
+		return &utls.SCTExtension{}
+	case 21:
+		return &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle}
+	case 23:
+		return &utls.UtlsExtendedMasterSecretExtension{}
+	case 24:
+		return &utls.FakeTokenBindingExtension{}
+	case 27:
+		return &utls.UtlsCompressCertExtension{
+			Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
+		}
+	case 28:
+		return &utls.FakeRecordSizeLimitExtension{} //Limit: 0x4001
+	case 34:
+		return &utls.FakeDelegatedCredentialsExtension{}
+	case 35:
+		return &utls.SessionTicketExtension{}
+	case 41:
+		return &utls.FakePreSharedKeyExtension{}
+	case 44:
+		return &utls.CookieExtension{}
+	case 45:
+		return &utls.PSKKeyExchangeModesExtension{Modes: []uint8{
+			utls.PskModeDHE,
+		}}
+	case 50:
+		return &utls.SignatureAlgorithmsCertExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
+			utls.ECDSAWithP256AndSHA256,
+			utls.ECDSAWithP384AndSHA384,
+			utls.ECDSAWithP521AndSHA512,
+			utls.PSSWithSHA256,
+			utls.PSSWithSHA384,
+			utls.PSSWithSHA512,
+			utls.PKCS1WithSHA256,
+			utls.PKCS1WithSHA384,
+			utls.PKCS1WithSHA512,
+			utls.ECDSAWithSHA1,
+			utls.PKCS1WithSHA1,
+		}}
+	case 51:
+		return &utls.KeyShareExtension{KeyShares: []utls.KeyShare{
+			{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
+			{Group: utls.X25519},
+			{Group: utls.CurveP256},
+		}}
+	case 13172:
+		return &utls.NPNExtension{}
+	case 17513:
+		return &utls.ApplicationSettingsExtension{SupportedProtocols: []string{"h2", "http/1.1"}}
+	case 30031:
+		return &utls.FakeChannelIDExtension{OldExtensionID: true} //FIXME
+	case 30032:
+		return &utls.FakeChannelIDExtension{} //FIXME
+	case 65281:
+		return &utls.RenegotiationInfoExtension{Renegotiation: utls.RenegotiateOnceAsClient}
+	default:
+		return nil
+	}
 }
 
+func getIdWithExtension(extension utls.TLSExtension) (uint16, bool) {
+	switch extension.(type) {
+	case *utls.SNIExtension:
+		return 0, true
+	case *utls.StatusRequestExtension:
+		return 5, true
+	case *utls.SignatureAlgorithmsExtension:
+		return 13, true
+	case *utls.ALPNExtension:
+		return 16, true
+	case *utls.StatusRequestV2Extension:
+		return 17, true
+	case *utls.SCTExtension:
+		return 18, true
+	case *utls.UtlsPaddingExtension:
+		return 21, true
+	case *utls.UtlsExtendedMasterSecretExtension:
+		return 23, true
+	case *utls.FakeTokenBindingExtension:
+		return 24, true
+	case *utls.UtlsCompressCertExtension:
+		return 27, true
+	case *utls.FakeRecordSizeLimitExtension:
+		return 28, true
+	case *utls.FakeDelegatedCredentialsExtension:
+		return 34, true
+	case *utls.SessionTicketExtension:
+		return 35, true
+	case *utls.FakePreSharedKeyExtension:
+		return 41, true
+	case *utls.CookieExtension:
+		return 44, true
+	case *utls.PSKKeyExchangeModesExtension:
+		return 45, true
+	case *utls.SignatureAlgorithmsCertExtension:
+		return 50, true
+	case *utls.KeyShareExtension:
+		return 51, true
+	case *utls.NPNExtension:
+		return 13172, true
+	case *utls.ApplicationSettingsExtension:
+		return 17513, true
+	case *utls.FakeChannelIDExtension:
+		return 30031, true
+	case *utls.RenegotiationInfoExtension:
+		return 65281, true
+	default:
+		return 0, false
+	}
+}
 func isGREASEUint16(v uint16) bool {
 	// First byte is same as second byte
 	// and lowest nibble is 0xa
@@ -291,8 +390,8 @@ func createExtensions(extensions []string, tlsExtension, curvesExtension, pointE
 		case 43:
 			allExtensions = append(allExtensions, tlsExtension)
 		default:
-			ext, ok := extMap[extensionId]
-			if !ok {
+			ext := getExtensionWithId(extensionId)
+			if ext == nil {
 				if isGREASEUint16(extensionId) {
 					allExtensions = append(allExtensions, &utls.UtlsGREASEExtension{})
 				} else {

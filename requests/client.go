@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"gitee.com/baixudong/gospider/ja3"
+	"gitee.com/baixudong/gospider/kinds"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/publicsuffix"
 )
@@ -42,6 +43,7 @@ type Client struct {
 	Ja3Spec       ja3.ClientHelloSpec        //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	Headers       any                        //请求头
 	Bar           bool                       //是否开启bar
+	http2Keys     *kinds.Set[string]
 
 	disCookie      bool
 	disAlive       bool
@@ -116,7 +118,17 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 	client.CheckRedirect = checkRedirect
 	client2.CheckRedirect = checkRedirect
 
-	return &Client{ctx: ctx, cnl: cnl, client: &client, baseTransport: &baseTransport, client2: &client2, baseTransport2: baseTransport2, disAlive: session_option.DisAlive, disCookie: session_option.DisCookie}, nil
+	return &Client{
+		ctx:            ctx,
+		cnl:            cnl,
+		client:         &client,
+		baseTransport:  &baseTransport,
+		client2:        &client2,
+		baseTransport2: baseTransport2,
+		disAlive:       session_option.DisAlive,
+		disCookie:      session_option.DisCookie,
+		http2Keys:      kinds.NewSet[string](),
+	}, nil
 }
 func checkRedirect(req *http.Request, via []*http.Request) error {
 	ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
