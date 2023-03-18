@@ -220,50 +220,50 @@ func getExtensionWithId(extensionId uint16) utls.TLSExtension {
 
 func getIdWithExtension(extension utls.TLSExtension) (uint16, bool) {
 	switch extension.(type) {
-	case *utls.SNIExtension:
-		return 0, true
-	case *utls.StatusRequestExtension:
-		return 5, true
-	case *utls.SignatureAlgorithmsExtension:
-		return 13, true
-	case *utls.ALPNExtension:
-		return 16, true
-	case *utls.StatusRequestV2Extension:
-		return 17, true
-	case *utls.SCTExtension:
-		return 18, true
-	case *utls.UtlsPaddingExtension:
-		return 21, true
-	case *utls.UtlsExtendedMasterSecretExtension:
-		return 23, true
-	case *utls.FakeTokenBindingExtension:
-		return 24, true
-	case *utls.UtlsCompressCertExtension:
-		return 27, true
-	case *utls.FakeRecordSizeLimitExtension:
-		return 28, true
-	case *utls.FakeDelegatedCredentialsExtension:
-		return 34, true
-	case *utls.SessionTicketExtension:
-		return 35, true
-	case *utls.FakePreSharedKeyExtension:
-		return 41, true
-	case *utls.CookieExtension:
-		return 44, true
-	case *utls.PSKKeyExchangeModesExtension:
-		return 45, true
-	case *utls.SignatureAlgorithmsCertExtension:
-		return 50, true
 	case *utls.KeyShareExtension:
 		return 51, true
-	case *utls.NPNExtension:
-		return 13172, true
-	case *utls.ApplicationSettingsExtension:
-		return 17513, true
-	case *utls.FakeChannelIDExtension:
-		return 30031, true
-	case *utls.RenegotiationInfoExtension:
-		return 65281, true
+	// case *utls.SNIExtension:
+	// 	return 0, true
+	// case *utls.StatusRequestExtension:
+	// 	return 5, true
+	// case *utls.SignatureAlgorithmsExtension:
+	// 	return 13, true
+	// case *utls.ALPNExtension:
+	// 	return 16, true
+	// case *utls.StatusRequestV2Extension:
+	// 	return 17, true
+	// case *utls.SCTExtension:
+	// 	return 18, true
+	// case *utls.UtlsPaddingExtension:
+	// 	return 21, true
+	// case *utls.UtlsExtendedMasterSecretExtension:
+	// 	return 23, true
+	// case *utls.FakeTokenBindingExtension:
+	// 	return 24, true
+	// case *utls.UtlsCompressCertExtension:
+	// 	return 27, true
+	// case *utls.FakeRecordSizeLimitExtension:
+	// 	return 28, true
+	// case *utls.FakeDelegatedCredentialsExtension:
+	// 	return 34, true
+	// case *utls.SessionTicketExtension:
+	// 	return 35, true
+	// case *utls.FakePreSharedKeyExtension:
+	// 	return 41, true
+	// case *utls.CookieExtension:
+	// 	return 44, true
+	// case *utls.PSKKeyExchangeModesExtension:
+	// 	return 45, true
+	// case *utls.SignatureAlgorithmsCertExtension:
+	// 	return 50, true
+	// case *utls.NPNExtension:
+	// 	return 13172, true
+	// case *utls.ApplicationSettingsExtension:
+	// 	return 17513, true
+	// case *utls.FakeChannelIDExtension:
+	// 	return 30031, true
+	// case *utls.RenegotiationInfoExtension:
+	// 	return 65281, true
 	default:
 		return 0, false
 	}
