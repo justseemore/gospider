@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
+	"strconv"
 
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/tools"
@@ -36,9 +38,9 @@ func getBaseUrl(option ClientOption) (string, error) {
 			baseUrl += "http://"
 		}
 		if option.Usr != "" && option.Pwd != "" {
-			baseUrl += fmt.Sprintf("%s:%s@%s:%d", option.Usr, option.Pwd, option.Host, option.Port)
+			baseUrl += fmt.Sprintf("%s:%s@%s", option.Usr, option.Pwd, net.JoinHostPort(option.Host, strconv.Itoa(option.Port)))
 		} else {
-			baseUrl += fmt.Sprintf("%s:%d", option.Host, option.Port)
+			baseUrl += net.JoinHostPort(option.Host, strconv.Itoa(option.Port))
 		}
 	} else {
 		uurl, err := url.Parse(option.BaseUrl)

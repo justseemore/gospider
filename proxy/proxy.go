@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	_ "unsafe"
@@ -162,7 +163,8 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		}
 	}
 	//构造listen
-	if server.listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", option.Host, option.Port)); err != nil {
+
+	if server.listener, err = net.Listen("tcp", net.JoinHostPort(option.Host, strconv.Itoa(option.Port))); err != nil {
 		return nil, err
 	}
 	return &server, nil
@@ -748,7 +750,7 @@ func (obj *Client) getSocketAddr(client *ProxyConn) (string, error) {
 	if _, err = io.ReadFull(client.reader, buf[:2]); err != nil { //读取端口号
 		return addr, fmt.Errorf("read port failed:%w", err)
 	}
-	return fmt.Sprintf("%s:%d", addr, binary.BigEndian.Uint16(buf[:2])), nil
+	return net.JoinHostPort(addr, strconv.Itoa(int(binary.BigEndian.Uint16(buf[:2])))), nil
 }
 func (obj *Client) verifySocket(client *ProxyConn) error {
 	ver, err := client.reader.ReadByte() //读取第一个字节判断是否是socks5协议

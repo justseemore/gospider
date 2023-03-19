@@ -3,7 +3,9 @@ package redis
 import (
 	"errors"
 	"fmt"
+	"net"
 	"sort"
+	"strconv"
 	"sync"
 
 	"gitee.com/baixudong/gospider/tools"
@@ -35,7 +37,7 @@ func NewClient(options ...ClientOption) (*Client, error) {
 		option.Port = 6379
 	}
 	redCli := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", option.Host, option.Port),
+		Addr:     net.JoinHostPort(option.Host, strconv.Itoa(option.Port)),
 		DB:       option.Db,
 		Password: option.Pwd,
 	})
@@ -194,9 +196,9 @@ func (r *Client) GetProxyDatas(key string) ([]Proxy, error) {
 		proxy.Ttl = val.Get("ttl").Int()
 
 		if proxy.Usr != "" && proxy.Pwd != "" {
-			proxy.Proxy = fmt.Sprintf("%s:%s@%s:%d", proxy.Usr, proxy.Pwd, proxy.Ip, proxy.Port)
+			proxy.Proxy = fmt.Sprintf("%s:%s@%s", proxy.Usr, proxy.Pwd, net.JoinHostPort(proxy.Ip, strconv.Itoa(int(proxy.Port))))
 		} else {
-			proxy.Proxy = fmt.Sprintf("%s:%d", proxy.Ip, proxy.Port)
+			proxy.Proxy = net.JoinHostPort(proxy.Ip, strconv.Itoa(int(proxy.Port)))
 		}
 		proxys = append(proxys, proxy)
 	}

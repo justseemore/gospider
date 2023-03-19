@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"gitee.com/baixudong/gospider/blog"
@@ -92,7 +93,7 @@ func NewClient(ctx context.Context, options ...ClientOption) (*Client, error) {
 			return nil, err
 		}
 	}
-	client.addr = fmt.Sprintf("%s:%d", option.Host, option.Port)
+	client.addr = net.JoinHostPort(option.Host, strconv.Itoa(option.Port))
 	client.headless = option.Headless
 	client.proxy = option.Proxy
 	client.logCli = blog.NewClient(option.logPath)

@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -293,7 +292,7 @@ func (obj *DialClient) DnsDialContext(ctx context.Context, netword string, addr 
 		if strings.Contains(obj.dns, ":") {
 			addr = obj.dns
 		} else {
-			addr = fmt.Sprintf("%s:%s", obj.dns, "53")
+			addr = net.JoinHostPort(obj.dns, "53")
 		}
 	}
 	return obj.dialer.DialContext(ctx, netword, addr)
@@ -477,9 +476,9 @@ func (obj *DialClient) DialContextForProxy(ctx context.Context, netword string, 
 	}
 	if proxyUrl.Port() == "" {
 		if proxyUrl.Scheme == "http" {
-			proxyUrl.Host = fmt.Sprintf("%s:%s", proxyUrl.Hostname(), "80")
+			proxyUrl.Host = net.JoinHostPort(proxyUrl.Hostname(), "80")
 		} else if proxyUrl.Scheme == "https" {
-			proxyUrl.Host = fmt.Sprintf("%s:%s", proxyUrl.Hostname(), "443")
+			proxyUrl.Host = net.JoinHostPort(proxyUrl.Hostname(), "443")
 		}
 	}
 	switch scheme {

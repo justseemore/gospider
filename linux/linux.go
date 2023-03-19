@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -122,7 +124,7 @@ func NewClient(option ClientOption) (*Client, error) {
 	} else {
 		return nil, errors.New("请输入密码")
 	}
-	addr := fmt.Sprintf("%s:%d", option.Host, option.Port)
+	addr := net.JoinHostPort(option.Host, strconv.Itoa(option.Port))
 	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
 		return nil, err
