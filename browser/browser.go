@@ -551,7 +551,6 @@ func (obj *Client) init() error {
 		return err
 	}
 	obj.proxyCli, err = proxy.NewClient(obj.ctx, proxy.ClientOption{
-		Host:  tools.GetHost(),
 		Port:  obj.port,
 		Proxy: fmt.Sprintf("http://%s:%d", obj.host, obj.port),
 	})

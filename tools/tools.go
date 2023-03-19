@@ -302,15 +302,19 @@ func GetDefaultDir() (string, error) {
 func PathJoin(elem ...string) string {
 	return filepath.Join(elem...)
 }
-func GetHost() string {
-	hosts := GetHosts()
+func GetHost(addrTypes ...int) string {
+	hosts := GetHosts(addrTypes...)
 	if len(hosts) == 0 {
 		return "0.0.0.0"
 	} else {
 		return hosts[0]
 	}
 }
-func GetHosts() []string {
+func GetHosts(addrTypes ...int) []string {
+	var addrType int
+	if len(addrTypes) > 0 {
+		addrType = addrTypes[0]
+	}
 	result := []string{}
 	lls, err := net.InterfaceAddrs()
 	if err != nil {
@@ -319,7 +323,9 @@ func GetHosts() []string {
 	for _, ll := range lls {
 		mm, ok := ll.(*net.IPNet)
 		if ok && mm.IP.IsPrivate() {
-			result = append(result, mm.IP.String())
+			if addrType == 0 || ParseIp(mm.IP) == addrType {
+				result = append(result, mm.IP.String())
+			}
 		}
 	}
 	return result
