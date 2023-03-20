@@ -121,7 +121,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	var fulData FulData
 	var err error
 	routeKey := keyMd5(routeOption, resourceType)
-	if !obj.webSock.filterKeys.Has(routeKey) { //如果存在
+	if !obj.webSock.disDataCache && !obj.webSock.filterKeys.Has(routeKey) { //如果存在
 		if fulData, err = obj.webSock.db.Get(routeKey); err == nil { //如果有緩存
 			if resourceType == "Document" || "resourceType" == "XHR" { //第一次走緩存，第二次不走緩存
 				obj.webSock.filterKeys.Add(routeKey)
@@ -146,7 +146,9 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	fulData.Body = rs.Text()
 	fulData.Headers = headers
 	fulData.ResponsePhrase = rs.Status()
-	obj.webSock.db.Put(routeKey, fulData)
+	if !obj.webSock.disDataCache {
+		obj.webSock.db.Put(routeKey, fulData)
+	}
 	return fulData, nil
 }
 

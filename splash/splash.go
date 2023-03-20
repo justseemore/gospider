@@ -247,7 +247,7 @@ func (obj *Client) taskMain(_ context.Context, reqCtx context.Context, brow *bro
 	var result taskResult
 	var err error
 	obj.logCli.Info("new page", map[string]any{"url": rendOption.Url, "proxy": rendOption.Proxy})
-	page, err := brow.NewPage(reqCtx, requests.ClientOption{Proxy: rendOption.Proxy})
+	page, err := brow.NewPage(reqCtx, browser.PageOption{Proxy: rendOption.Proxy})
 	if err != nil {
 		return result, err
 	}

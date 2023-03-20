@@ -24,7 +24,7 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	page, err := browCli.NewPage(nil, requests.ClientOption{Ja3Spec: Ja3Spec})
+	page, err := browCli.NewPage(nil, browser.PageOption{Ja3Spec: Ja3Spec})
 	if err != nil {
 		log.Panic(err)
 	}

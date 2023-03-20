@@ -36,12 +36,12 @@ type Page struct {
 	webSock *cdp.WebSock
 }
 
-func (obj *Page) init(option requests.ClientOption, db *db.Client[cdp.FulData]) error {
+func (obj *Page) init(option PageOption, db *db.Client[cdp.FulData]) error {
 	var err error
 	if obj.webSock, err = cdp.NewWebSock(
 		obj.ctx,
 		fmt.Sprintf("ws://%s:%d/devtools/page/%s", obj.host, obj.port, obj.id),
-		option,
+		cdp.WebSockOption(option),
 		db,
 	); err != nil {
 		return err

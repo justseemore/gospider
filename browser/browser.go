@@ -21,6 +21,7 @@ import (
 	"gitee.com/baixudong/gospider/cmd"
 	"gitee.com/baixudong/gospider/conf"
 	"gitee.com/baixudong/gospider/db"
+	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/proxy"
 	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/requests"
@@ -112,33 +113,37 @@ var stealth string
 var stealth2 string
 
 type Client struct {
-	db       *db.Client[cdp.FulData]
-	cmdCli   *cmd.Client
-	reqCli   *requests.Client
-	port     int
-	host     string
-	lock     sync.Mutex
-	ctx      context.Context
-	cnl      context.CancelFunc
-	webSock  *cdp.WebSock
-	proxyCli *proxy.Client
-	disRoute bool //关闭默认路由
-	proxy    string
-	getProxy func(ctx context.Context, url *url.URL) (string, error)
+	db           *db.Client[cdp.FulData]
+	cmdCli       *cmd.Client
+	reqCli       *requests.Client
+	port         int
+	host         string
+	lock         sync.Mutex
+	ctx          context.Context
+	cnl          context.CancelFunc
+	webSock      *cdp.WebSock
+	proxyCli     *proxy.Client
+	disRoute     bool //关闭默认路由
+	proxy        string
+	getProxy     func(ctx context.Context, url *url.URL) (string, error)
+	disDataCache bool
+	ja3Spec      ja3.ClientHelloSpec
 }
 type ClientOption struct {
-	ChromePath string   //chrome浏览器执行路径
-	Host       string   //连接host
-	Port       int      //连接port
-	UserDir    string   //设置用户目录
-	Args       []string //启动参数
-	Headless   bool     //是否使用无头
-	UserAgent  string
-	Proxy      string                                                  //代理
-	GetProxy   func(ctx context.Context, url *url.URL) (string, error) //代理
-	DisRoute   bool                                                    //关闭默认路由
-	Width      int64                                                   //浏览器的宽
-	Height     int64                                                   //浏览器的高
+	ChromePath   string   //chrome浏览器执行路径
+	Host         string   //连接host
+	Port         int      //连接port
+	UserDir      string   //设置用户目录
+	Args         []string //启动参数
+	Headless     bool     //是否使用无头
+	DisDataCache bool     //关闭数据缓存
+	Ja3Spec      ja3.ClientHelloSpec
+	UserAgent    string
+	Proxy        string                                                  //代理http,https,socks5,ex: http://127.0.0.1:7005
+	GetProxy     func(ctx context.Context, url *url.URL) (string, error) //代理
+	DisRoute     bool                                                    //关闭默认路由
+	Width        int64                                                   //浏览器的宽
+	Height       int64                                                   //浏览器的高
 }
 
 //go:embed browserCmd.exe
@@ -300,9 +305,9 @@ func runChrome(ctx context.Context, option *ClientOption) (*cmd.Client, error) {
 }
 
 var chromeArgs = []string{
-	"--useAutomationExtension=false",
-	"--excludeSwitches=enable-automation",
 	"--no-sandbox",
+	"--useAutomationExtension=false",
+	"--excludeSwitches=enable-automation,ignore-certificate-errors",
 	"--no-pings",
 	"--no-zygote",
 	"--mute-audio",
@@ -311,13 +316,13 @@ var chromeArgs = []string{
 	"--disable-software-rasterizer",
 	"--disable-cloud-import",
 	"--disable-gesture-typing",
-	"--disable-setuid-sandbox",
 	"--disable-offer-store-unmasked-wallet-cards",
 	"--disable-offer-upload-credit-cards",
 	"--disable-print-preview",
 	"--disable-voice-input",
 	"--disable-wake-on-wifi",
 	"--disable-cookie-encryption",
+	"--disable-notifications",
 
 	"--ignore-gpu-blocklist",
 	"--enable-async-dns",
@@ -495,9 +500,13 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 	if reqCli, err = requests.NewClient(ctx); err != nil {
 		return
 	}
+
 	client = &Client{
-		proxy:    option.Proxy,
-		getProxy: option.GetProxy,
+		proxy:        option.Proxy,
+		getProxy:     option.GetProxy,
+		disDataCache: option.DisDataCache,
+		ja3Spec:      option.Ja3Spec,
+
 		ctx:      ctx,
 		cnl:      cnl,
 		cmdCli:   cli,
@@ -544,7 +553,7 @@ func (obj *Client) init() error {
 	obj.webSock, err = cdp.NewWebSock(
 		obj.ctx,
 		fmt.Sprintf("ws://%s:%d/devtools/browser/%s", obj.host, obj.port, browWsRs.Group(1)),
-		requests.ClientOption{},
+		cdp.WebSockOption{},
 		obj.db,
 	)
 	if err != nil {
@@ -561,12 +570,18 @@ func (obj *Client) init() error {
 	go obj.proxyCli.Run()
 	return obj.proxyCli.Err
 }
+
+// 浏览器是否结束的 chan
 func (obj *Client) Done() <-chan struct{} {
 	return obj.webSock.Done()
 }
+
+// 返回浏览器远程控制的地址
 func (obj *Client) Addr() string {
 	return obj.proxyCli.Addr()
 }
+
+// 关闭浏览器
 func (obj *Client) Close() (err error) {
 	if obj.webSock != nil {
 		if err = obj.webSock.BrowserClose(); err != nil {
@@ -581,9 +596,16 @@ func (obj *Client) Close() (err error) {
 	return
 }
 
+type PageOption struct {
+	Proxy        string
+	GetProxy     func(ctx context.Context, url *url.URL) (string, error)
+	DisDataCache bool //关闭数据缓存
+	Ja3Spec      ja3.ClientHelloSpec
+}
+
 // 新建标签页
-func (obj *Client) NewPage(preCtx context.Context, options ...requests.ClientOption) (*Page, error) {
-	var option requests.ClientOption
+func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page, error) {
+	var option PageOption
 	if len(options) > 0 {
 		option = options[0]
 	}
@@ -592,6 +614,12 @@ func (obj *Client) NewPage(preCtx context.Context, options ...requests.ClientOpt
 	}
 	if option.GetProxy == nil {
 		option.GetProxy = obj.getProxy
+	}
+	if !option.DisDataCache {
+		option.DisDataCache = obj.disDataCache
+	}
+	if !option.Ja3Spec.IsSet() {
+		option.Ja3Spec = obj.ja3Spec
 	}
 
 	rs, err := obj.webSock.TargetCreateTarget(preCtx, "")

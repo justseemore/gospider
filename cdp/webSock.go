@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"sync"
 	"time"
 
 	"gitee.com/baixudong/gospider/db"
+	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/thread"
@@ -39,19 +41,20 @@ type RecvData struct {
 }
 
 type WebSock struct {
-	db         *db.Client[FulData]
-	ids        map[int64]*event
-	methods    map[string]*event
-	methodLock sync.RWMutex
-	idLock     sync.RWMutex
-	conn       *websocket.Conn
-	ctx        context.Context
-	cnl        context.CancelCauseFunc
-	id         atomic.Int64
-	RouteFunc  func(context.Context, *Route)
-	reqCli     *requests.Client
-	lock       sync.Mutex
-	filterKeys *kinds.Set[[16]byte]
+	disDataCache bool
+	db           *db.Client[FulData]
+	ids          map[int64]*event
+	methods      map[string]*event
+	methodLock   sync.RWMutex
+	idLock       sync.RWMutex
+	conn         *websocket.Conn
+	ctx          context.Context
+	cnl          context.CancelCauseFunc
+	id           atomic.Int64
+	RouteFunc    func(context.Context, *Route)
+	reqCli       *requests.Client
+	lock         sync.Mutex
+	filterKeys   *kinds.Set[[16]byte]
 }
 
 type DataEntrie struct {
@@ -161,7 +164,19 @@ func (obj *WebSock) recvMain() (err error) {
 	}
 }
 
-func NewWebSock(preCtx context.Context, ws string, reqOption requests.ClientOption, db *db.Client[FulData]) (*WebSock, error) {
+type WebSockOption struct {
+	Proxy        string
+	GetProxy     func(ctx context.Context, url *url.URL) (string, error)
+	DisDataCache bool //关闭数据缓存
+	Ja3Spec      ja3.ClientHelloSpec
+}
+
+func NewWebSock(preCtx context.Context, ws string, option WebSockOption, db *db.Client[FulData]) (*WebSock, error) {
+	reqOption := requests.ClientOption{
+		Proxy:    option.Proxy,
+		GetProxy: option.GetProxy,
+		Ja3Spec:  option.Ja3Spec,
+	}
 	reqOption.DisCookie = true
 	reqCli, err := requests.NewClient(preCtx, reqOption)
 	if err != nil {
@@ -175,11 +190,13 @@ func NewWebSock(preCtx context.Context, ws string, reqOption requests.ClientOpti
 	}
 	response.WebSocket().SetReadLimit(1024 * 1024 * 1024) //1G
 	cli := &WebSock{
-		ids:        make(map[int64]*event),
-		methods:    make(map[string]*event),
-		conn:       response.WebSocket(),
-		db:         db,
-		reqCli:     reqCli,
+		ids:          make(map[int64]*event),
+		methods:      make(map[string]*event),
+		conn:         response.WebSocket(),
+		db:           db,
+		reqCli:       reqCli,
+		disDataCache: option.DisDataCache,
+
 		filterKeys: kinds.NewSet[[16]byte](),
 	}
 	cli.ctx, cli.cnl = context.WithCancelCause(preCtx)
