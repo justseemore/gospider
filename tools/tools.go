@@ -727,9 +727,17 @@ func SplitHostPort(address string) (string, int, error) {
 }
 
 func GetRootCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
+	beforDate, err := time.ParseInLocation(time.DateOnly, "2023-03-20", time.Local)
+	if err != nil {
+		return nil, err
+	}
+	afterDate, err := time.ParseInLocation(time.DateOnly, "2033-03-20", time.Local)
+	if err != nil {
+		return nil, err
+	}
 	rootCsr := &x509.Certificate{
 		Version:      3,
-		SerialNumber: big.NewInt(123456),
+		SerialNumber: big.NewInt(10000),
 		Subject: pkix.Name{
 			Country:            []string{"CN"},
 			Province:           []string{"Shanghai"},
@@ -738,8 +746,8 @@ func GetRootCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
 			OrganizationalUnit: []string{"JediProxy"},
 			CommonName:         "Jedi Root CA",
 		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(10, 0, 0),
+		NotBefore:             beforDate,
+		NotAfter:              afterDate,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 		MaxPathLen:            1,
@@ -752,10 +760,22 @@ func GetRootCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
 	}
 	return x509.ParseCertificate(rootDer)
 }
-func GetInterCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey) (*x509.Certificate, error) {
+func GetInterCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
+	rootCrt, err := GetRootCert(key)
+	if err != nil {
+		return nil, err
+	}
+	beforDate, err := time.ParseInLocation(time.DateOnly, "2023-03-20", time.Local)
+	if err != nil {
+		return nil, err
+	}
+	afterDate, err := time.ParseInLocation(time.DateOnly, "2033-03-20", time.Local)
+	if err != nil {
+		return nil, err
+	}
 	interCsr := &x509.Certificate{
 		Version:      3,
-		SerialNumber: big.NewInt(123457),
+		SerialNumber: big.NewInt(10001),
 		Subject: pkix.Name{
 			Country:            []string{"CN"},
 			Province:           []string{"Shanghai"},
@@ -764,24 +784,32 @@ func GetInterCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey) (*x509.Cert
 			OrganizationalUnit: []string{"JediProxy"},
 			CommonName:         "Jedi Inter CA",
 		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(1, 0, 0),
+		NotBefore:             beforDate,
+		NotAfter:              afterDate,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 		MaxPathLen:            0,
 		MaxPathLenZero:        true,
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 	}
-	interDer, err := x509.CreateCertificate(rand2.Reader, interCsr, rootCert, key.Public(), key)
+	interDer, err := x509.CreateCertificate(rand2.Reader, interCsr, rootCrt, key.Public(), key)
 	if err != nil {
 		return nil, err
 	}
 	return x509.ParseCertificate(interDer)
 }
 func GetCert(interCert *x509.Certificate, key *ecdsa.PrivateKey, serverName string) (*x509.Certificate, error) {
+	beforDate, err := time.ParseInLocation(time.DateOnly, "2023-03-20", time.Local)
+	if err != nil {
+		return nil, err
+	}
+	afterDate, err := time.ParseInLocation(time.DateOnly, "2033-03-20", time.Local)
+	if err != nil {
+		return nil, err
+	}
 	csr := &x509.Certificate{
 		Version:      3,
-		SerialNumber: big.NewInt(123458),
+		SerialNumber: big.NewInt(10002),
 		Subject: pkix.Name{
 			Country:            []string{"CN"},
 			Province:           []string{"Shanghai"},
@@ -791,8 +819,8 @@ func GetCert(interCert *x509.Certificate, key *ecdsa.PrivateKey, serverName stri
 			CommonName:         serverName,
 		},
 		DNSNames:              []string{serverName},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(1, 0, 0),
+		NotBefore:             beforDate,
+		NotAfter:              afterDate,
 		BasicConstraintsValid: true,
 		IsCA:                  false,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,

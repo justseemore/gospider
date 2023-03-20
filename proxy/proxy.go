@@ -27,7 +27,7 @@ import (
 	"gitee.com/baixudong/gospider/websocket"
 )
 
-//go:embed interCert.crt
+//go:embed rootCert.crt
 var CrtFile []byte
 
 //go:embed rootCert.key
@@ -52,8 +52,8 @@ func getCert(serverName string) (tlsCert tls.Certificate, err error) {
 type ClientOption struct {
 	Ja3          bool                //是否开启ja3
 	Ja3Spec      ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
-	ProxyJa3     bool                //proxy是否开启ja3
-	ProxyJa3Spec ja3.ClientHelloSpec //proxy指定ja3Spec,//指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	ProxyJa3     bool                //连接代理时是否开启ja3
+	ProxyJa3Spec ja3.ClientHelloSpec //连接代理时指定ja3Spec,//指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	DisDnsCache  bool                //是否关闭dns 缓存
 
 	Usr     string   //用户名
@@ -99,6 +99,8 @@ type Client struct {
 	ja3Spec  ja3.ClientHelloSpec
 	ctx      context.Context
 	cnl      context.CancelFunc
+	host     string
+	port     string
 }
 
 func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error) {
@@ -163,8 +165,9 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		}
 	}
 	//构造listen
-
-	if server.listener, err = net.Listen("tcp", net.JoinHostPort(option.Host, strconv.Itoa(option.Port))); err != nil {
+	server.host = option.Host
+	server.port = strconv.Itoa(option.Port)
+	if server.listener, err = net.Listen("tcp", net.JoinHostPort(server.host, server.port)); err != nil {
 		return nil, err
 	}
 	return &server, nil
@@ -172,7 +175,7 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 
 // 代理监听的端口
 func (obj *Client) Addr() string {
-	return obj.listener.Addr().String()
+	return net.JoinHostPort(obj.host, obj.port)
 }
 
 func (obj *Client) Run() error {
@@ -386,9 +389,6 @@ func (obj *ProxyConn) readRequest() (*http.Request, error) {
 	} else if clientReq.URL.Port() == "" {
 		clientReq.URL.Host = clientReq.URL.Hostname() + ":" + obj.option.port
 	}
-	if strings.HasPrefix(clientReq.Host, "127.0.0.1") || strings.HasPrefix(clientReq.Host, "localhost") {
-		return clientReq, errors.New("loop addr error")
-	}
 	return clientReq, err
 }
 
@@ -414,6 +414,11 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	clientReq, err := obj.ReadRequest(client)
 	if err != nil {
 		return err
+	}
+	if strings.HasPrefix(clientReq.Host, "127.0.0.1") || strings.HasPrefix(clientReq.Host, "localhost") {
+		if clientReq.URL.Port() == obj.port {
+			return errors.New("loop addr error")
+		}
 	}
 	if err = obj.verifyPwd(client, clientReq); err != nil {
 		return err
@@ -463,9 +468,14 @@ func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
 		return err
 	}
 	//获取host
-	host, _, err := net.SplitHostPort(addr)
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return err
+	}
+	if strings.HasPrefix(addr, "127.0.0.1") || strings.HasPrefix(addr, "localhost") {
+		if port == obj.port {
+			return errors.New("loop addr error")
+		}
 	}
 	//获取代理
 	proxyUrl, err := obj.dialer.GetProxy(ctx, nil)
@@ -695,6 +705,9 @@ func (obj *Client) copyTlsHttpsMain(ctx context.Context, client *ProxyConn, serv
 	tlsServer, http2, serverName, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
 	if err != nil {
 		return err
+	}
+	if serverName == "" {
+		serverName = tools.GetServerName(client.option.host)
 	}
 	cert, err := getCert(serverName)
 	if err != nil {

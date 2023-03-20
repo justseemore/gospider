@@ -2,7 +2,6 @@ package cdp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -73,6 +72,9 @@ func (obj *Route) PostData() string {
 	return obj.recvData.Request.PostData
 }
 func (obj *Route) Headers() map[string]string {
+	if _, ok := obj.recvData.Request.Headers["If-Modified-Since"]; ok {
+		delete(obj.recvData.Request.Headers, "If-Modified-Since")
+	}
 	return obj.recvData.Request.Headers
 }
 
@@ -90,7 +92,7 @@ func keyMd5(key RequestOption, resourceType string) [16]byte {
 
 	md5Str += fmt.Sprintf("%s,%s,%s", key.Method, key.Url, key.PostData)
 
-	if resourceType == "Document" || "resourceType" == "XHR" {
+	if resourceType == "Document" || resourceType == "XHR" {
 		kks := maps.Keys(key.Headers)
 		sort.Strings(kks)
 		for _, k := range kks {
@@ -109,21 +111,17 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	}
 	option.Headers = routeOption.Headers
 	resourceType := obj.ResourceType()
-	if resourceType == "Document" || "resourceType" == "XHR" {
+	if resourceType == "Document" || resourceType == "XHR" {
+		option.TryNum = 2
+	} else {
 		option.TryNum = 1
-	}
-	switch resourceType {
-	case "Document", "XHR":
-		option.TryNum = 1
-	case "Font":
-		return FulData{}, errors.New("filter")
 	}
 	var fulData FulData
 	var err error
 	routeKey := keyMd5(routeOption, resourceType)
 	if !obj.webSock.disDataCache && !obj.webSock.filterKeys.Has(routeKey) { //如果存在
 		if fulData, err = obj.webSock.db.Get(routeKey); err == nil { //如果有緩存
-			if resourceType == "Document" || "resourceType" == "XHR" { //第一次走緩存，第二次不走緩存
+			if resourceType == "Document" || resourceType == "XHR" { //第一次走緩存，第二次不走緩存
 				obj.webSock.filterKeys.Add(routeKey)
 			}
 			return fulData, err
