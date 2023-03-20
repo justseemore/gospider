@@ -30,10 +30,10 @@ type Page struct {
 	cnl        context.CancelFunc
 	preWebSock *cdp.WebSock
 	ReqCli     *requests.Client
-
-	nodeId  int64
-	baseUrl string
-	webSock *cdp.WebSock
+	headless   bool
+	nodeId     int64
+	baseUrl    string
+	webSock    *cdp.WebSock
 }
 
 func (obj *Page) init(option PageOption, db *db.Client[cdp.FulData]) error {
@@ -53,8 +53,10 @@ func (obj *Page) init(option PageOption, db *db.Client[cdp.FulData]) error {
 	if _, err = obj.webSock.PageEnable(obj.ctx); err != nil {
 		return err
 	}
-	if err = obj.AddScript(obj.ctx, stealth); err != nil {
-		return err
+	if obj.headless {
+		if err = obj.AddScript(obj.ctx, stealth); err != nil {
+			return err
+		}
 	}
 	return obj.AddScript(obj.ctx, stealth2)
 }

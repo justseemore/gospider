@@ -128,6 +128,7 @@ type Client struct {
 	getProxy     func(ctx context.Context, url *url.URL) (string, error)
 	disDataCache bool
 	ja3Spec      ja3.ClientHelloSpec
+	headless     bool
 }
 type ClientOption struct {
 	ChromePath   string   //chrome浏览器执行路径
@@ -506,6 +507,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 		getProxy:     option.GetProxy,
 		disDataCache: option.DisDataCache,
 		ja3Spec:      option.Ja3Spec,
+		headless:     option.Headless,
 
 		ctx:      ctx,
 		cnl:      cnl,
@@ -638,6 +640,7 @@ func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page
 		host:       obj.host,
 		ctx:        ctx,
 		cnl:        cnl,
+		headless:   obj.headless,
 	}
 	if err = page.init(option, obj.db); err != nil {
 		return nil, err
