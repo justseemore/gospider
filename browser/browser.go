@@ -310,7 +310,8 @@ func runChrome(ctx context.Context, option *ClientOption) (*cmd.Client, error) {
 var chromeArgs = []string{
 	"--no-sandbox",
 	"--useAutomationExtension=false",
-	"--excludeSwitches=enable-automation,ignore-certificate-errors",
+	"--excludeSwitches=enable-automation",
+	"--disable-web-security",
 	"--no-pings",
 	"--no-zygote",
 	"--mute-audio",
@@ -336,7 +337,6 @@ var chromeArgs = []string{
 
 	"--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,TranslateUI,BlinkGenPropertyTrees", // do not disable UserAgentClientHint
 	"--aggressive-cache-discard",
-	"--disable-extensions",
 	"--disable-ipc-flooding-protection",
 	"--disable-default-apps",
 	"--enable-webgl",

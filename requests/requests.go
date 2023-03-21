@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 	_ "unsafe"
 
 	"gitee.com/baixudong/gospider/ja3"
+	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
 
@@ -528,7 +530,17 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	}
 	ctxData.url = reqs.URL
 	ctxData.host = reqs.Host
-
+	if reqs.URL.Scheme == "file" {
+		fileContent, err := os.ReadFile(re.Sub(`^/+`, "", reqs.URL.Path))
+		if err != nil {
+			return nil, err
+		}
+		cancel()
+		return &Response{
+			content: fileContent,
+			isFile:  true,
+		}, nil
+	}
 	//判断ws
 	switch reqs.URL.Scheme {
 	case "ws":

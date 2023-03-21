@@ -26,6 +26,7 @@ type Response struct {
 	encoding  string
 	disDecode bool
 	disUnzip  bool
+	isFile    bool
 }
 
 func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request_option RequestOption) (*Response, error) {
@@ -110,7 +111,7 @@ func (obj *Response) Location() (*url.URL, error) {
 
 // 返回这个请求的cookies
 func (obj *Response) Cookies() Cookies {
-	if obj.response == nil {
+	if obj.isFile {
 		return nil
 	}
 	return obj.response.Cookies()
@@ -118,17 +119,23 @@ func (obj *Response) Cookies() Cookies {
 
 // 返回这个请求的状态码
 func (obj *Response) StatusCode() int {
+	if obj.isFile {
+		return 200
+	}
 	return obj.response.StatusCode
 }
 
 // 返回这个请求的状态
 func (obj *Response) Status() string {
+	if obj.isFile {
+		return "200 OK"
+	}
 	return obj.response.Status
 }
 
 // 返回这个请求的url
 func (obj *Response) Url() *url.URL {
-	if obj.response == nil {
+	if obj.isFile {
 		return nil
 	}
 	return obj.response.Request.URL
@@ -136,6 +143,9 @@ func (obj *Response) Url() *url.URL {
 
 // 返回response 的请求头
 func (obj *Response) Headers() http.Header {
+	if obj.isFile {
+		return nil
+	}
 	return obj.response.Header
 }
 
@@ -184,16 +194,25 @@ func (obj *Response) Html() *bs4.Client {
 
 // 获取headers 的Content-Type
 func (obj *Response) ContentType() string {
+	if obj.isFile {
+		return ""
+	}
 	return obj.response.Header.Get("Content-Type")
 }
 
 // 获取headers 的Content-Encoding
 func (obj *Response) ContentEncoding() string {
+	if obj.isFile {
+		return ""
+	}
 	return obj.response.Header.Get("Content-Encoding")
 }
 
 // 获取response 的内容长度
 func (obj *Response) ContentLength() int64 {
+	if obj.isFile {
+		return int64(len(obj.content))
+	}
 	return obj.response.ContentLength
 }
 
@@ -260,7 +279,7 @@ func (obj *Response) Close() error {
 	if obj.webSocket != nil {
 		obj.webSocket.Close("close")
 	}
-	if obj.response.Body != nil {
+	if obj.response != nil && obj.response.Body != nil {
 		io.Copy(io.Discard, obj.response.Body)
 		return obj.response.Body.Close()
 	}
