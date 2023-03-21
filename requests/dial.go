@@ -294,6 +294,8 @@ func (obj *DialClient) DnsDialContext(ctx context.Context, netword string, addr 
 		} else {
 			addr = net.JoinHostPort(obj.dns, "53")
 		}
+	} else {
+		addr = "223.5.5.5:53"
 	}
 	return obj.dialer.DialContext(ctx, netword, addr)
 }
