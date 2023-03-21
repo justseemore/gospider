@@ -144,7 +144,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	fulData.Body = rs.Text()
 	fulData.Headers = headers
 	fulData.ResponsePhrase = rs.Status()
-	if !obj.webSock.disDataCache {
+	if !obj.webSock.disDataCache && fulData.StatusCode == 200 {
 		obj.webSock.db.Put(routeKey, fulData)
 	}
 	return fulData, nil
