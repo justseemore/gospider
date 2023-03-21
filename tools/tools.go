@@ -798,7 +798,7 @@ func GetInterCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
 	}
 	return x509.ParseCertificate(interDer)
 }
-func GetCert(interCert *x509.Certificate, key *ecdsa.PrivateKey, serverName string) (*x509.Certificate, error) {
+func GetCertWithCN(interCert *x509.Certificate, key *ecdsa.PrivateKey, commonName string) (*x509.Certificate, error) {
 	beforDate, err := time.ParseInLocation(time.DateOnly, "2023-03-20", time.Local)
 	if err != nil {
 		return nil, err
@@ -816,9 +816,36 @@ func GetCert(interCert *x509.Certificate, key *ecdsa.PrivateKey, serverName stri
 			Locality:           []string{"Shanghai"},
 			Organization:       []string{"JediLtd"},
 			OrganizationalUnit: []string{"JediProxy"},
-			CommonName:         serverName,
+			CommonName:         commonName,
 		},
-		DNSNames:              []string{serverName},
+		DNSNames:              []string{commonName},
+		NotBefore:             beforDate,
+		NotAfter:              afterDate,
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand2.Reader, csr, interCert, key.Public(), key)
+	if err != nil {
+		return nil, err
+	}
+	return x509.ParseCertificate(der)
+}
+func GetCertWithCert(interCert *x509.Certificate, key *ecdsa.PrivateKey, preCert *x509.Certificate) (*x509.Certificate, error) {
+	beforDate, err := time.ParseInLocation(time.DateOnly, "2023-03-20", time.Local)
+	if err != nil {
+		return nil, err
+	}
+	afterDate, err := time.ParseInLocation(time.DateOnly, "2033-03-20", time.Local)
+	if err != nil {
+		return nil, err
+	}
+	csr := &x509.Certificate{
+		Version:               3,
+		SerialNumber:          big.NewInt(10002),
+		Subject:               preCert.Subject,
+		DNSNames:              preCert.DNSNames,
 		NotBefore:             beforDate,
 		NotAfter:              afterDate,
 		BasicConstraintsValid: true,

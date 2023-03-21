@@ -177,6 +177,11 @@ func (obj *Route) Continue(ctx context.Context) error {
 	return err2
 }
 
+func (obj *Route) _continue(ctx context.Context) error {
+	_, err := obj.webSock.FetchContinueRequest(ctx, obj.recvData.RequestId)
+	return err
+}
+
 // Failed, Aborted, TimedOut, AccessDenied, ConnectionClosed, ConnectionReset, ConnectionRefused, ConnectionAborted, ConnectionFailed, NameNotResolved, InternetDisconnected, AddressUnreachable, BlockedByClient, BlockedByResponse
 func (obj *Route) Fail(ctx context.Context, errorReasons ...string) error {
 	var errorReason string

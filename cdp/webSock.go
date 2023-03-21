@@ -93,7 +93,7 @@ func (obj *WebSock) routeMain() (err error) {
 					}
 				} else {
 					if _, err := pool.Write(&thread.Task{
-						Func: route.Continue,
+						Func: route._continue,
 					}); err != nil {
 						return err
 					}
@@ -169,6 +169,7 @@ type WebSockOption struct {
 	GetProxy     func(ctx context.Context, url *url.URL) (string, error)
 	DisDataCache bool //关闭数据缓存
 	Ja3Spec      ja3.ClientHelloSpec
+	Ja3          bool
 }
 
 func NewWebSock(preCtx context.Context, ws string, option WebSockOption, db *db.Client[FulData]) (*WebSock, error) {
@@ -176,6 +177,7 @@ func NewWebSock(preCtx context.Context, ws string, option WebSockOption, db *db.
 		Proxy:    option.Proxy,
 		GetProxy: option.GetProxy,
 		Ja3Spec:  option.Ja3Spec,
+		Ja3:      option.Ja3,
 	}
 	reqOption.DisCookie = true
 	reqCli, err := requests.NewClient(preCtx, reqOption)
@@ -196,8 +198,7 @@ func NewWebSock(preCtx context.Context, ws string, option WebSockOption, db *db.
 		db:           db,
 		reqCli:       reqCli,
 		disDataCache: option.DisDataCache,
-
-		filterKeys: kinds.NewSet[[16]byte](),
+		filterKeys:   kinds.NewSet[[16]byte](),
 	}
 	cli.ctx, cli.cnl = context.WithCancelCause(preCtx)
 	go cli.recvMain()

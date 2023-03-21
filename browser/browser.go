@@ -128,6 +128,7 @@ type Client struct {
 	getProxy     func(ctx context.Context, url *url.URL) (string, error)
 	disDataCache bool
 	ja3Spec      ja3.ClientHelloSpec
+	ja3          bool
 	headless     bool
 }
 type ClientOption struct {
@@ -139,6 +140,7 @@ type ClientOption struct {
 	Headless     bool     //是否使用无头
 	DisDataCache bool     //关闭数据缓存
 	Ja3Spec      ja3.ClientHelloSpec
+	Ja3          bool
 	UserAgent    string
 	Proxy        string                                                  //代理http,https,socks5,ex: http://127.0.0.1:7005
 	GetProxy     func(ctx context.Context, url *url.URL) (string, error) //代理
@@ -507,6 +509,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 		getProxy:     option.GetProxy,
 		disDataCache: option.DisDataCache,
 		ja3Spec:      option.Ja3Spec,
+		ja3:          option.Ja3,
 		headless:     option.Headless,
 
 		ctx:      ctx,
@@ -603,6 +606,7 @@ type PageOption struct {
 	GetProxy     func(ctx context.Context, url *url.URL) (string, error)
 	DisDataCache bool //关闭数据缓存
 	Ja3Spec      ja3.ClientHelloSpec
+	Ja3          bool
 }
 
 // 新建标签页
@@ -622,6 +626,9 @@ func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page
 	}
 	if !option.Ja3Spec.IsSet() {
 		option.Ja3Spec = obj.ja3Spec
+	}
+	if !option.Ja3 {
+		option.Ja3 = obj.ja3
 	}
 
 	rs, err := obj.webSock.TargetCreateTarget(preCtx, "")

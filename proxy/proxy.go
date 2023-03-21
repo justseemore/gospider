@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	_ "embed"
 	"encoding/binary"
 	"errors"
@@ -42,7 +43,22 @@ func getCert(serverName string) (tlsCert tls.Certificate, err error) {
 	if err != nil {
 		return tlsCert, err
 	}
-	cert, err := tools.GetCert(crt, key, serverName)
+	cert, err := tools.GetCertWithCN(crt, key, serverName)
+	if err != nil {
+		return tlsCert, err
+	}
+	return tls.X509KeyPair(tools.GetCertData(cert), KeyFile)
+}
+func getCert2(preCert *x509.Certificate) (tlsCert tls.Certificate, err error) {
+	crt, err := tools.LoadCertData(CrtFile)
+	if err != nil {
+		return tlsCert, err
+	}
+	key, err := tools.LoadCertKeyData(KeyFile)
+	if err != nil {
+		return tlsCert, err
+	}
+	cert, err := tools.GetCertWithCert(crt, key, preCert)
 	if err != nil {
 		return tlsCert, err
 	}
@@ -685,31 +701,33 @@ func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, http2 bool, cer
 	})
 	return tlsConn, tlsConn.HandshakeContext(ctx)
 }
-func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws bool) (net.Conn, bool, string, error) {
+func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws bool) (net.Conn, bool, []*x509.Certificate, error) {
 	if obj.ja3 {
 		if tlsConn, err := ja3.NewClient(ctx, conn, obj.ja3Spec, ws, addr); err != nil {
-			return tlsConn, false, "", err
+			return tlsConn, false, nil, err
 		} else {
-			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().ServerName, err
+			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().PeerCertificates, err
 		}
 	} else {
 		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}})
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			return tlsConn, false, "", err
+			return tlsConn, false, nil, err
 		} else {
-			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().ServerName, err
+			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().PeerCertificates, err
 		}
 	}
 }
 func (obj *Client) copyTlsHttpsMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
-	tlsServer, http2, serverName, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
+	tlsServer, http2, certs, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
 	if err != nil {
 		return err
 	}
-	if serverName == "" {
-		serverName = tools.GetServerName(client.option.host)
+	var cert tls.Certificate
+	if len(certs) > 0 {
+		cert, err = getCert2(certs[0])
+	} else {
+		cert, err = getCert(tools.GetServerName(client.option.host))
 	}
-	cert, err := getCert(serverName)
 	if err != nil {
 		return err
 	}
