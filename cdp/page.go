@@ -47,7 +47,6 @@ func (obj *WebSock) PageReload(ctx context.Context) (RecvData, error) {
 	})
 }
 func (obj *WebSock) PageNavigate(ctx context.Context, url string) (RecvData, error) {
-	obj.filterKeys.ReSet()
 	return obj.send(ctx, commend{
 		Method: "Page.navigate",
 		Params: map[string]any{

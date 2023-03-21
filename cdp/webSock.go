@@ -10,7 +10,6 @@ import (
 
 	"gitee.com/baixudong/gospider/db"
 	"gitee.com/baixudong/gospider/ja3"
-	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/thread"
 	"gitee.com/baixudong/gospider/websocket"
@@ -54,7 +53,6 @@ type WebSock struct {
 	RouteFunc    func(context.Context, *Route)
 	reqCli       *requests.Client
 	lock         sync.Mutex
-	filterKeys   *kinds.Set[[16]byte]
 }
 
 type DataEntrie struct {
@@ -198,7 +196,6 @@ func NewWebSock(preCtx context.Context, ws string, option WebSockOption, db *db.
 		db:           db,
 		reqCli:       reqCli,
 		disDataCache: option.DisDataCache,
-		filterKeys:   kinds.NewSet[[16]byte](),
 	}
 	cli.ctx, cli.cnl = context.WithCancelCause(preCtx)
 	go cli.recvMain()
