@@ -76,7 +76,7 @@ type RequestOption struct {
 	Proxy         string   //代理,支持http,https,socks5协议代理,例如：http://127.0.0.1:7005
 	Timeout       int64    //请求超时时间
 	Headers       any      //请求头,支持：json,map，header
-	Cookies       any      // cookies,支持json,map,cookie
+	Cookies       any      // cookies,支持json,map,str
 	Files         []File   //文件
 	Params        any      //url 中的参数，用以拼接url,支持json,map,string
 	Form          any      //发送multipart/form-data,适用于文件上传,支持json,map

@@ -222,7 +222,12 @@ func (obj *Page) html(ctx context.Context) (*bs4.Client, error) {
 		return nil, err
 	}
 	html := bs4.NewClient(rs.Result["outerHTML"].(string), obj.baseUrl)
-	iframes := html.Finds("iframe")
+	iframes := []*bs4.Client{}
+	for _, iframe := range html.Finds("iframe") {
+		if !strings.HasPrefix(iframe.Get("src"), "javascript:") {
+			iframes = append(iframes, iframe)
+		}
+	}
 	if len(iframes) > 0 {
 		pageFrams, err := obj.QuerySelectorAll(ctx, "iframe")
 		if err != nil {
