@@ -531,14 +531,15 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	ctxData.url = reqs.URL
 	ctxData.host = reqs.Host
 	if reqs.URL.Scheme == "file" {
-		fileContent, err := os.ReadFile(re.Sub(`^/+`, "", reqs.URL.Path))
+		filePath := re.Sub(`^/+`, "", reqs.URL.Path)
+		fileContent, err := os.ReadFile(filePath)
 		if err != nil {
 			return nil, err
 		}
 		cancel()
 		return &Response{
-			content: fileContent,
-			isFile:  true,
+			content:  fileContent,
+			filePath: filePath,
 		}, nil
 	}
 	//判断ws

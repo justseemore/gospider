@@ -88,14 +88,9 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 		}
 		utlsSpec.Extensions = make([]utls.TLSExtension, len(ja3Spec.Extensions))
 		for i := 0; i < len(ja3Spec.Extensions); i++ {
-			extenId, ok := getIdWithExtension(ja3Spec.Extensions[i])
+			ext, ok := cloneExtension(ja3Spec.Extensions[i])
 			if ok {
-				ext := getExtensionWithId(extenId)
-				if ext != nil {
-					utlsSpec.Extensions[i] = ext
-				} else {
-					utlsSpec.Extensions[i] = ja3Spec.Extensions[i]
-				}
+				utlsSpec.Extensions[i] = ext
 			} else {
 				utlsSpec.Extensions[i] = ja3Spec.Extensions[i]
 			}
@@ -198,11 +193,13 @@ func getExtensionWithId(extensionId uint16) utls.TLSExtension {
 			utls.PKCS1WithSHA1,
 		}}
 	case 51:
-		return &utls.KeyShareExtension{KeyShares: []utls.KeyShare{
-			{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
-			{Group: utls.X25519},
-			{Group: utls.CurveP256},
-		}}
+		return &utls.KeyShareExtension{
+			KeyShares: []utls.KeyShare{
+				{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
+				{Group: utls.X25519},
+				{Group: utls.CurveP256},
+			},
+		}
 	case 13172:
 		return &utls.NPNExtension{}
 	case 17513:
@@ -218,54 +215,99 @@ func getExtensionWithId(extensionId uint16) utls.TLSExtension {
 	}
 }
 
-func getIdWithExtension(extension utls.TLSExtension) (uint16, bool) {
-	switch extension.(type) {
+func cloneExtension(extension utls.TLSExtension) (utls.TLSExtension, bool) {
+	switch ext := extension.(type) {
 	case *utls.KeyShareExtension:
-		return 51, true
-	// case *utls.SNIExtension:
-	// 	return 0, true
+		return &utls.KeyShareExtension{
+			KeyShares: tools.CopySlices(ext.KeyShares),
+		}, true
+	case *utls.SNIExtension:
+		return &utls.SNIExtension{
+			ServerName: ext.ServerName,
+		}, true
+	case *utls.ALPNExtension:
+		return &utls.ALPNExtension{
+			AlpnProtocols: tools.CopySlices(ext.AlpnProtocols),
+		}, true
+	case *utls.SignatureAlgorithmsExtension:
+		return &utls.SignatureAlgorithmsExtension{
+			SupportedSignatureAlgorithms: tools.CopySlices(ext.SupportedSignatureAlgorithms),
+		}, true
+	case *utls.UtlsPaddingExtension:
+		return &utls.UtlsPaddingExtension{
+			PaddingLen:    ext.PaddingLen,
+			WillPad:       ext.WillPad,
+			GetPaddingLen: ext.GetPaddingLen,
+		}, true
+	case *utls.FakeTokenBindingExtension:
+		return &utls.FakeTokenBindingExtension{
+			MajorVersion:  ext.MajorVersion,
+			MinorVersion:  ext.MinorVersion,
+			KeyParameters: tools.CopySlices(ext.KeyParameters),
+		}, true
+	case *utls.UtlsCompressCertExtension:
+		return &utls.UtlsCompressCertExtension{
+			Algorithms: tools.CopySlices(ext.Algorithms),
+		}, true
+	case *utls.FakeRecordSizeLimitExtension:
+		return &utls.FakeRecordSizeLimitExtension{
+			Limit: ext.Limit,
+		}, true
+	case *utls.FakeDelegatedCredentialsExtension:
+		return &utls.FakeDelegatedCredentialsExtension{
+			SupportedSignatureAlgorithms: tools.CopySlices(ext.SupportedSignatureAlgorithms),
+		}, true
+	case *utls.SessionTicketExtension:
+		var session *utls.ClientSessionState
+		if ext.Session != nil {
+			session = &utls.ClientSessionState{}
+		}
+		return &utls.SessionTicketExtension{
+			Session: session,
+		}, true
+	case *utls.FakePreSharedKeyExtension:
+		return &utls.FakePreSharedKeyExtension{
+			PskIdentities: tools.CopySlices(ext.PskIdentities),
+			PskBinders:    tools.CopySlicess(ext.PskBinders),
+		}, true
+	case *utls.CookieExtension:
+		return &utls.CookieExtension{
+			Cookie: tools.CopySlices(ext.Cookie),
+		}, true
+	case *utls.PSKKeyExchangeModesExtension:
+		return &utls.PSKKeyExchangeModesExtension{
+			Modes: tools.CopySlices(ext.Modes),
+		}, true
+	case *utls.SignatureAlgorithmsCertExtension:
+		return &utls.SignatureAlgorithmsCertExtension{
+			SupportedSignatureAlgorithms: tools.CopySlices(ext.SupportedSignatureAlgorithms),
+		}, true
+	case *utls.NPNExtension:
+		return &utls.NPNExtension{
+			NextProtos: tools.CopySlices(ext.NextProtos),
+		}, true
+	case *utls.ApplicationSettingsExtension:
+		return &utls.ApplicationSettingsExtension{
+			SupportedProtocols: tools.CopySlices(ext.SupportedProtocols),
+		}, true
+	case *utls.FakeChannelIDExtension:
+		return &utls.FakeChannelIDExtension{
+			OldExtensionID: ext.OldExtensionID,
+		}, true
+	case *utls.RenegotiationInfoExtension:
+		return &utls.RenegotiationInfoExtension{
+			Renegotiation: ext.Renegotiation,
+		}, true
 	// case *utls.StatusRequestExtension:
-	// 	return 5, true
-	// case *utls.SignatureAlgorithmsExtension:
-	// 	return 13, true
-	// case *utls.ALPNExtension:
-	// 	return 16, true
+	// 	return ext, true
 	// case *utls.StatusRequestV2Extension:
 	// 	return 17, true
 	// case *utls.SCTExtension:
 	// 	return 18, true
-	// case *utls.UtlsPaddingExtension:
-	// 	return 21, true
 	// case *utls.UtlsExtendedMasterSecretExtension:
 	// 	return 23, true
-	// case *utls.FakeTokenBindingExtension:
-	// 	return 24, true
-	// case *utls.UtlsCompressCertExtension:
-	// 	return 27, true
-	// case *utls.FakeRecordSizeLimitExtension:
-	// 	return 28, true
-	// case *utls.FakeDelegatedCredentialsExtension:
-	// 	return 34, true
-	// case *utls.SessionTicketExtension:
-	// 	return 35, true
-	// case *utls.FakePreSharedKeyExtension:
-	// 	return 41, true
-	// case *utls.CookieExtension:
-	// 	return 44, true
-	// case *utls.PSKKeyExchangeModesExtension:
-	// 	return 45, true
-	// case *utls.SignatureAlgorithmsCertExtension:
-	// 	return 50, true
-	// case *utls.NPNExtension:
-	// 	return 13172, true
-	// case *utls.ApplicationSettingsExtension:
-	// 	return 17513, true
-	// case *utls.FakeChannelIDExtension:
-	// 	return 30031, true
-	// case *utls.RenegotiationInfoExtension:
-	// 	return 65281, true
 	default:
-		return 0, false
+		return nil, false
 	}
 }
 func isGREASEUint16(v uint16) bool {

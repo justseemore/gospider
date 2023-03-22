@@ -26,7 +26,7 @@ type Response struct {
 	encoding  string
 	disDecode bool
 	disUnzip  bool
-	isFile    bool
+	filePath  string
 }
 
 func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request_option RequestOption) (*Response, error) {
@@ -111,7 +111,7 @@ func (obj *Response) Location() (*url.URL, error) {
 
 // 返回这个请求的cookies
 func (obj *Response) Cookies() Cookies {
-	if obj.isFile {
+	if obj.filePath != "" {
 		return nil
 	}
 	return obj.response.Cookies()
@@ -119,7 +119,7 @@ func (obj *Response) Cookies() Cookies {
 
 // 返回这个请求的状态码
 func (obj *Response) StatusCode() int {
-	if obj.isFile {
+	if obj.filePath != "" {
 		return 200
 	}
 	return obj.response.StatusCode
@@ -127,7 +127,7 @@ func (obj *Response) StatusCode() int {
 
 // 返回这个请求的状态
 func (obj *Response) Status() string {
-	if obj.isFile {
+	if obj.filePath != "" {
 		return "200 OK"
 	}
 	return obj.response.Status
@@ -135,7 +135,7 @@ func (obj *Response) Status() string {
 
 // 返回这个请求的url
 func (obj *Response) Url() *url.URL {
-	if obj.isFile {
+	if obj.filePath != "" {
 		return nil
 	}
 	return obj.response.Request.URL
@@ -143,8 +143,10 @@ func (obj *Response) Url() *url.URL {
 
 // 返回response 的请求头
 func (obj *Response) Headers() http.Header {
-	if obj.isFile {
-		return nil
+	if obj.filePath != "" {
+		return http.Header{
+			"Content-Type": []string{obj.ContentType()},
+		}
 	}
 	return obj.response.Header
 }
@@ -194,15 +196,15 @@ func (obj *Response) Html() *bs4.Client {
 
 // 获取headers 的Content-Type
 func (obj *Response) ContentType() string {
-	if obj.isFile {
-		return ""
+	if obj.filePath != "" {
+		return tools.GetContentTypeWithBytes(obj.content)
 	}
 	return obj.response.Header.Get("Content-Type")
 }
 
 // 获取headers 的Content-Encoding
 func (obj *Response) ContentEncoding() string {
-	if obj.isFile {
+	if obj.filePath != "" {
 		return ""
 	}
 	return obj.response.Header.Get("Content-Encoding")
@@ -210,7 +212,7 @@ func (obj *Response) ContentEncoding() string {
 
 // 获取response 的内容长度
 func (obj *Response) ContentLength() int64 {
-	if obj.isFile {
+	if obj.filePath != "" {
 		return int64(len(obj.content))
 	}
 	return obj.response.ContentLength

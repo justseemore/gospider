@@ -27,6 +27,7 @@ import (
 	"math/rand"
 
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -890,4 +891,20 @@ func GetServerName(addr string) string {
 		return addr[:colonPos]
 	}
 	return ""
+}
+func CopySlices[T any](value []T) []T {
+	copyValue := make([]T, len(value))
+	copy(copyValue, value)
+	return copyValue
+}
+func CopySlicess[T any](value [][]T) [][]T {
+	copyValue := make([][]T, len(value))
+	for i := 0; i < len(value); i++ {
+		copyValue[i] = CopySlices(value[i])
+	}
+	return copyValue
+}
+
+func GetContentTypeWithBytes(content []byte) string {
+	return http.DetectContentType(content)
 }
