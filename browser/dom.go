@@ -13,9 +13,10 @@ import (
 )
 
 type Dom struct {
-	baseUrl string
-	webSock *cdp.WebSock
-	nodeId  int64
+	baseUrl  string
+	webSock  *cdp.WebSock
+	nodeId   int64
+	isIframe bool
 }
 
 func (obj *Dom) dom2Iframe(ctx context.Context) error {
@@ -23,7 +24,15 @@ func (obj *Dom) dom2Iframe(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	rs, err = obj.webSock.DOMResolveNode(ctx, tools.Any2json(rs.Result).Get("node.contentDocument.backendNodeId").Int())
+	jsonData := tools.Any2json(rs.Result)
+	var backendNodeId int64
+	if jsonData.Get("node.contentDocument.backendNodeId").Exists() {
+		backendNodeId = jsonData.Get("node.contentDocument.backendNodeId").Int()
+	} else {
+		obj.isIframe = true
+		return nil
+	}
+	rs, err = obj.webSock.DOMResolveNode(ctx, backendNodeId)
 	if err != nil {
 		return err
 	}
@@ -51,6 +60,9 @@ func (obj *Dom) html(ctx context.Context) (*bs4.Client, error) {
 		return nil, err
 	}
 	html := bs4.NewClient(rs.Result["outerHTML"].(string), obj.baseUrl)
+	if obj.isIframe {
+		return html, nil
+	}
 	iframes := []*bs4.Client{}
 	for _, iframe := range html.Finds("iframe") {
 		if !strings.HasPrefix(iframe.Get("src"), "javascript:") {
@@ -140,9 +152,6 @@ func (obj *Dom) QuerySelector(ctx context.Context, selector string) (*Dom, error
 func (obj *Dom) querySelector(ctx context.Context, selector string) (*Dom, error) {
 	rs, err := obj.webSock.DOMQuerySelector(ctx, obj.nodeId, selector)
 	if err != nil {
-		if strings.Contains(err.Error(), "not find") {
-			return nil, nil
-		}
 		return nil, err
 	}
 	nodeId := int64(rs.Result["nodeId"].(float64))
@@ -186,9 +195,6 @@ func (obj *Dom) QuerySelectorAll(ctx context.Context, selector string) ([]*Dom, 
 func (obj *Dom) querySelectorAll(ctx context.Context, selector string) ([]*Dom, error) {
 	rs, err := obj.webSock.DOMQuerySelectorAll(ctx, obj.nodeId, selector)
 	if err != nil {
-		if strings.Contains(err.Error(), "not find") {
-			return nil, nil
-		}
 		return nil, err
 	}
 	doms := []*Dom{}
@@ -215,7 +221,7 @@ func (obj *Dom) WaitSelector(preCtx context.Context, selector string, timeouts .
 	startTime := time.Now().Unix()
 	for time.Now().Unix()-startTime <= timeout {
 		dom, err := obj.QuerySelector(preCtx, selector)
-		if err != nil && !strings.Contains(err.Error(), "not find") {
+		if err != nil {
 			return nil, err
 		}
 		if dom != nil {

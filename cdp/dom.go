@@ -1,6 +1,8 @@
 package cdp
 
-import "context"
+import (
+	"context"
+)
 
 func (obj *WebSock) DOMDescribeNode(ctx context.Context, nodeId int64) (RecvData, error) {
 	return obj.send(ctx, commend{

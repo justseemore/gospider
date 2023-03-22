@@ -189,21 +189,23 @@ func (obj *Page) Route(ctx context.Context, routeFunc func(context.Context, *cdp
 	}
 	return err
 }
-func (obj *Page) initNodeId(ctx context.Context) error {
+func (obj *Page) initNodeId(ctx context.Context) (error, bool) {
 	rs, err := obj.webSock.DOMGetDocument(ctx)
 	if err != nil {
-		return err
+		return err, false
 	}
 	jsonData := tools.Any2json(rs.Result["root"])
 	href := jsonData.Get("baseURL").String()
 	if href != "" {
 		obj.baseUrl = href
 	}
-	obj.nodeId = jsonData.Get("nodeId").Int()
-	return nil
+	nodeId := jsonData.Get("nodeId").Int()
+	ok := obj.nodeId == nodeId
+	obj.nodeId = nodeId
+	return nil, ok
 }
 func (obj *Page) Html(ctx context.Context, contents ...string) (*bs4.Client, error) {
-	err := obj.initNodeId(ctx)
+	err, _ := obj.initNodeId(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -265,10 +267,6 @@ func (obj *Page) WaitSelector(preCtx context.Context, selector string, timeouts 
 	return nil, errors.New("超时")
 }
 func (obj *Page) QuerySelector(ctx context.Context, selector string) (*Dom, error) {
-	err := obj.initNodeId(ctx)
-	if err != nil {
-		return nil, err
-	}
 	dom, err := obj.querySelector(ctx, selector)
 	if err != nil {
 		return dom, err
@@ -288,12 +286,21 @@ func (obj *Page) QuerySelector(ctx context.Context, selector string) (*Dom, erro
 	return dom, err
 }
 func (obj *Page) querySelector(ctx context.Context, selector string) (*Dom, error) {
+	err, _ := obj.initNodeId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	rs, err := obj.webSock.DOMQuerySelector(ctx, obj.nodeId, selector)
 	if err != nil {
-		if strings.Contains(err.Error(), "not find") {
-			return nil, nil
+		err2, ok := obj.initNodeId(ctx)
+		if err2 != nil {
+			return nil, err2
 		}
-		return nil, err
+		if ok {
+			return nil, err
+		} else {
+			return obj.querySelector(ctx, selector)
+		}
 	}
 	nodeId := int64(rs.Result["nodeId"].(float64))
 	if nodeId == 0 {
@@ -312,10 +319,6 @@ func (obj *Page) querySelector(ctx context.Context, selector string) (*Dom, erro
 	return dom, nil
 }
 func (obj *Page) QuerySelectorAll(ctx context.Context, selector string) ([]*Dom, error) {
-	err := obj.initNodeId(ctx)
-	if err != nil {
-		return nil, err
-	}
 	dom, err := obj.querySelectorAll(ctx, selector)
 	if err != nil {
 		return dom, err
@@ -338,12 +341,21 @@ func (obj *Page) QuerySelectorAll(ctx context.Context, selector string) ([]*Dom,
 	return dom, err
 }
 func (obj *Page) querySelectorAll(ctx context.Context, selector string) ([]*Dom, error) {
+	err, _ := obj.initNodeId(ctx)
+	if err != nil {
+		return nil, err
+	}
 	rs, err := obj.webSock.DOMQuerySelectorAll(ctx, obj.nodeId, selector)
 	if err != nil {
-		if strings.Contains(err.Error(), "not find") {
-			return nil, nil
+		err2, ok := obj.initNodeId(ctx)
+		if err2 != nil {
+			return nil, err2
 		}
-		return nil, err
+		if ok {
+			return nil, err
+		} else {
+			return obj.querySelectorAll(ctx, selector)
+		}
 	}
 	doms := []*Dom{}
 	for _, nodeId := range tools.Any2json(rs.Result["nodeIds"]).Array() {
