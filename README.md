@@ -9,7 +9,7 @@ python到golang爬虫过渡的所有必需库.
 7. 更多功能...
 # 依赖
 * go1.20 (不要低于这个版本)
-# 安装 (不要拉github 上的包,go包路径只能在gitee 和github 选一个,拉去github 包会出现路径问题)
+# 安装 (不要拉github的包,go包路径只能在gitee和github选一个,拉github包会出现路径问题)
 ```
 go get -u gitee.com/baixudong/gospider
 ```
