@@ -35,7 +35,12 @@ func (obj *WebSock) FetchFailRequest(preCtx context.Context, requestId, errorRea
 }
 func (obj *WebSock) FetchFulfillRequest(preCtx context.Context, requestId string, fulData FulData) (RecvData, error) {
 	if fulData.Headers == nil {
-		fulData.Headers = []Header{}
+		fulData.Headers = []Header{
+			{
+				Name:  "Content-Type",
+				Value: tools.GetContentTypeWithBytes(tools.StringToBytes(fulData.Body)),
+			},
+		}
 	}
 	if fulData.StatusCode == 0 {
 		fulData.StatusCode = 200
@@ -43,6 +48,7 @@ func (obj *WebSock) FetchFulfillRequest(preCtx context.Context, requestId string
 	if fulData.ResponsePhrase == "" {
 		fulData.ResponsePhrase = "200 OK"
 	}
+
 	return obj.send(preCtx, commend{
 		Method: "Fetch.fulfillRequest",
 		Params: map[string]any{
