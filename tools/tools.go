@@ -41,6 +41,7 @@ import (
 	"unsafe"
 
 	"github.com/andybalholm/brotli"
+	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/tidwall/gjson"
 
@@ -907,4 +908,7 @@ func CopySlicess[T any](value [][]T) [][]T {
 
 func GetContentTypeWithBytes(content []byte) string {
 	return http.DetectContentType(content)
+}
+func Uuid() uuid.UUID {
+	return uuid.New()
 }
