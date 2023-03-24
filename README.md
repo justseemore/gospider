@@ -1,10 +1,11 @@
 # 简介
 python到golang爬虫过渡的所有必需库.
 1. [请求库](../../tree/master/requests)：支持ja3,http2 协议,各种主流代理协议,覆盖python requests 所有的功能
-2. [并发库](../../tree/master/thread)：自实现高性能并发库
-3. [执行js](../../tree/master/cmd): 通过管道调用js 方法
-4. [执行python](../../tree/master/cmd): 通过管道调用python 方法
-5. 更多功能...
+2. [代理库](../../tree/master/proxy)：对数据抓包拦截修改,聚合代理池,作为网关拦截爬虫请求,作为代理突破ja3反爬
+3. [并发库](../../tree/master/thread)：自实现高性能并发库
+4. [执行js](../../tree/master/cmd): 通过管道调用js 方法
+5. [执行python](../../tree/master/cmd): 通过管道调用python 方法
+6. 更多功能...
 # 依赖
 * go1.20 (不要低于这个版本)
 # 安装 (不要拉github的包,go包路径只能在gitee和github选一个,拉github包会出现路径问题)
