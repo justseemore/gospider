@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"gitee.com/baixudong/gospider/conf"
+	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/tools"
 	"github.com/tidwall/gjson"
 	"github.com/ysmood/leakless"
@@ -109,23 +111,48 @@ var cmdPipJsScript []byte
 //go:embed cmdPipPyScript.py
 var cmdPipPyScript []byte
 
-var jsScriptVersion = "015"
-var pyScriptVersion = "014"
+var jsScriptVersion = "017"
+var pyScriptVersion = "017"
 
 type JyClient struct {
 	client *Client
 	write  io.WriteCloser
-	read   *json.Decoder
+	read   io.ReadCloser
 	lock   sync.Mutex
+	pip    chan string
+}
+type PyClientOption struct {
+	Script     string   //加载的python 文件
+	Names      []string //要调用的函数名称,只有在这里注册的函数名才能被调用
+	PythonPath string   //python 的路径,ex: c:/python.exe
+	ModulePath []string //python包搜索路径,如果出现搜索不到包的情况,手动在这里加入路径哈
 }
 
 // 创建py解析器
-func NewPyClient(pre_ctx context.Context, script string, name string, names ...string) (*JyClient, error) {
-	names = append(names, name)
+func NewPyClient(pre_ctx context.Context, option PyClientOption) (*JyClient, error) {
+	if len(option.Names) == 0 {
+		return nil, errors.New("缺少调用的函数名,请补充names 字段")
+	}
+	if option.Script == "" {
+		return nil, errors.New("缺少加载的js 文件,请补充script 字段")
+	}
+	if option.PythonPath == "" {
+		option.PythonPath = "python"
+	}
+	nowDir, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	if option.ModulePath == nil {
+		option.ModulePath = []string{nowDir}
+	} else {
+		option.ModulePath = append(option.ModulePath, nowDir)
+	}
 	userDir, err := conf.GetMainDirPath()
 	if err != nil {
 		return nil, err
 	}
+
 	filePath := tools.PathJoin(userDir, fmt.Sprintf(".cmdPipPyScript%s.py", pyScriptVersion))
 	if !tools.PathExist(filePath) {
 		err := os.WriteFile(filePath, cmdPipPyScript, 0777)
@@ -134,7 +161,7 @@ func NewPyClient(pre_ctx context.Context, script string, name string, names ...s
 		}
 	}
 	cli := NewClient(pre_ctx, ClientOption{
-		Name: "python",
+		Name: option.PythonPath,
 		Args: []string{"-u", filePath},
 	})
 	writeBody, err := cli.StdInPipe()
@@ -146,16 +173,14 @@ func NewPyClient(pre_ctx context.Context, script string, name string, names ...s
 		return nil, err
 	}
 	go cli.Run()
-	jsCli := &JyClient{
+	pyCli := &JyClient{
 		client: cli,
-		read:   json.NewDecoder(readBody),
+		read:   readBody,
 		write:  writeBody,
+		pip:    make(chan string),
 	}
-	scrJson, err := json.Marshal(map[string]any{"Script": tools.Base64Encode(script), "Names": names})
-	if err != nil {
-		return nil, err
-	}
-	jsonData, err := jsCli.run(scrJson)
+	go pyCli.readMain()
+	jsonData, err := pyCli.run(map[string]any{"Type": "init", "Script": tools.Base64Encode(option.Script), "Names": option.Names, "ModulePath": option.ModulePath})
 	if err != nil {
 		return nil, err
 	}
@@ -163,12 +188,36 @@ func NewPyClient(pre_ctx context.Context, script string, name string, names ...s
 	if errData.Exists() && errData.String() != "" {
 		return nil, errors.New(errData.String())
 	}
-	return jsCli, nil
+	return pyCli, nil
+}
+
+type JsClientOption struct {
+	Script     string   //加载的js 文件
+	Names      []string //要调用的函数名称,只有在这里注册的函数名才能被调用
+	NodePath   string   //node 的路径,ex: c:/node.exe
+	ModulePath []string //node包搜索路径,如果出现搜索不到包的情况,手动在这里加入路径哈
 }
 
 // 创建json解析器
-func NewJsClient(pre_ctx context.Context, script string, name string, names ...string) (*JyClient, error) {
-	names = append(names, name)
+func NewJsClient(pre_ctx context.Context, option JsClientOption) (*JyClient, error) {
+	if len(option.Names) == 0 {
+		return nil, errors.New("缺少调用的函数名,请补充names 字段")
+	}
+	if option.Script == "" {
+		return nil, errors.New("缺少加载的js 文件,请补充script 字段")
+	}
+	if option.NodePath == "" {
+		option.NodePath = "node"
+	}
+	nowDir, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	if option.ModulePath == nil {
+		option.ModulePath = []string{nowDir}
+	} else {
+		option.ModulePath = append(option.ModulePath, nowDir)
+	}
 	userDir, err := conf.GetMainDirPath()
 	if err != nil {
 		return nil, err
@@ -181,7 +230,7 @@ func NewJsClient(pre_ctx context.Context, script string, name string, names ...s
 		}
 	}
 	cli := NewClient(pre_ctx, ClientOption{
-		Name: "node",
+		Name: option.NodePath,
 		Args: []string{filePath},
 	})
 	writeBody, err := cli.StdInPipe()
@@ -195,14 +244,12 @@ func NewJsClient(pre_ctx context.Context, script string, name string, names ...s
 	go cli.Run()
 	jsCli := &JyClient{
 		client: cli,
-		read:   json.NewDecoder(readBody),
+		read:   readBody,
 		write:  writeBody,
+		pip:    make(chan string),
 	}
-	scrJson, err := json.Marshal(map[string]any{"Script": tools.Base64Encode(script), "Names": names})
-	if err != nil {
-		return nil, err
-	}
-	jsonData, err := jsCli.run(scrJson)
+	go jsCli.readMain()
+	jsonData, err := jsCli.run(map[string]any{"Type": "init", "Script": tools.Base64Encode(option.Script), "Names": option.Names, "ModulePath": option.ModulePath})
 	if err != nil {
 		return nil, err
 	}
@@ -212,23 +259,55 @@ func NewJsClient(pre_ctx context.Context, script string, name string, names ...s
 	}
 	return jsCli, nil
 }
-func (obj *JyClient) run(con []byte) (gjson.Result, error) {
+func (obj *JyClient) readMain() {
+	defer obj.Close()
+	doneChan := make(chan struct{})
+	go func() {
+		defer close(doneChan)
+		allCon := bytes.NewBuffer(nil)
+		tempCon := make([]byte, 1024)
+		var readInt int
+		var err error
+		for {
+			if readInt, err = obj.read.Read(tempCon); err != nil {
+				return
+			}
+			allCon.Write(tempCon[:readInt])
+			if rs := re.Search(`##gospider@start##(.*?)##gospider@end##`, allCon.String()); rs != nil {
+				obj.pip <- rs.Group(1)
+				allCon.Reset()
+			}
+		}
+	}()
+	select {
+	case <-obj.client.Done():
+		return
+	case <-doneChan:
+		return
+	}
+}
+func (obj *JyClient) run(dataMap map[string]any) (gjson.Result, error) {
 	obj.lock.Lock()
 	defer obj.lock.Unlock()
-	con = append(con, '\n')
-	_, err := obj.write.Write(con)
+	select {
+	case <-obj.client.Done():
+		return gjson.Result{}, errors.New("client closed")
+	default:
+	}
+	con, err := json.Marshal(dataMap)
 	if err != nil {
 		return gjson.Result{}, err
 	}
-	data := map[string]any{}
-	err = obj.read.Decode(&data)
-	return tools.Any2json(data), err
+	con = append(con, '\n')
+	if _, err = obj.write.Write(con); err != nil {
+		return gjson.Result{}, err
+	}
+	return tools.Any2json(<-obj.pip), nil
 }
 
 // 执行函数,第一个参数是要调用的函数名称,后面的是传参
 func (obj *JyClient) Call(funcName string, values ...any) (jsonData gjson.Result, err error) {
-	scrJson, _ := json.Marshal(map[string]any{"Func": funcName, "Args": values})
-	if jsonData, err = obj.run(scrJson); err != nil {
+	if jsonData, err = obj.run(map[string]any{"Type": "call", "Func": funcName, "Args": values}); err != nil {
 		if obj.client.Err != nil {
 			err = obj.client.Err
 		}

@@ -24,36 +24,36 @@ function requireFromString(code, ...names) {
 	parent && parent.children && parent.children.splice(parent.children.indexOf(m), 1);
 	return exports;
 };
-console = new Proxy(console, {
-    get(target, prop, receiver) {
-      return (...params)=>{}
-    }
-  });
 process.stdin.on('data', (data) => {
     let result
     let error
     try{
         dataStr=data.toString()
         let responseJson=JSON.parse(dataStr)
-        if (responseJson.Script && responseJson.Names){
+        if (responseJson.Type=="init"){
             tempExport=requireFromString(responseJson.Script,...responseJson.Names)
             responseJson.Names.forEach(element => {
                 global[element]=tempExport[element]
             });
-            result="ok"
-        }else if(responseJson.Func){
+            responseJson.ModulePath.forEach((path)=>{
+                module.paths.push(path)                    
+            })            
+        }else if (responseJson.Type=="call"){
             if (responseJson.Args){
                 result=eval(`${responseJson.Func}`)(...responseJson.Args)
             }else{
-            result=eval(`${responseJson.Func}`)()
+                result=eval(`${responseJson.Func}`)()
             }
+        }else{
+            error="未知的类型"
+            result=dataStr
         }
     }catch(e){
         error=e.stack
         result=dataStr
     }
-    process.stdout.write(JSON.stringify({
+    process.stdout.write("##gospider@start##"+JSON.stringify({
         Result:result,
         Error:error,
-    }))
+    })+"##gospider@end##")
 });
