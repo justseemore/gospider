@@ -1,7 +1,6 @@
 import warnings,base64
 warnings.filterwarnings("ignore",category=DeprecationWarning)
 import imp,sys,json
-
 def loadModule(source):
     mod = sys.modules.setdefault("", imp.new_module(""))
     exec(compile(base64.b64decode(source).decode("utf8"), "", 'exec'), mod.__dict__)
@@ -30,4 +29,4 @@ while True:
     except Exception as e:
         error=str(e)
         result=dataStr
-    sys.stdout.write("##gospider@start##"+json.dumps({"Result":result,"Error":error})++"##gospider@end##")
+    sys.stdout.write("##gospider@start##"+json.dumps({"Result":result,"Error":error})+"##gospider@end##")

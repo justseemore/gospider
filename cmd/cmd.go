@@ -111,8 +111,8 @@ var cmdPipJsScript []byte
 //go:embed cmdPipPyScript.py
 var cmdPipPyScript []byte
 
-var jsScriptVersion = "017"
-var pyScriptVersion = "017"
+var jsScriptVersion = "018"
+var pyScriptVersion = "018"
 
 type JyClient struct {
 	client *Client

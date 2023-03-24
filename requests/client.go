@@ -26,9 +26,10 @@ type ClientOption struct {
 	DnsCacheTime          int64                                                   //dns解析缓存时间60*30
 	DisDnsCache           bool                                                    //是否关闭dns 缓存,影响dns 解析
 	AddrType              AddrType                                                //优先使用的addr 类型
-	Dns                   string                                                  //dns
-	Ja3                   bool                                                    //开启ja3
-	Ja3Spec               ja3.ClientHelloSpec                                     //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	GetAddrType           func(string) AddrType
+	Dns                   string              //dns
+	Ja3                   bool                //开启ja3
+	Ja3Spec               ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 }
 type Client struct {
 	RedirectNum    int                        //重定向次数
@@ -90,6 +91,7 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		KeepAlive:           session_option.KeepAlive,
 		LocalAddr:           session_option.LocalAddr,
 		AddrType:            session_option.AddrType,
+		GetAddrType:         session_option.GetAddrType,
 		DisDnsCache:         session_option.DisDnsCache,
 		Dns:                 session_option.Dns,
 	})

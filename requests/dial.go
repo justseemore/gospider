@@ -25,7 +25,8 @@ type DialClient struct {
 	lock        sync.RWMutex
 	dnsTimeout  int64
 	addrType    AddrType //使用ipv4,ipv6 ,或自动选项
-	ja3         bool     //是否启用ja3
+	getAddrType func(string) AddrType
+	ja3         bool //是否启用ja3
 	ja3Spec     ja3.ClientHelloSpec
 	disDnsCache bool   //是否关闭dns 缓存
 	dns         string //dns
@@ -48,9 +49,10 @@ type DialOption struct {
 	DnsCacheTime        int64
 	KeepAlive           int64
 	GetProxy            func(ctx context.Context, url *url.URL) (string, error)
-	Proxy               string              //代理
-	LocalAddr           string              //使用本地网卡
-	AddrType            AddrType            //优先使用的地址类型,ipv4,ipv6 ,或自动选项
+	Proxy               string   //代理
+	LocalAddr           string   //使用本地网卡
+	AddrType            AddrType //优先使用的地址类型,ipv4,ipv6 ,或自动选项
+	GetAddrType         func(string) AddrType
 	Ja3                 bool                //是否启用ja3
 	Ja3Spec             ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	DisDnsCache         bool                //是否关闭dns 缓存
@@ -77,6 +79,7 @@ func NewDail(option DialOption) (*DialClient, error) {
 		dnsTimeout:  option.DnsCacheTime,
 		getProxy:    option.GetProxy,
 		addrType:    option.AddrType,
+		getAddrType: option.GetAddrType,
 		ja3:         option.Ja3,
 		ja3Spec:     option.Ja3Spec,
 		disDnsCache: option.DisDnsCache,
@@ -152,7 +155,7 @@ func (obj *DialClient) AddrToIp(ctx context.Context, addr string) (string, error
 	}
 	host, ok := obj.loadHost(host)
 	if !ok {
-		ip, err := obj.lookupIPAddr(ctx, host, int(obj.addrType))
+		ip, err := obj.lookupIPAddr(ctx, host)
 		if err != nil {
 			return addr, err
 		}
@@ -294,12 +297,16 @@ func (obj *DialClient) DnsDialContext(ctx context.Context, netword string, addr 
 		} else {
 			addr = net.JoinHostPort(obj.dns, "53")
 		}
-	} else {
-		addr = "223.5.5.5:53"
 	}
 	return obj.dialer.DialContext(ctx, netword, addr)
 }
-func (obj *DialClient) lookupIPAddr(ctx context.Context, host string, addrType int) (net.IP, error) {
+func (obj *DialClient) lookupIPAddr(ctx context.Context, host string) (net.IP, error) {
+	var addrType int
+	if obj.addrType != 0 {
+		addrType = int(obj.addrType)
+	} else if obj.getAddrType != nil {
+		addrType = int(obj.getAddrType(host))
+	}
 	ips, err := obj.resolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		return nil, err
