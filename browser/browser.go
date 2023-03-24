@@ -309,82 +309,70 @@ func runChrome(ctx context.Context, option *ClientOption) (*cmd.Client, error) {
 }
 
 var chromeArgs = []string{
-	"--no-sandbox",
-	"--useAutomationExtension=false",
-	"--excludeSwitches=enable-automation",
-	"--disable-blink-features=AutomationControlled", //非常重要不要删除
-	"--disable-web-security",
-	"--no-pings",
-	"--no-zygote",
-	"--mute-audio",
-	"--no-first-run",
-	"--no-default-browser-check",
-	"--disable-software-rasterizer",
-	"--disable-cloud-import",
-	"--disable-gesture-typing",
-	"--disable-offer-store-unmasked-wallet-cards",
-	"--disable-offer-upload-credit-cards",
-	"--disable-print-preview",
-	"--disable-voice-input",
-	"--disable-wake-on-wifi",
-	"--disable-cookie-encryption",
+	"--no-sandbox",                                  //禁用 Chrome 的沙盒模式。
+	"--useAutomationExtension=false",                //禁用自动化扩展。
+	"--excludeSwitches=enable-automation",           //禁用自动化
+	"--disable-blink-features=AutomationControlled", //禁用 Blink 引擎的自动化控制。
+	"--disable-web-security",                        //禁用同源策略。
+	"--no-pings",                                    //禁用 ping。
+	"--no-zygote",                                   //禁用 zygote 进程。
+	"--mute-audio",                                  //禁用音频。
+	"--no-first-run",                                //不显示欢迎页面。
+	"--no-default-browser-check",                    //不检查是否为默认浏览器。
+	"--disable-software-rasterizer",                 //禁用软件光栅化器
+	"--disable-cloud-import",                        //禁用云导入。
+	"--disable-gesture-typing",                      //禁用手势输入。
+	"--disable-offer-store-unmasked-wallet-cards",   //禁用钱包卡。
+	"--disable-offer-upload-credit-cards",           //禁用上传信用卡。
+	"--disable-print-preview",                       //禁用打印预览。
+	"--disable-voice-input",                         //禁用语音输入。
+	"--disable-wake-on-wifi",                        //禁用 Wi-Fi 唤醒。
+	"--disable-cookie-encryption",                   //禁用 cookie 加密
+	"--ignore-gpu-blocklist",                        //忽略 GPU 阻止列表。
+	"--enable-async-dns",                            //启用异步 DNS。
+	"--enable-simple-cache-backend",                 //启用简单缓存后端
+	"--enable-tcp-fast-open",                        //启用 TCP 快速打开。
+	"--prerender-from-omnibox=disabled",             //用于禁用从地址栏预渲染页面
+	"--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,TranslateUI,BlinkGenPropertyTrees", // 禁用一些 Chrome 功能。
+	"--aggressive-cache-discard",                                      //启用缓存丢弃。
+	"--disable-ipc-flooding-protection",                               //禁用 IPC 洪水保护。
+	"--disable-default-apps",                                          //禁用默认应用
+	"--enable-webgl",                                                  //启用 WebGL。
+	"--disable-breakpad",                                              //禁用 Breakpad。
+	"--disable-component-update",                                      //禁用组件更新。
+	"--disable-domain-reliability",                                    //禁用域可靠性。
+	"--disable-sync",                                                  //禁用同步。
+	"--disable-client-side-phishing-detection",                        //禁用客户端钓鱼检测。
+	"--disable-hang-monitor",                                          //禁用挂起监视器
+	"--disable-popup-blocking",                                        //禁用弹出窗口阻止。
+	"--disable-crash-reporter",                                        //禁用崩溃报告器。
+	"--disable-dev-shm-usage",                                         //禁用 /dev/shm 使用。
+	"--disable-background-networking",                                 //禁用后台网络。
+	"--disable-background-timer-throttling",                           //禁用后台计时器限制。
+	"--disable-backgrounding-occluded-windows",                        //禁用后台窗口。
+	"--disable-infobars",                                              //禁用信息栏。
+	"--hide-scrollbars",                                               //隐藏滚动条。
+	"--disable-prompt-on-repost",                                      //禁用重新提交提示。
+	"--metrics-recording-only",                                        //仅记录指标。
+	"--safebrowsing-disable-auto-update",                              //禁用安全浏览自动更新。
+	"--use-mock-keychain",                                             //使用模拟钥匙串。
+	"--force-webrtc-ip-handling-policy=default_public_interface_only", //强制 WebRTC IP 处理策略。
+	"--enable-webrtc-stun-origin=false",                               //用于禁用WebRTC的STUN源，而
+	"--enforce-webrtc-ip-permission-check=false",                      //用于禁用WebRTC的IP权限检查。
 
-	"--ignore-gpu-blocklist",
-	"--enable-async-dns",
-	"--enable-simple-cache-backend",
-	"--enable-tcp-fast-open",
-	"--prerender-from-omnibox=disabled",
-	"--enable-web-bluetooth",
+	"--disable-session-crashed-bubble", //禁用会话崩溃气泡。
+	"--disable-renderer-backgrounding", //禁用渲染器后台化。
+	"--font-render-hinting=none",       //禁用字体渲染提示
+	"--disable-logging",                //禁用日志记录。
+	"--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4,imagesEnabled=true", //Blink 设置。
 
-	"--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,TranslateUI,BlinkGenPropertyTrees", // do not disable UserAgentClientHint
-	"--aggressive-cache-discard",
-	"--disable-ipc-flooding-protection",
-	"--disable-default-apps",
-	"--enable-webgl",
-	"--disable-breakpad",
-	"--disable-component-update",
-	"--disable-domain-reliability",
-	"--disable-sync",
-	"--disable-client-side-phishing-detection",
-	"--disable-hang-monitor",
-	"--disable-popup-blocking",
-	"--disable-crash-reporter",
-
-	"--disable-dev-shm-usage",
-	"--disable-background-networking",
-	"--disable-background-timer-throttling",
-	"--disable-backgrounding-occluded-windows",
-	"--disable-infobars",
-	"--hide-scrollbars",
-	"--disable-prompt-on-repost",
-	"--metrics-recording-only",
-
-	"--safebrowsing-disable-auto-update",
-	"--use-mock-keychain",
-	"--force-webrtc-ip-handling-policy=default_public_interface_only",
-	"--disable-session-crashed-bubble",
-	"--disable-renderer-backgrounding",
-	"--font-render-hinting=none",
-	"--disable-logging",
-	"--enable-surface-synchronization",
-	"--run-all-compositor-stages-before-draw",
-	"--disable-threaded-animation",
-	"--disable-threaded-scrolling",
-	"--disable-checker-imaging",
-
-	"--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
-	"--blink-settings=imagesEnabled=true",
-	"--ignore-ssl-errors=true",
-	"--ssl-protocol=any",
-
-	"--autoplay-policy=no-user-gesture-required",
-	"--force-color-profile=srgb",
-	"--disable-partial-raster",
-	"--disable-component-extensions-with-background-pages",
-	"--disable-new-content-rendering-timeout",
-	"--disable-translate",
-	"--password-store=basic",
-	"--disable-image-animation-resync",
+	"--ignore-ssl-errors=true",                             //忽略 SSL 错误。
+	"--ssl-protocol=any",                                   //使用任何 SSL 协议。
+	"--disable-partial-raster",                             //禁用部分光栅化
+	"--disable-component-extensions-with-background-pages", //禁用具有后台页面的组件扩展。
+	"--disable-translate",                                  //禁用翻译。
+	"--password-store=basic",                               //使用基本密码存储。
+	"--disable-image-animation-resync",                     //禁用图像动画重新
 }
 
 //go:embed devices.json

@@ -13,7 +13,7 @@ import (
 var readbilityJs string
 
 type Client struct {
-	cmd *cmd.JsClient
+	cmd *cmd.JyClient
 }
 type ParseOption struct {
 	MaxElemsToParse   int    `json:"maxElemsToParse,omitempty"`

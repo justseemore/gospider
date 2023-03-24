@@ -7,6 +7,12 @@ python到golang爬虫过渡的所有必需库.
 5. 执行js: 通过管道调用js 方法
 6. 执行python: 通过管道调用python 方法
 7. 更多功能...
+# 依赖
+* go1.20 (不要低于这个版本)
+# 安装 (不要拉github 上的包,go包路径只能在gitee 和github 选一个,拉去github 包会出现路径问题)
+```
+go get -u gitee.com/baixudong/gospider
+```
 # 教程
 1. [知乎](https://www.zhihu.com/people/xiao-bai-shu-87-3/posts)
 2. [掘金](https://juejin.cn/user/4098624347452359/posts)

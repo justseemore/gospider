@@ -112,7 +112,7 @@ var cmdPipPyScript []byte
 var jsScriptVersion = "015"
 var pyScriptVersion = "014"
 
-type JsClient struct {
+type JyClient struct {
 	client *Client
 	write  io.WriteCloser
 	read   *json.Decoder
@@ -120,7 +120,7 @@ type JsClient struct {
 }
 
 // 创建py解析器
-func NewPyClient(pre_ctx context.Context, script string, name string, names ...string) (*JsClient, error) {
+func NewPyClient(pre_ctx context.Context, script string, name string, names ...string) (*JyClient, error) {
 	names = append(names, name)
 	userDir, err := conf.GetMainDirPath()
 	if err != nil {
@@ -146,7 +146,7 @@ func NewPyClient(pre_ctx context.Context, script string, name string, names ...s
 		return nil, err
 	}
 	go cli.Run()
-	jsCli := &JsClient{
+	jsCli := &JyClient{
 		client: cli,
 		read:   json.NewDecoder(readBody),
 		write:  writeBody,
@@ -167,7 +167,7 @@ func NewPyClient(pre_ctx context.Context, script string, name string, names ...s
 }
 
 // 创建json解析器
-func NewJsClient(pre_ctx context.Context, script string, name string, names ...string) (*JsClient, error) {
+func NewJsClient(pre_ctx context.Context, script string, name string, names ...string) (*JyClient, error) {
 	names = append(names, name)
 	userDir, err := conf.GetMainDirPath()
 	if err != nil {
@@ -193,7 +193,7 @@ func NewJsClient(pre_ctx context.Context, script string, name string, names ...s
 		return nil, err
 	}
 	go cli.Run()
-	jsCli := &JsClient{
+	jsCli := &JyClient{
 		client: cli,
 		read:   json.NewDecoder(readBody),
 		write:  writeBody,
@@ -212,7 +212,7 @@ func NewJsClient(pre_ctx context.Context, script string, name string, names ...s
 	}
 	return jsCli, nil
 }
-func (obj *JsClient) run(con []byte) (gjson.Result, error) {
+func (obj *JyClient) run(con []byte) (gjson.Result, error) {
 	obj.lock.Lock()
 	defer obj.lock.Unlock()
 	con = append(con, '\n')
@@ -226,7 +226,7 @@ func (obj *JsClient) run(con []byte) (gjson.Result, error) {
 }
 
 // 执行函数,第一个参数是要调用的函数名称,后面的是传参
-func (obj *JsClient) Call(funcName string, values ...any) (jsonData gjson.Result, err error) {
+func (obj *JyClient) Call(funcName string, values ...any) (jsonData gjson.Result, err error) {
 	scrJson, _ := json.Marshal(map[string]any{"Func": funcName, "Args": values})
 	if jsonData, err = obj.run(scrJson); err != nil {
 		if obj.client.Err != nil {
@@ -241,7 +241,7 @@ func (obj *JsClient) Call(funcName string, values ...any) (jsonData gjson.Result
 }
 
 // 关闭解析器
-func (obj *JsClient) Close() {
+func (obj *JyClient) Close() {
 	obj.client.Close()
 }
 
