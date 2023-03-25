@@ -38,3 +38,22 @@ func main() {
 	log.Print(rs)
 }
 ~~~
+## 执行python代码示例
+~~~go
+func main() {
+	script := `def sign(val,val2):
+		return {"val":val,"val2":val2}`
+	pyCli, err := cmd.NewPyClient(nil, cmd.PyClientOption{
+		Script: script,
+		Names:  []string{"sign"},
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	rs, err := pyCli.Call("sign", 1, 2)
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Print(rs)
+}
+~~~
