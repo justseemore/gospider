@@ -13,6 +13,7 @@ import (
 	"crypto/md5"
 	rand2 "crypto/rand"
 	"crypto/sha1"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
@@ -304,20 +305,20 @@ func GetDefaultDir() (string, error) {
 func PathJoin(elem ...string) string {
 	return filepath.Join(elem...)
 }
-func GetHost(addrTypes ...int) string {
+func GetHost(addrTypes ...int) net.IP {
 	hosts := GetHosts(addrTypes...)
 	if len(hosts) == 0 {
-		return "0.0.0.0"
+		return net.IPv4(0, 0, 0, 0)
 	} else {
 		return hosts[0]
 	}
 }
-func GetHosts(addrTypes ...int) []string {
+func GetHosts(addrTypes ...int) []net.IP {
 	var addrType int
 	if len(addrTypes) > 0 {
 		addrType = addrTypes[0]
 	}
-	result := []string{}
+	result := []net.IP{}
 	lls, err := net.InterfaceAddrs()
 	if err != nil {
 		return result
@@ -326,7 +327,7 @@ func GetHosts(addrTypes ...int) []string {
 		mm, ok := ll.(*net.IPNet)
 		if ok && mm.IP.IsPrivate() {
 			if addrType == 0 || ParseIp(mm.IP) == addrType {
-				result = append(result, mm.IP.String())
+				result = append(result, mm.IP)
 			}
 		}
 	}
@@ -739,14 +740,14 @@ func GetRootCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
 	}
 	rootCsr := &x509.Certificate{
 		Version:      3,
-		SerialNumber: big.NewInt(10000),
+		SerialNumber: big.NewInt(time.Now().Unix()),
 		Subject: pkix.Name{
 			Country:            []string{"CN"},
 			Province:           []string{"Shanghai"},
 			Locality:           []string{"Shanghai"},
-			Organization:       []string{"JediLtd"},
-			OrganizationalUnit: []string{"JediProxy"},
-			CommonName:         "Jedi Root CA",
+			Organization:       []string{"GoSpider"},
+			OrganizationalUnit: []string{"GoSpiderProxy"},
+			CommonName:         "Gospider Root CA",
 		},
 		NotBefore:             beforDate,
 		NotAfter:              afterDate,
@@ -762,107 +763,68 @@ func GetRootCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
 	}
 	return x509.ParseCertificate(rootDer)
 }
-func GetInterCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
-	rootCrt, err := GetRootCert(key)
-	if err != nil {
-		return nil, err
-	}
-	beforDate, err := time.ParseInLocation(time.DateOnly, "2023-03-20", time.Local)
-	if err != nil {
-		return nil, err
-	}
-	afterDate, err := time.ParseInLocation(time.DateOnly, "2033-03-20", time.Local)
-	if err != nil {
-		return nil, err
-	}
-	interCsr := &x509.Certificate{
-		Version:      3,
-		SerialNumber: big.NewInt(10001),
-		Subject: pkix.Name{
-			Country:            []string{"CN"},
-			Province:           []string{"Shanghai"},
-			Locality:           []string{"Shanghai"},
-			Organization:       []string{"JediLtd"},
-			OrganizationalUnit: []string{"JediProxy"},
-			CommonName:         "Jedi Inter CA",
-		},
-		NotBefore:             beforDate,
-		NotAfter:              afterDate,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-		MaxPathLen:            0,
-		MaxPathLenZero:        true,
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-	}
-	interDer, err := x509.CreateCertificate(rand2.Reader, interCsr, rootCrt, key.Public(), key)
-	if err != nil {
-		return nil, err
-	}
-	return x509.ParseCertificate(interDer)
-}
-func GetCertWithCN(interCert *x509.Certificate, key *ecdsa.PrivateKey, commonName string) (*x509.Certificate, error) {
-	beforDate, err := time.ParseInLocation(time.DateOnly, "2023-03-20", time.Local)
-	if err != nil {
-		return nil, err
-	}
-	afterDate, err := time.ParseInLocation(time.DateOnly, "2033-03-20", time.Local)
-	if err != nil {
-		return nil, err
-	}
-	csr := &x509.Certificate{
-		Version:      3,
-		SerialNumber: big.NewInt(10002),
-		Subject: pkix.Name{
-			Country:            []string{"CN"},
-			Province:           []string{"Shanghai"},
-			Locality:           []string{"Shanghai"},
-			Organization:       []string{"JediLtd"},
-			OrganizationalUnit: []string{"JediProxy"},
-			CommonName:         commonName,
-		},
-		DNSNames:              []string{commonName},
-		NotBefore:             beforDate,
-		NotAfter:              afterDate,
-		BasicConstraintsValid: true,
-		IsCA:                  false,
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	}
-	der, err := x509.CreateCertificate(rand2.Reader, csr, interCert, key.Public(), key)
-	if err != nil {
-		return nil, err
-	}
-	return x509.ParseCertificate(der)
-}
-func GetCertWithCert(interCert *x509.Certificate, key *ecdsa.PrivateKey, preCert *x509.Certificate) (*x509.Certificate, error) {
-	beforDate, err := time.ParseInLocation(time.DateOnly, "2023-03-20", time.Local)
-	if err != nil {
-		return nil, err
-	}
-	afterDate, err := time.ParseInLocation(time.DateOnly, "2033-03-20", time.Local)
-	if err != nil {
-		return nil, err
-	}
-	csr := &x509.Certificate{
-		Version:               3,
-		SerialNumber:          big.NewInt(10002),
-		Subject:               preCert.Subject,
-		DNSNames:              preCert.DNSNames,
-		NotBefore:             beforDate,
-		NotAfter:              afterDate,
-		BasicConstraintsValid: true,
-		IsCA:                  false,
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	}
-	der, err := x509.CreateCertificate(rand2.Reader, csr, interCert, key.Public(), key)
-	if err != nil {
-		return nil, err
-	}
-	return x509.ParseCertificate(der)
-}
 func GetCertKey() (*ecdsa.PrivateKey, error) {
 	return ecdsa.GenerateKey(elliptic.P256(), rand2.Reader)
+}
+func GetCertWithCN(rootCert *x509.Certificate, key *ecdsa.PrivateKey, commonName string) (*x509.Certificate, error) {
+	csr := &x509.Certificate{
+		Version:      3,
+		SerialNumber: big.NewInt(time.Now().Unix()),
+		Subject: pkix.Name{
+			Country:            []string{"CN"},
+			Province:           []string{"Shanghai"},
+			Locality:           []string{"Shanghai"},
+			Organization:       []string{"GoSpider"},
+			OrganizationalUnit: []string{"GoSpiderProxy"},
+		},
+		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1)},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(1, 0, 0),
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+	}
+	csr.IPAddresses = GetHosts()
+	if commonName != "" {
+		if ip, ipType := ParseHost(commonName); ipType == 0 {
+			csr.Subject.CommonName = commonName
+			csr.DNSNames = []string{commonName}
+		} else {
+			csr.IPAddresses = append(csr.IPAddresses, ip)
+		}
+	}
+	der, err := x509.CreateCertificate(rand2.Reader, csr, rootCert, key.Public(), key)
+	if err != nil {
+		return nil, err
+	}
+	return x509.ParseCertificate(der)
+}
+func GetCertWithCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey, preCert *x509.Certificate) (*x509.Certificate, error) {
+	csr := &x509.Certificate{
+		Version:               3,
+		SerialNumber:          big.NewInt(time.Now().Unix()),
+		Subject:               preCert.Subject,
+		DNSNames:              preCert.DNSNames,
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(1, 0, 0),
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+	}
+	der, err := x509.CreateCertificate(rand2.Reader, csr, rootCert, key.Public(), key)
+	if err != nil {
+		return nil, err
+	}
+	return x509.ParseCertificate(der)
+}
+func GetTlsCert(cert *x509.Certificate, key *ecdsa.PrivateKey) (tls.Certificate, error) {
+	keyFile, err := GetCertKeyData(key)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	return tls.X509KeyPair(GetCertData(cert), keyFile)
 }
 func GetCertData(cert *x509.Certificate) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})

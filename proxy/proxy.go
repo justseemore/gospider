@@ -28,10 +28,10 @@ import (
 	"gitee.com/baixudong/gospider/websocket"
 )
 
-//go:embed rootCert.crt
+//go:embed gospider.crt
 var CrtFile []byte
 
-//go:embed rootCert.key
+//go:embed gospider.key
 var KeyFile []byte
 
 func getCert(serverName string) (tlsCert tls.Certificate, err error) {
@@ -47,7 +47,7 @@ func getCert(serverName string) (tlsCert tls.Certificate, err error) {
 	if err != nil {
 		return tlsCert, err
 	}
-	return tls.X509KeyPair(tools.GetCertData(cert), KeyFile)
+	return tools.GetTlsCert(cert, key)
 }
 func getCert2(preCert *x509.Certificate) (tlsCert tls.Certificate, err error) {
 	crt, err := tools.LoadCertData(CrtFile)
@@ -62,7 +62,7 @@ func getCert2(preCert *x509.Certificate) (tlsCert tls.Certificate, err error) {
 	if err != nil {
 		return tlsCert, err
 	}
-	return tls.X509KeyPair(tools.GetCertData(cert), KeyFile)
+	return tools.GetTlsCert(cert, key)
 }
 
 type ClientOption struct {
@@ -80,15 +80,15 @@ type ClientOption struct {
 	CrtFile []byte   //公钥,根证书
 	KeyFile []byte   //私钥
 
-	TLSHandshakeTimeout int64
-	DnsCacheTime        int64
+	TLSHandshakeTimeout int64                                                   //tls 握手超时时间
+	DnsCacheTime        int64                                                   //dns 缓存时间
 	GetProxy            func(ctx context.Context, url *url.URL) (string, error) //代理ip http://116.62.55.139:8888
 	Proxy               string                                                  //代理ip http://192.168.1.50:8888
-	KeepAlive           int64
-	LocalAddr           string //本地网卡出口
-	ServerName          string
-	Vpn                 bool   //是否是vpn
-	Dns                 string //dns
+	KeepAlive           int64                                                   //保活时间
+	LocalAddr           string                                                  //本地网卡出口
+	ServerName          string                                                  //https 域名或ip，当使用https协议的代理时需要设置
+	Vpn                 bool                                                    //是否是vpn
+	Dns                 string                                                  //dns
 }
 
 //go:linkname readRequest net/http.readRequest
@@ -168,15 +168,12 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		return nil, err
 	}
 	//证书
-	if option.CrtFile != nil && KeyFile != nil {
-		if option.ServerName == "" {
-			option.ServerName = "gospider"
-		}
+	if option.CrtFile == nil || option.KeyFile == nil {
 		if server.cert, err = getCert(option.ServerName); err != nil {
 			return nil, err
 		}
 	} else {
-		if server.cert, err = tls.X509KeyPair(CrtFile, KeyFile); err != nil {
+		if server.cert, err = tls.X509KeyPair(option.CrtFile, option.KeyFile); err != nil {
 			return nil, err
 		}
 	}
@@ -513,6 +510,8 @@ func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
 		return err
 	}
 	server := NewProxyCon(proxyServer, bufio.NewReader(proxyServer), client.option)
+	server.option.port = port
+	server.option.host = host
 	defer server.Close()
 	return obj.copyMain(ctx, client, server)
 }

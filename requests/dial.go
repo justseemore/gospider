@@ -61,7 +61,7 @@ type DialOption struct {
 
 func NewDail(option DialOption) (*DialClient, error) {
 	if option.KeepAlive == 0 {
-		option.KeepAlive = 15
+		option.KeepAlive = 30
 	}
 	if option.TLSHandshakeTimeout == 0 {
 		option.TLSHandshakeTimeout = 15

@@ -575,7 +575,7 @@ func (obj *Client) init() error {
 	if runtime.GOOS == "windows" {
 		host = "0.0.0.0"
 	} else {
-		host = tools.GetHost(4)
+		host = tools.GetHost(4).String()
 	}
 	obj.proxyCli, err = proxy.NewClient(obj.ctx, proxy.ClientOption{
 		Host:  host,
