@@ -86,7 +86,7 @@ type ClientOption struct {
 	Proxy               string                                                  //代理ip http://192.168.1.50:8888
 	KeepAlive           int64                                                   //保活时间
 	LocalAddr           string                                                  //本地网卡出口
-	ServerName          string                                                  //https 域名或ip，当使用https协议的代理时需要设置
+	ServerName          string                                                  //https 域名或ip
 	Vpn                 bool                                                    //是否是vpn
 	Dns                 string                                                  //dns
 }
