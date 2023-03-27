@@ -52,7 +52,7 @@ func main() {
 	log.Panic(proCli.Run())
 }
 ```
-# vpn 模式(https就是vpn,开启vpn后只会代理https协议)
+# VPN 模式(https就是VPN,开启VPN后只会代理https协议)
 ```go
 func main() {
 	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
