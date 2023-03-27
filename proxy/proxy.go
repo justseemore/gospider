@@ -89,6 +89,8 @@ type ClientOption struct {
 	ServerName          string                                                  //https 域名或ip
 	Vpn                 bool                                                    //是否是vpn
 	Dns                 string                                                  //dns
+	AddrType            requests.AddrType                                       //host优先解析的类型
+	GetAddrType         func(string) requests.AddrType                          //控制host优先解析的类型
 }
 
 //go:linkname readRequest net/http.readRequest
@@ -164,6 +166,8 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		Ja3Spec:             option.ProxyJa3Spec,
 		DisDnsCache:         option.DisDnsCache,
 		Dns:                 option.Dns,
+		GetAddrType:         option.GetAddrType,
+		AddrType:            option.AddrType,
 	}); err != nil {
 		return nil, err
 	}

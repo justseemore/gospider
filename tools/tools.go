@@ -734,7 +734,7 @@ func GetRootCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
-	afterDate, err := time.ParseInLocation(time.DateOnly, "2033-03-20", time.Local)
+	afterDate, err := time.ParseInLocation(time.DateOnly, "3023-03-20", time.Local)
 	if err != nil {
 		return nil, err
 	}
@@ -779,7 +779,7 @@ func GetCertWithCN(rootCert *x509.Certificate, key *ecdsa.PrivateKey, commonName
 		},
 		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1)},
 		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(1, 0, 0),
+		NotAfter:              time.Now().AddDate(1000, 0, 0),
 		BasicConstraintsValid: true,
 		IsCA:                  false,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
@@ -807,7 +807,7 @@ func GetCertWithCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey, preCert 
 		Subject:               preCert.Subject,
 		DNSNames:              preCert.DNSNames,
 		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(1, 0, 0),
+		NotAfter:              time.Now().AddDate(1000, 0, 0),
 		BasicConstraintsValid: true,
 		IsCA:                  false,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
