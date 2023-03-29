@@ -302,7 +302,15 @@ func (obj *JyClient) run(dataMap map[string]any) (gjson.Result, error) {
 	if _, err = obj.write.Write(con); err != nil {
 		return gjson.Result{}, err
 	}
-	return tools.Any2json(<-obj.pip), nil
+	select {
+	case data := <-obj.pip:
+		return tools.Any2json(data), nil
+	case <-obj.client.Done():
+		if obj.client.Err != nil {
+			return gjson.Result{}, obj.client.Err
+		}
+		return gjson.Result{}, obj.client.ctx.Err()
+	}
 }
 
 // 执行函数,第一个参数是要调用的函数名称,后面的是传参

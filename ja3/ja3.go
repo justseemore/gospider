@@ -62,6 +62,50 @@ var (
 	HelloQQ_Auto = utls.HelloQQ_Auto
 	HelloQQ_11_1 = utls.HelloQQ_11_1
 )
+var ClientHelloIDs = []ClientHelloId{
+	HelloFirefox_Auto,
+	HelloFirefox_55,
+	HelloFirefox_56,
+	HelloFirefox_63,
+	HelloFirefox_65,
+	HelloFirefox_99,
+	HelloFirefox_102,
+	HelloFirefox_105,
+
+	HelloChrome_Auto,
+	HelloChrome_58,
+	HelloChrome_62,
+	HelloChrome_70,
+	HelloChrome_72,
+	HelloChrome_83,
+	HelloChrome_87,
+	HelloChrome_96,
+	HelloChrome_100,
+	HelloChrome_102,
+	HelloChrome_106_Shuffle,
+
+	HelloIOS_Auto,
+	HelloIOS_11_1,
+	HelloIOS_12_1,
+	HelloIOS_13,
+	HelloIOS_14,
+
+	HelloAndroid_11_OkHttp,
+
+	HelloEdge_Auto,
+	HelloEdge_85,
+	HelloEdge_106,
+
+	HelloSafari_Auto,
+	HelloSafari_16_0,
+
+	Hello360_Auto,
+	Hello360_7_5,
+	Hello360_11_0,
+
+	HelloQQ_Auto,
+	HelloQQ_11_1,
+}
 
 func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disHttp2 bool, addr string) (utlsConn *utls.UConn, err error) {
 	defer func() {

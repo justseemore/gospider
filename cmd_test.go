@@ -1,18 +1,11 @@
-# 功能概要
-* 执行命令行命令
-* 没有内存泄露的执行cmd 命令
-* js 解析器，配合node ,调用js代码，使用管道
-* python 解析器，配合python ,调用python代码，使用管道
-
-## 执行js 代码示例
-~~~go
 package main
 
 import (
-	"log"
+	"testing"
 
 	"gitee.com/baixudong/gospider/cmd"
 )
+
 func TestJs(t *testing.T) {
 	script := `
 	function sign(val,val2){
@@ -44,9 +37,6 @@ func TestJs(t *testing.T) {
 		t.Fatal("sign error")
 	}
 }
-~~~
-## 执行python代码示例
-~~~go
 func TestPy(t *testing.T) {
 	script := `def sign(val,val2):
 	return {"val":val,"val2":val2}`
@@ -65,4 +55,3 @@ func TestPy(t *testing.T) {
 		t.Fatal("sign error")
 	}
 }
-~~~
