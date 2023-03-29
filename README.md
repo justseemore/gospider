@@ -1,7 +1,7 @@
 # 简介
 ### gospider 是一个golang 爬虫神器，拥有python到golang爬虫过渡的所有必需库。用于python爬虫从业者快速且无坑的过渡到golang
 1. [请求库](../../tree/master/requests)：支持ja3,http2 协议,各种主流代理协议,覆盖python requests 所有的功能
-2. [代理库](../../tree/master/proxy?)：ja3指纹代理,数据抓包,链式代理,客户端协议自动转换
+2. 代理库：ja3指纹代理,数据抓包,链式代理,客户端协议自动转换
 3. [并发库](../../tree/master/thread)：自实现高性能并发库
 4. [执行js,py](../../tree/master/cmd): 通过管道调用js,python 中的方法
 5. 更多功能...
