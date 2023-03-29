@@ -116,7 +116,7 @@ var stealth2 string
 type Client struct {
 	db           *db.Client[cdp.FulData]
 	cmdCli       *cmd.Client
-	reqCli       *requests.Client
+	globalReqCli *requests.Client
 	port         int
 	host         string
 	lock         sync.Mutex
@@ -125,11 +125,7 @@ type Client struct {
 	webSock      *cdp.WebSock
 	proxyCli     *proxy.Client
 	disRoute     bool //关闭默认路由
-	proxy        string
-	getProxy     func(ctx context.Context, url *url.URL) (string, error)
 	disDataCache bool
-	ja3Spec      ja3.ClientHelloSpec
-	ja3          bool
 	headless     bool
 }
 type ClientOption struct {
@@ -506,36 +502,39 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 			return
 		}
 	}
-	var reqCli *requests.Client
-	if reqCli, err = requests.NewClient(ctx); err != nil {
-		return
+	globalReqCli, err := requests.NewClient(preCtx, requests.ClientOption{
+		Proxy:     option.Proxy,
+		GetProxy:  option.GetProxy,
+		Ja3Spec:   option.Ja3Spec,
+		Ja3:       option.Ja3,
+		DisCookie: true,
+	})
+	if err != nil {
+		return nil, err
 	}
-
+	globalReqCli.RedirectNum = -1
+	globalReqCli.DisDecode = true
 	client = &Client{
-		proxy:        option.Proxy,
-		getProxy:     option.GetProxy,
 		disDataCache: option.DisDataCache,
-		ja3Spec:      option.Ja3Spec,
-		ja3:          option.Ja3,
 		headless:     option.Headless,
-
-		ctx:      ctx,
-		cnl:      cnl,
-		cmdCli:   cli,
-		db:       db.NewClient[cdp.FulData](ctx, cnl),
-		host:     option.Host,
-		port:     option.Port,
-		reqCli:   reqCli,
-		disRoute: option.DisRoute,
+		ctx:          ctx,
+		cnl:          cnl,
+		cmdCli:       cli,
+		db:           db.NewClient[cdp.FulData](ctx, cnl),
+		host:         option.Host,
+		port:         option.Port,
+		globalReqCli: globalReqCli,
+		disRoute:     option.DisRoute,
 	}
 	return client, client.init()
 }
 
 // 浏览器初始化
 func (obj *Client) init() error {
-	rs, err := obj.reqCli.Request(obj.ctx, "get",
+	rs, err := obj.globalReqCli.Request(obj.ctx, "get",
 		fmt.Sprintf("http://%s:%d/json/version", obj.host, obj.port),
 		requests.RequestOption{
+			DisProxy: true,
 			ErrCallBack: func(err error) bool {
 				time.Sleep(time.Millisecond * 1000)
 				return false
@@ -564,6 +563,7 @@ func (obj *Client) init() error {
 	}
 	obj.webSock, err = cdp.NewWebSock(
 		obj.ctx,
+		obj.globalReqCli,
 		fmt.Sprintf("ws://%s:%d/devtools/browser/%s", obj.host, obj.port, browWsRs.Group(1)),
 		cdp.WebSockOption{},
 		obj.db,
@@ -617,7 +617,6 @@ func (obj *Client) Close() (err error) {
 
 type PageOption struct {
 	Proxy        string
-	GetProxy     func(ctx context.Context, url *url.URL) (string, error)
 	DisDataCache bool //关闭数据缓存
 	Ja3Spec      ja3.ClientHelloSpec
 	Ja3          bool
@@ -629,22 +628,9 @@ func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page
 	if len(options) > 0 {
 		option = options[0]
 	}
-	if option.Proxy == "" {
-		option.Proxy = obj.proxy
-	}
-	if option.GetProxy == nil {
-		option.GetProxy = obj.getProxy
-	}
 	if !option.DisDataCache {
 		option.DisDataCache = obj.disDataCache
 	}
-	if !option.Ja3Spec.IsSet() {
-		option.Ja3Spec = obj.ja3Spec
-	}
-	if !option.Ja3 {
-		option.Ja3 = obj.ja3
-	}
-
 	rs, err := obj.webSock.TargetCreateTarget(preCtx, "")
 	if err != nil {
 		return nil, err
@@ -655,15 +641,16 @@ func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page
 	}
 	ctx, cnl := context.WithCancel(obj.ctx)
 	page := &Page{
-		id:         targetId,
-		preWebSock: obj.webSock,
-		port:       obj.port,
-		host:       obj.host,
-		ctx:        ctx,
-		cnl:        cnl,
-		headless:   obj.headless,
+		id:           targetId,
+		preWebSock:   obj.webSock,
+		port:         obj.port,
+		host:         obj.host,
+		ctx:          ctx,
+		cnl:          cnl,
+		headless:     obj.headless,
+		globalReqCli: obj.globalReqCli,
 	}
-	if err = page.init(option, obj.db); err != nil {
+	if err = page.init(obj.globalReqCli, option, obj.db); err != nil {
 		return nil, err
 	}
 	if !obj.disRoute {

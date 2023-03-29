@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/url"
 	"sync"
 	"time"
 
@@ -40,19 +39,19 @@ type RecvData struct {
 }
 
 type WebSock struct {
-	disDataCache bool
-	db           *db.Client[FulData]
-	ids          map[int64]*event
-	methods      map[string]*event
-	methodLock   sync.RWMutex
-	idLock       sync.RWMutex
-	conn         *websocket.Conn
-	ctx          context.Context
-	cnl          context.CancelCauseFunc
-	id           atomic.Int64
-	RouteFunc    func(context.Context, *Route)
-	reqCli       *requests.Client
-	lock         sync.Mutex
+	option     WebSockOption
+	db         *db.Client[FulData]
+	ids        map[int64]*event
+	methods    map[string]*event
+	methodLock sync.RWMutex
+	idLock     sync.RWMutex
+	conn       *websocket.Conn
+	ctx        context.Context
+	cnl        context.CancelCauseFunc
+	id         atomic.Int64
+	RouteFunc  func(context.Context, *Route)
+	reqCli     *requests.Client
+	lock       sync.Mutex
 }
 
 type DataEntrie struct {
@@ -164,38 +163,24 @@ func (obj *WebSock) recvMain() (err error) {
 
 type WebSockOption struct {
 	Proxy        string
-	GetProxy     func(ctx context.Context, url *url.URL) (string, error)
 	DisDataCache bool //关闭数据缓存
 	Ja3Spec      ja3.ClientHelloSpec
 	Ja3          bool
 }
 
-func NewWebSock(preCtx context.Context, ws string, option WebSockOption, db *db.Client[FulData]) (*WebSock, error) {
-	reqOption := requests.ClientOption{
-		Proxy:    option.Proxy,
-		GetProxy: option.GetProxy,
-		Ja3Spec:  option.Ja3Spec,
-		Ja3:      option.Ja3,
-	}
-	reqOption.DisCookie = true
-	reqCli, err := requests.NewClient(preCtx, reqOption)
-	if err != nil {
-		return nil, err
-	}
-	reqCli.RedirectNum = -1
-	reqCli.DisDecode = true
-	response, err := reqCli.Request(preCtx, "get", ws, requests.RequestOption{DisProxy: true})
+func NewWebSock(preCtx context.Context, globalReqCli *requests.Client, ws string, option WebSockOption, db *db.Client[FulData]) (*WebSock, error) {
+	response, err := globalReqCli.Request(preCtx, "get", ws, requests.RequestOption{DisProxy: true})
 	if err != nil {
 		return nil, err
 	}
 	response.WebSocket().SetReadLimit(1024 * 1024 * 1024) //1G
 	cli := &WebSock{
-		ids:          make(map[int64]*event),
-		methods:      make(map[string]*event),
-		conn:         response.WebSocket(),
-		db:           db,
-		reqCli:       reqCli,
-		disDataCache: option.DisDataCache,
+		ids:     make(map[int64]*event),
+		methods: make(map[string]*event),
+		conn:    response.WebSocket(),
+		db:      db,
+		reqCli:  globalReqCli,
+		option:  option,
 	}
 	cli.ctx, cli.cnl = context.WithCancelCause(preCtx)
 	go cli.recvMain()
@@ -204,7 +189,6 @@ func NewWebSock(preCtx context.Context, ws string, option WebSockOption, db *db.
 }
 func (obj *WebSock) Close(err error) error {
 	obj.cnl(err)
-	obj.reqCli.Close()
 	return obj.conn.Close("close")
 }
 

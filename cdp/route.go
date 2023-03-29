@@ -102,7 +102,11 @@ func keyMd5(key RequestOption, resourceType string) [16]byte {
 	return tools.Md5(md5Str)
 }
 func (obj *Route) Request(ctx context.Context, routeOption RequestOption, options ...requests.RequestOption) (FulData, error) {
-	var option requests.RequestOption
+	option := requests.RequestOption{
+		Proxy:   obj.webSock.option.Proxy,
+		Ja3Spec: obj.webSock.option.Ja3Spec,
+		Ja3:     obj.webSock.option.Ja3,
+	}
 	if len(options) > 0 {
 		option = options[0]
 	}
@@ -119,7 +123,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	var fulData FulData
 	var err error
 	routeKey := keyMd5(routeOption, resourceType)
-	if !obj.webSock.disDataCache {
+	if !obj.webSock.option.DisDataCache {
 		if fulData, err = obj.webSock.db.Get(routeKey); err == nil { //如果有緩存
 			return fulData, err
 		}
@@ -141,7 +145,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	fulData.Body = rs.Text()
 	fulData.Headers = headers
 	fulData.ResponsePhrase = rs.Status()
-	if !obj.webSock.disDataCache && fulData.StatusCode == 200 && fulData.Body != "" {
+	if !obj.webSock.option.DisDataCache && fulData.StatusCode == 200 && fulData.Body != "" {
 		obj.webSock.db.Put(routeKey, fulData)
 	}
 	return fulData, nil

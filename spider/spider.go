@@ -240,7 +240,6 @@ func (obj *Client) Request(ctx context.Context, method string, url string, optio
 		return nil, err
 	}
 	defer page.Close()
-	page.ReqCli = obj.Session
 	if err = page.GoTo(ctx, url); err != nil {
 		return nil, err
 	}

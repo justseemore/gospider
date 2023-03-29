@@ -21,33 +21,30 @@ import (
 )
 
 type Page struct {
-	host       string
-	port       int
-	id         string
-	mouseX     float64
-	mouseY     float64
-	ctx        context.Context
-	cnl        context.CancelFunc
-	preWebSock *cdp.WebSock
-	ReqCli     *requests.Client
-	headless   bool
-	nodeId     int64
-	baseUrl    string
-	webSock    *cdp.WebSock
+	host         string
+	port         int
+	id           string
+	mouseX       float64
+	mouseY       float64
+	ctx          context.Context
+	cnl          context.CancelFunc
+	preWebSock   *cdp.WebSock
+	globalReqCli *requests.Client
+	headless     bool
+	nodeId       int64
+	baseUrl      string
+	webSock      *cdp.WebSock
 }
 
-func (obj *Page) init(option PageOption, db *db.Client[cdp.FulData]) error {
+func (obj *Page) init(globalReqCli *requests.Client, option PageOption, db *db.Client[cdp.FulData]) error {
 	var err error
 	if obj.webSock, err = cdp.NewWebSock(
 		obj.ctx,
+		globalReqCli,
 		fmt.Sprintf("ws://%s:%d/devtools/page/%s", obj.host, obj.port, obj.id),
 		cdp.WebSockOption(option),
 		db,
 	); err != nil {
-		return err
-	}
-	obj.ReqCli, err = requests.NewClient(obj.ctx)
-	if err != nil {
 		return err
 	}
 	if _, err = obj.webSock.PageEnable(obj.ctx); err != nil {
@@ -166,7 +163,7 @@ func (obj *Page) Close() error {
 	return err
 }
 func (obj *Page) close() error {
-	resp, err := obj.ReqCli.Request(context.TODO(), "get", fmt.Sprintf("http://%s:%d/json/close/%s", obj.host, obj.port, obj.id), requests.RequestOption{DisProxy: true})
+	resp, err := obj.globalReqCli.Request(context.TODO(), "get", fmt.Sprintf("http://%s:%d/json/close/%s", obj.host, obj.port, obj.id), requests.RequestOption{DisProxy: true})
 	if err != nil {
 		return err
 	}
