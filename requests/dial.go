@@ -218,11 +218,7 @@ func (obj *DialClient) clientVerifySocks5(ctx context.Context, proxyUrl *url.URL
 	}
 	var host string
 	var port int
-	var revHost string
-	if revHost, err = obj.AddrToIp(ctx, addr); err != nil {
-		return
-	}
-	if host, port, err = tools.SplitHostPort(revHost); err != nil {
+	if host, port, err = tools.SplitHostPort(addr); err != nil {
 		return
 	}
 	writeCon := []byte{5, 1, 0}
@@ -498,6 +494,10 @@ func (obj *DialClient) DialContextForProxy(ctx context.Context, netword string, 
 		case "https":
 			return obj.Http2HttpsProxy(ctx, netword, addr, host, proxyUrl)
 		case "socks5":
+			addr, err := obj.AddrToIp(ctx, addr)
+			if err != nil {
+				return nil, err
+			}
 			return obj.Http2Socks5Proxy(ctx, netword, addr, proxyUrl)
 		default:
 			return nil, errors.New("proxyUrl Scheme error")

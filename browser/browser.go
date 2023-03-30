@@ -76,7 +76,7 @@ func BrowserCmdMain() (err error) {
 	}()
 	select {
 	case <-cmdCli.Done():
-		return cmdCli.Err
+		return cmdCli.Err()
 	case <-ctx.Done():
 		return context.Cause(ctx)
 	case <-pipData:
@@ -103,7 +103,7 @@ func BrowserCmdMain() (err error) {
 	case <-ctx.Done():
 		return context.Cause(ctx)
 	case <-cmdCli.Done():
-		return cmdCli.Err
+		return cmdCli.Err()
 	}
 }
 
@@ -301,7 +301,7 @@ func runChrome(ctx context.Context, option *ClientOption) (*cmd.Client, error) {
 		return nil, err
 	}
 	go cli.Run()
-	return cli, cli.Err
+	return cli, cli.Err()
 }
 
 var chromeArgs = []string{
@@ -548,8 +548,8 @@ func (obj *Client) init() error {
 			TryNum: 10,
 		})
 	if err != nil {
-		if obj.cmdCli.Err != nil {
-			return obj.cmdCli.Err
+		if err2 := obj.cmdCli.Err(); err2 != nil {
+			return err2
 		}
 		return err
 	}

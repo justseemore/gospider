@@ -174,9 +174,10 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		}
 	}
 	//构造listen
-	server.host = option.Host
-	server.port = strconv.Itoa(option.Port)
-	if server.listener, err = net.Listen("tcp", net.JoinHostPort(server.host, server.port)); err != nil {
+	if server.listener, err = net.Listen("tcp", net.JoinHostPort(option.Host, strconv.Itoa(option.Port))); err != nil {
+		return nil, err
+	}
+	if server.host, server.port, err = net.SplitHostPort(server.listener.Addr().String()); err != nil {
 		return nil, err
 	}
 	server.capture = option.Capture
@@ -254,7 +255,6 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) (err error) 
 			}
 		}()
 	}
-
 	if client == nil {
 		return errors.New("client is nil")
 	}
@@ -269,56 +269,16 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) (err error) 
 	}
 	if obj.vpn {
 		if firstCons[0] == 22 {
-			return obj.httpsHandle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}))
+			return obj.httpsHandle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}, true))
 		}
 		return errors.New("vpn error")
 	}
 	switch firstCons[0] {
 	case 5: //socks5 代理
-		return obj.sockes5Handle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}))
+		return obj.sockes5Handle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}, true))
 	case 22: //https 代理
-		return obj.httpsHandle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}))
+		return obj.httpsHandle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}, true))
 	default: //http 代理
-		return obj.httpHandle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}))
-	}
-}
-
-func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, ws bool, cert tls.Certificate) (tlsConn *tls.Conn, http2 bool, err error) {
-	var nextProtos []string
-	if ws {
-		nextProtos = []string{"http/1.1"}
-	} else {
-		nextProtos = []string{"h2", "http/1.1"}
-	}
-	tlsConn = tls.Server(conn, &tls.Config{
-		InsecureSkipVerify: true,
-		Certificates:       []tls.Certificate{cert},
-		NextProtos:         nextProtos,
-	})
-	if err = tlsConn.HandshakeContext(ctx); err != nil {
-		return nil, false, err
-	}
-	return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
-}
-func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws bool) (net.Conn, bool, []*x509.Certificate, error) {
-	if obj.ja3 {
-		if tlsConn, err := ja3.NewClient(ctx, conn, obj.ja3Spec, ws, addr); err != nil {
-			return tlsConn, false, nil, err
-		} else {
-			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().PeerCertificates, err
-		}
-	} else {
-		var nextProtos []string
-		if ws {
-			nextProtos = []string{"http/1.1"}
-		} else {
-			nextProtos = []string{"h2", "http/1.1"}
-		}
-		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: nextProtos})
-		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			return tlsConn, false, nil, err
-		} else {
-			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().PeerCertificates, err
-		}
+		return obj.httpHandle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}, true))
 	}
 }

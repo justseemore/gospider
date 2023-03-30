@@ -37,6 +37,7 @@ func TestJs(t *testing.T) {
 		t.Fatal("sign error")
 	}
 }
+
 func TestPy(t *testing.T) {
 	script := `def sign(val,val2):
 	return {"val":val,"val2":val2}`

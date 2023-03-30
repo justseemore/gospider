@@ -55,7 +55,10 @@ func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
 	if err != nil {
 		return err
 	}
-	server := NewProxyCon(ctx, proxyServer, bufio.NewReader(proxyServer), *client.option)
+	server := NewProxyCon(ctx, proxyServer, bufio.NewReader(proxyServer), *client.option, false)
+	client.option.port = port
+	client.option.host = host
+
 	server.option.port = port
 	server.option.host = host
 	defer server.Close()

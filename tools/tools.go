@@ -686,6 +686,9 @@ func CopyWitchContext(ctx context.Context, writer io.Writer, reader io.Reader) (
 			close(p)
 		}()
 		_, err = io.Copy(writer, reader)
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			err = nil
+		}
 	}()
 	select {
 	case <-ctx.Done():

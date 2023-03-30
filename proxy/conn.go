@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -28,16 +29,16 @@ type ProxyOption struct {
 	cnl      context.CancelFunc
 }
 type ProxyConn struct {
+	client bool
 	conn   net.Conn
 	reader *bufio.Reader
 	option *ProxyOption
 }
 
-func NewProxyCon(preCtx context.Context, conn net.Conn, reader *bufio.Reader, option ProxyOption) *ProxyConn {
-	if option.ctx == nil || option.cnl == nil {
-		option.ctx, option.cnl = context.WithCancel(preCtx)
-	}
-	return &ProxyConn{conn: conn, reader: reader, option: &option}
+func NewProxyCon(preCtx context.Context, conn net.Conn, reader *bufio.Reader, option ProxyOption, client bool) *ProxyConn {
+	option.ctx, option.cnl = context.WithCancel(preCtx)
+
+	return &ProxyConn{conn: conn, reader: reader, option: &option, client: client}
 }
 
 type connectionStater interface {
@@ -75,7 +76,7 @@ func (obj *ProxyConn) ConnectionState() tls.ConnectionState {
 }
 func (obj *ProxyConn) Read(b []byte) (int, error) {
 	n, err := obj.reader.Read(b)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		obj.Close()
 	}
 	return n, err

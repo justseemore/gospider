@@ -4,12 +4,16 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"sync"
+	_ "unsafe"
 
+	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
 	"golang.org/x/net/http2"
@@ -49,11 +53,12 @@ func (obj *Client) wsRecv(ctx context.Context, wsClient *websocket.Conn, wsServe
 		}
 	}
 }
-func (obj *Client) http21Copy(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+func (obj *Client) http21Copy(preCtx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	defer client.Close()
 	defer server.Close()
 	var lock sync.Mutex
-
+	ctx, cnl := context.WithCancel(preCtx)
+	defer cnl()
 	go obj.http2Server.ServeConn(client, &http2.ServeConnOpts{
 		Context: ctx,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -89,54 +94,121 @@ func (obj *Client) http21Copy(ctx context.Context, client *ProxyConn, server *Pr
 			if _, err = io.Copy(w, resp.Body); err != nil {
 				server.Close()
 				client.Close()
+				return
+			}
+			if flush, ok := w.(Flusher); ok {
+				flush.FlushError()
+			}
+			select {
+			case <-server.option.ctx.Done():
+				select {
+				case <-client.option.ctx.Done():
+				case <-ctx.Done():
+				default:
+					go func() {
+						select {
+						case <-client.option.ctx.Done():
+						case <-ctx.Done():
+						case <-r.Context().Done():
+							client.Close()
+						}
+					}()
+				}
 			}
 		}),
 	})
 	select {
 	case <-client.option.ctx.Done():
-		return client.option.ctx.Err()
+		return
 	case <-server.option.ctx.Done():
-		return server.option.ctx.Err()
+		select {
+		case <-client.option.ctx.Done():
+			return
+		case <-ctx.Done():
+			return
+		}
+	case <-ctx.Done():
+		return
 	}
 }
-func (obj *Client) http22Copy(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+
+type Flusher interface {
+	// Flush sends any buffered data to the client.
+	FlushError() error
+}
+
+func (obj *Client) http22Copy(preCtx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	defer client.Close()
 	defer server.Close()
 	serverConn, err := obj.http2Transport.NewClientConn(server)
 	if err != nil {
 		return err
 	}
+	defer serverConn.Close()
+	ctx, cnl := context.WithCancel(preCtx)
+	defer cnl()
 	go obj.http2Server.ServeConn(client, &http2.ServeConnOpts{
 		Context: ctx,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.URL.Scheme = "https"
-			r.URL.Host = net.JoinHostPort(client.option.host, client.option.port)
-			resp, err := serverConn.RoundTrip(r)
-			if err != nil {
-				server.Close()
-				client.Close()
-				return
-			}
-			if obj.RequestCallBack != nil {
-				obj.RequestCallBack(r, resp)
-			}
-			for kk, vvs := range resp.Header {
-				for _, vv := range vvs {
-					w.Header().Add(kk, vv)
+		Handler: http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				r.URL.Scheme = "https"
+				r.URL.Host = net.JoinHostPort(tools.GetServerName(client.option.host), client.option.port)
+				resp, err := serverConn.RoundTrip(r)
+				if err != nil {
+					server.Close()
+					client.Close()
+					return
 				}
-			}
-			w.WriteHeader(resp.StatusCode)
-			if _, err = io.Copy(w, resp.Body); err != nil {
-				server.Close()
-				client.Close()
-			}
-		}),
-	})
+				if obj.RequestCallBack != nil {
+					obj.RequestCallBack(r, resp)
+				}
+				for kk, vvs := range resp.Header {
+					for _, vv := range vvs {
+						w.Header().Add(kk, vv)
+					}
+				}
+				w.WriteHeader(resp.StatusCode)
+				_, err = io.Copy(w, resp.Body)
+				if err != nil {
+					server.Close()
+					client.Close()
+					return
+				}
+				if flush, ok := w.(Flusher); ok {
+					flush.FlushError()
+				}
+				select {
+				case <-server.option.ctx.Done():
+					select {
+					case <-client.option.ctx.Done():
+					case <-ctx.Done():
+					default:
+						go func() {
+							select {
+							case <-client.option.ctx.Done():
+							case <-ctx.Done():
+							case <-r.Context().Done():
+								client.Close()
+							}
+						}()
+					}
+				}
+			},
+		),
+	},
+	)
 	select {
 	case <-client.option.ctx.Done():
-		return client.option.ctx.Err()
+		return
 	case <-server.option.ctx.Done():
-		return server.option.ctx.Err()
+		select {
+		case <-client.option.ctx.Done():
+			return
+		case <-ctx.Done():
+			return
+		}
+	case <-ctx.Done():
+		return
 	}
 }
 func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
@@ -146,6 +218,7 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 	if err != nil {
 		return err
 	}
+	defer serverConn.Close()
 	var req *http.Request
 	var resp *http.Response
 	for {
@@ -166,6 +239,11 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 		resp.ProtoMinor = 1
 		if err = resp.Write(client); err != nil {
 			return err
+		}
+		select {
+		case <-server.option.ctx.Done():
+			return
+		default:
 		}
 	}
 }
@@ -215,7 +293,11 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 	}
 	if client.option.http2 && server.option.http2 {
 		if obj.RequestCallBack == nil {
-			go io.Copy(client, server)
+			go func() {
+				defer client.Close()
+				defer server.Close()
+				io.Copy(client, server)
+			}()
 			_, err = io.Copy(server, client)
 			return err
 		} else {
@@ -223,7 +305,11 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		}
 	}
 	if obj.RequestCallBack == nil && obj.WsCallBack == nil { //没有回调直接返回
-		go io.Copy(client, server)
+		go func() {
+			defer client.Close()
+			defer server.Close()
+			io.Copy(client, server)
+		}()
 		_, err = io.Copy(server, client)
 		return err
 	}
@@ -231,7 +317,11 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		return err
 	}
 	if obj.WsCallBack == nil { //没有ws 回调直接返回
-		go io.Copy(client, server)
+		go func() {
+			defer client.Close()
+			defer server.Close()
+			io.Copy(client, server)
+		}()
 		_, err = io.Copy(server, client)
 		return err
 	}
@@ -244,6 +334,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 	return obj.wsSend(ctx, wsClient, wsServer)
 }
 func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+	log.Print(client.option.host)
 	tlsServer, http2, certs, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
 	if err != nil {
 		return err
@@ -263,7 +354,46 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 		return err
 	}
 	client.option.http2 = http2
-	clientProxy := NewProxyCon(ctx, tlsClient, bufio.NewReader(tlsClient), *client.option)
-	serverProxy := NewProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option)
+	clientProxy := NewProxyCon(ctx, tlsClient, bufio.NewReader(tlsClient), *client.option, true)
+	serverProxy := NewProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option, false)
 	return obj.copyHttpMain(ctx, clientProxy, serverProxy)
+}
+func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, ws bool, cert tls.Certificate) (tlsConn *tls.Conn, http2 bool, err error) {
+	var nextProtos []string
+	if ws {
+		nextProtos = []string{"http/1.1"}
+	} else {
+		nextProtos = []string{"h2", "http/1.1"}
+	}
+	tlsConn = tls.Server(conn, &tls.Config{
+		InsecureSkipVerify: true,
+		Certificates:       []tls.Certificate{cert},
+		NextProtos:         nextProtos,
+	})
+	if err = tlsConn.HandshakeContext(ctx); err != nil {
+		return nil, false, err
+	}
+	return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
+}
+func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ws bool) (net.Conn, bool, []*x509.Certificate, error) {
+	if obj.ja3 {
+		if tlsConn, err := ja3.NewClient(ctx, conn, obj.ja3Spec, ws, addr); err != nil {
+			return tlsConn, false, nil, err
+		} else {
+			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().PeerCertificates, err
+		}
+	} else {
+		var nextProtos []string
+		if ws {
+			nextProtos = []string{"http/1.1"}
+		} else {
+			nextProtos = []string{"h2", "http/1.1"}
+		}
+		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: nextProtos})
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			return tlsConn, false, nil, err
+		} else {
+			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().PeerCertificates, err
+		}
+	}
 }

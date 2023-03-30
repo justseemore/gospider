@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -254,6 +255,10 @@ func (obj *Response) read(bar bool) error { //读取body,对body 解压，解码
 		err = tools.CopyWitchContext(obj.response.Request.Context(), bBody, obj.response.Body)
 	}
 	if err != nil {
+		log.Print(bBody.String())
+		log.Print(err)
+		log.Print(errors.Is(err, io.ErrUnexpectedEOF))
+		log.Print(err == io.ErrUnexpectedEOF)
 		return errors.New("io.Copy error: " + err.Error())
 	}
 	if !obj.disUnzip {

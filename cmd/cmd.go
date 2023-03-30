@@ -31,7 +31,7 @@ type ClientOption struct {
 	TimeOut int      //程序超时时间
 }
 type Client struct {
-	Err error
+	err error
 	cmd *exec.Cmd
 	ctx context.Context
 	cnl context.CancelFunc
@@ -152,7 +152,6 @@ func NewPyClient(pre_ctx context.Context, option PyClientOption) (*JyClient, err
 	if err != nil {
 		return nil, err
 	}
-
 	filePath := tools.PathJoin(userDir, fmt.Sprintf(".cmdPipPyScript%s.py", pyScriptVersion))
 	if !tools.PathExist(filePath) {
 		err := os.WriteFile(filePath, cmdPipPyScript, 0777)
@@ -306,8 +305,8 @@ func (obj *JyClient) run(dataMap map[string]any) (gjson.Result, error) {
 	case data := <-obj.pip:
 		return tools.Any2json(data), nil
 	case <-obj.client.Done():
-		if obj.client.Err != nil {
-			return gjson.Result{}, obj.client.Err
+		if obj.client.err != nil {
+			return gjson.Result{}, obj.client.err
 		}
 		return gjson.Result{}, obj.client.ctx.Err()
 	}
@@ -316,8 +315,8 @@ func (obj *JyClient) run(dataMap map[string]any) (gjson.Result, error) {
 // 执行函数,第一个参数是要调用的函数名称,后面的是传参
 func (obj *JyClient) Call(funcName string, values ...any) (jsonData gjson.Result, err error) {
 	if jsonData, err = obj.run(map[string]any{"Type": "call", "Func": funcName, "Args": values}); err != nil {
-		if obj.client.Err != nil {
-			err = obj.client.Err
+		if obj.client.err != nil {
+			err = obj.client.err
 		}
 		return
 	}
@@ -337,23 +336,29 @@ func (obj *Client) Run() error {
 	defer obj.Close()
 	err := obj.cmd.Run()
 	if err != nil {
-		obj.Err = err
-		return obj.Err
+		obj.err = err
+		return obj.err
 	} else if !obj.cmd.ProcessState.Success() {
 		if obj.ctx.Err() != nil {
-			obj.Err = obj.ctx.Err()
-			return obj.Err
+			obj.err = obj.ctx.Err()
+			return obj.err
 		} else {
-			obj.Err = errors.New("shell 执行异常")
-			return obj.Err
+			obj.err = errors.New("shell 执行异常")
+			return obj.err
 		}
 	}
-	return obj.Err
+	return obj.err
 }
 
 // 导出cmd 的 in管道
 func (obj *Client) StdInPipe() (io.WriteCloser, error) {
 	return obj.cmd.StdinPipe()
+}
+func (obj *Client) Err() error {
+	if obj.cmd.Err != nil {
+		return obj.cmd.Err
+	}
+	return obj.err
 }
 
 // 导出cmd 的 out管道
