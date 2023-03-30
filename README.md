@@ -1,10 +1,11 @@
 # 简介
 ### gospider 是一个golang 爬虫神器，拥有python到golang爬虫过渡的所有必需库。用于python爬虫从业者快速且无坑的过渡到golang
 1. [请求库](../../tree/master/requests)：ja3指纹,主流代理协议,类型自动转换,覆盖python requests 所有的功能
-2. 代理库：ja3指纹代理,数据抓包,链式代理,客户端协议自动转换
-3. [并发库](../../tree/master/thread)：自实现高性能并发库
-4. [执行js,py](../../tree/master/cmd): 通过管道调用js,python 中的方法
-5. 更多功能...
+2. [渲染库](../../tree/master/splash): 提供动态页面渲染功能
+3. 代理库：ja3指纹代理,数据抓包,链式代理,客户端协议自动转换
+4. [并发库](../../tree/master/thread)：自实现高性能并发库
+5. [执行js,py](../../tree/master/cmd): 通过管道调用js,python 中的方法
+6. 更多功能...
 # 依赖
 * go1.20 (不要低于这个版本)
 # 安装 (不要拉github的包,go包路径只能在gitee和github选一个,拉github包会出现路径问题)
@@ -13,6 +14,8 @@ go get -u gitee.com/baixudong/gospider
 ```
 # 文档
 文档请去各模块文件夹下寻找,如果出现文档有bug,文档不完善 请联系作者,或者提交issues
+# [测试用例](../../tree/master/test) 
+这个目录下的测试用例,大伙可以当作部分文档看哈
 
 # 使用本项目已完成的爬虫
 * 五秒盾,瑞数爬虫
