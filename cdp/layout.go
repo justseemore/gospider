@@ -7,6 +7,13 @@ type Rect struct {
 	Width  float64 `json:"width"`
 }
 
+func (obj Rect) Centor() Point {
+	return Point{
+		X: obj.X + obj.Width/2,
+		Y: obj.Y + obj.Height/2,
+	}
+}
+
 type Point struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
