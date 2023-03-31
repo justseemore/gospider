@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"image"
 	"io"
 	"math"
 	"math/big"
@@ -49,6 +50,7 @@ import (
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/re"
 
+	_ "golang.org/x/image/webp"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
@@ -876,4 +878,27 @@ func GetContentTypeWithBytes(content []byte) string {
 }
 func Uuid() uuid.UUID {
 	return uuid.New()
+}
+func ImgDiffer(c, c2 []byte) (float64, error) {
+	img1, _, err := image.Decode(bytes.NewBuffer(c))
+	if err != nil {
+		return 0, err
+	}
+	img2, _, err := image.Decode(bytes.NewBuffer(c2))
+	if err != nil {
+		return 0, err
+	}
+	var score float64
+	bounds := img1.Bounds()
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r1, g1, b1, _ := img1.At(x, y).RGBA()
+			r2, g2, b2, _ := img2.At(x, y).RGBA()
+			score += math.Pow(float64(r1)-float64(r2), 2)
+			score += math.Pow(float64(g1)-float64(g2), 2)
+			score += math.Pow(float64(b1)-float64(b2), 2)
+		}
+	}
+	score /= math.Pow(2, 16) * math.Pow(float64(bounds.Dx()), 2) * math.Pow(float64(bounds.Dy()), 2)
+	return score, nil
 }

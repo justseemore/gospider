@@ -18,12 +18,27 @@ func (obj *WebSock) PageAddScriptToEvaluateOnNewDocument(ctx context.Context, so
 	})
 }
 
-func (obj *WebSock) PageCaptureScreenshot(ctx context.Context, rect Rect) (RecvData, error) {
+type ScreenShotOption struct {
+	Format                string //图像压缩格式（默认为 webp）,允许的值：jpeg,png,webp
+	Quality               int    //范围 [0..100] 的压缩质量（仅限 jpeg）。
+	CaptureBeyondViewport bool   //捕获视口之外的屏幕截图。默认为 false。
+}
+
+func (obj *WebSock) PageCaptureScreenshot(ctx context.Context, rect Rect, options ...ScreenShotOption) (RecvData, error) {
+	var option ScreenShotOption
+	if len(options) > 0 {
+		option = options[0]
+	}
+	if option.Format == "" {
+		option.Format = "webp"
+	}
 	return obj.send(ctx, commend{
 		Method: "Page.captureScreenshot",
 		Params: map[string]any{
-			"format":                "png",
-			"captureBeyondViewport": true,
+			"format":                option.Format,
+			"quality":               option.Quality,
+			"captureBeyondViewport": option.CaptureBeyondViewport,
+			"optimizeForSpeed":      true,
 			"clip": map[string]float64{
 				"x":      rect.X,
 				"y":      rect.Y,
