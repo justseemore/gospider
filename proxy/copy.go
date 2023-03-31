@@ -7,10 +7,10 @@ import (
 	"crypto/x509"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	_ "unsafe"
 
 	"gitee.com/baixudong/gospider/ja3"
@@ -53,15 +53,23 @@ func (obj *Client) wsRecv(ctx context.Context, wsClient *websocket.Conn, wsServe
 		}
 	}
 }
+
+type Flusher interface {
+	FlushError() error
+}
+
 func (obj *Client) http21Copy(preCtx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	defer client.Close()
 	defer server.Close()
 	var lock sync.Mutex
 	ctx, cnl := context.WithCancel(preCtx)
 	defer cnl()
+	var startSize atomic.Int64
+	var endSize atomic.Int64
 	go obj.http2Server.ServeConn(client, &http2.ServeConnOpts{
 		Context: ctx,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			startSize.Add(1)
 			r.URL.Scheme = "https"
 			r.URL.Host = net.JoinHostPort(client.option.host, client.option.port)
 			r.Proto = "HTTP/1.1"
@@ -114,6 +122,8 @@ func (obj *Client) http21Copy(preCtx context.Context, client *ProxyConn, server 
 						}
 					}()
 				}
+			default:
+				endSize.Add(1)
 			}
 		}),
 	})
@@ -121,6 +131,9 @@ func (obj *Client) http21Copy(preCtx context.Context, client *ProxyConn, server 
 	case <-client.option.ctx.Done():
 		return
 	case <-server.option.ctx.Done():
+		if startSize.Load() == endSize.Load() {
+			return
+		}
 		select {
 		case <-client.option.ctx.Done():
 			return
@@ -131,12 +144,6 @@ func (obj *Client) http21Copy(preCtx context.Context, client *ProxyConn, server 
 		return
 	}
 }
-
-type Flusher interface {
-	// Flush sends any buffered data to the client.
-	FlushError() error
-}
-
 func (obj *Client) http22Copy(preCtx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	defer client.Close()
 	defer server.Close()
@@ -147,10 +154,14 @@ func (obj *Client) http22Copy(preCtx context.Context, client *ProxyConn, server 
 	defer serverConn.Close()
 	ctx, cnl := context.WithCancel(preCtx)
 	defer cnl()
+	var startSize atomic.Int64
+	var endSize atomic.Int64
+
 	go obj.http2Server.ServeConn(client, &http2.ServeConnOpts{
 		Context: ctx,
 		Handler: http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
+				startSize.Add(1)
 				r.URL.Scheme = "https"
 				r.URL.Host = net.JoinHostPort(tools.GetServerName(client.option.host), client.option.port)
 				resp, err := serverConn.RoundTrip(r)
@@ -192,6 +203,8 @@ func (obj *Client) http22Copy(preCtx context.Context, client *ProxyConn, server 
 							}
 						}()
 					}
+				default:
+					endSize.Add(1)
 				}
 			},
 		),
@@ -201,6 +214,9 @@ func (obj *Client) http22Copy(preCtx context.Context, client *ProxyConn, server 
 	case <-client.option.ctx.Done():
 		return
 	case <-server.option.ctx.Done():
+		if startSize.Load() == endSize.Load() {
+			return
+		}
 		select {
 		case <-client.option.ctx.Done():
 			return
@@ -221,54 +237,117 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 	defer serverConn.Close()
 	var req *http.Request
 	var resp *http.Response
-	for {
-		if req, err = client.readRequest(); err != nil {
-			return err
+	var startSize atomic.Int64
+	var endSize atomic.Int64
+	go func() {
+		defer client.Close()
+		defer server.Close()
+		for {
+			if req, err = client.readRequest(); err != nil {
+				return
+			}
+			startSize.Add(1)
+			req.Proto = "HTTP/2.0"
+			req.ProtoMajor = 2
+			req.ProtoMinor = 0
+			if resp, err = serverConn.RoundTrip(req); err != nil {
+				return
+			}
+			if obj.RequestCallBack != nil {
+				obj.RequestCallBack(req, resp)
+			}
+			resp.Proto = "HTTP/1.1"
+			resp.ProtoMajor = 1
+			resp.ProtoMinor = 1
+			if err = resp.Write(client); err != nil {
+				return
+			}
+			select {
+			case <-server.option.ctx.Done():
+				return
+			default:
+				endSize.Add(1)
+			}
 		}
-		req.Proto = "HTTP/2.0"
-		req.ProtoMajor = 2
-		req.ProtoMinor = 0
-		if resp, err = serverConn.RoundTrip(req); err != nil {
-			return err
-		}
-		if obj.RequestCallBack != nil {
-			obj.RequestCallBack(req, resp)
-		}
-		resp.Proto = "HTTP/1.1"
-		resp.ProtoMajor = 1
-		resp.ProtoMinor = 1
-		if err = resp.Write(client); err != nil {
-			return err
-		}
-		select {
-		case <-server.option.ctx.Done():
+	}()
+	select {
+	case <-client.option.ctx.Done():
+		return
+	case <-server.option.ctx.Done():
+		if startSize.Load() == endSize.Load() {
 			return
-		default:
 		}
+		<-client.option.ctx.Done()
+		return
 	}
 }
-func (obj *Client) httpCopy(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+func (obj *Client) http11Copy(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	var req *http.Request
 	var rsp *http.Response
-	for !server.option.isWs {
-		if req, err = client.readRequest(); err != nil {
-			return err
+	var startSize atomic.Int64
+	var endSize atomic.Int64
+	donCha := make(chan struct{})
+	go func() {
+		defer close(donCha)
+		for !server.option.isWs {
+			if req, err = client.readRequest(); err != nil {
+				server.Close()
+				client.Close()
+				return
+			}
+			startSize.Add(1)
+			if err = req.Write(server); err != nil {
+				server.Close()
+				client.Close()
+				return
+			}
+			if rsp, err = server.readResponse(req); err != nil {
+				server.Close()
+				client.Close()
+				return
+			}
+			if obj.RequestCallBack != nil {
+				obj.RequestCallBack(req, rsp)
+			}
+			if err = rsp.Write(client); err != nil {
+				server.Close()
+				client.Close()
+				return
+			}
+			select {
+			case <-server.option.ctx.Done():
+				err = errors.New("server closed")
+				client.Close()
+				return
+			default:
+				endSize.Add(1)
+			}
 		}
-		if err = req.Write(server); err != nil {
-			return err
-		}
+	}()
 
-		if rsp, err = server.readResponse(req); err != nil {
-			return err
+	select {
+	case <-donCha:
+		return
+	case <-client.option.ctx.Done():
+		server.Close()
+		if err == nil {
+			err = errors.New("client closed")
 		}
-		if obj.RequestCallBack != nil {
-			obj.RequestCallBack(req, rsp)
+		return
+	case <-server.option.ctx.Done():
+		if startSize.Load() == endSize.Load() {
+			client.Close()
+			if err == nil {
+				err = errors.New("server closed")
+			}
+			return
 		}
-		if err = rsp.Write(client); err != nil {
-			return err
+		<-client.option.ctx.Done()
+		if err == nil {
+			err = errors.New("server closed")
 		}
+		return
 	}
-	return nil
 }
 func (obj *Client) copyMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	if client.option.schema == "http" {
@@ -313,7 +392,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		_, err = io.Copy(server, client)
 		return err
 	}
-	if err = obj.httpCopy(ctx, client, server); err != nil { //http 开始回调
+	if err = obj.http11Copy(ctx, client, server); err != nil { //http 开始回调
 		return err
 	}
 	if obj.WsCallBack == nil { //没有ws 回调直接返回
@@ -334,7 +413,6 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 	return obj.wsSend(ctx, wsClient, wsServer)
 }
 func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
-	log.Print(client.option.host)
 	tlsServer, http2, certs, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
 	if err != nil {
 		return err
