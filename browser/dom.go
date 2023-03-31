@@ -232,45 +232,28 @@ func (obj *Dom) WaitSelector(preCtx context.Context, selector string, timeouts .
 	return nil, errors.New("超时")
 }
 
-func (obj *Dom) Box(ctx context.Context) (cdp.BoxData, error) {
+func (obj *Dom) Rect(ctx context.Context) (cdp.Rect, error) {
 	rs, err := obj.webSock.DOMGetBoxModel(ctx, obj.nodeId)
 	if err != nil {
-		return cdp.BoxData{}, err
+		return cdp.Rect{}, err
 	}
 	jsonData := tools.Any2json(rs.Result["model"])
 	content := jsonData.Get("content").Array()
-	point := cdp.Point{
-		X: content[0].Float(),
-		Y: content[1].Float(),
-	}
-	point2 := cdp.Point{
-		X: content[4].Float(),
-		Y: content[5].Float(),
-	}
-	boxData := cdp.BoxData{
+	boxData := cdp.Rect{
+		X:      content[0].Float(),
+		Y:      content[1].Float(),
 		Width:  jsonData.Get("width").Float(),
 		Height: jsonData.Get("height").Float(),
-		Point:  point,
-		Point2: point2,
-	}
-	boxData.Center = cdp.Point{
-		X: boxData.Point.X + boxData.Width/2,
-		Y: boxData.Point.Y + boxData.Height/2,
 	}
 	return boxData, nil
 }
 
-func (obj *Dom) Png(ctx context.Context) ([]byte, error) {
-	rect, err := obj.Box(ctx)
+func (obj *Dom) Img(ctx context.Context, options ...cdp.ScreenShotOption) ([]byte, error) {
+	rect, err := obj.Rect(ctx)
 	if err != nil {
 		return nil, err
 	}
-	rs, err := obj.webSock.PageCaptureScreenshot(ctx, cdp.Rect{
-		X:      rect.Point.X,
-		Y:      rect.Point.Y,
-		Width:  rect.Width,
-		Height: rect.Height,
-	})
+	rs, err := obj.webSock.PageCaptureScreenshot(ctx, rect, options...)
 	if err != nil {
 		return nil, err
 	}

@@ -32,21 +32,25 @@ func (obj *WebSock) PageCaptureScreenshot(ctx context.Context, rect Rect, option
 	if option.Format == "" {
 		option.Format = "webp"
 	}
+	params := map[string]any{
+		"format":                option.Format,
+		"quality":               option.Quality,
+		"captureBeyondViewport": option.CaptureBeyondViewport,
+		"optimizeForSpeed":      true,
+		"clip": map[string]float64{
+			"x":      rect.X,
+			"y":      rect.Y,
+			"width":  rect.Width,
+			"height": rect.Height,
+			"scale":  1,
+		},
+	}
+	if rect.Width == 0 || rect.Height == 0 {
+		delete(params, "clip")
+	}
 	return obj.send(ctx, commend{
 		Method: "Page.captureScreenshot",
-		Params: map[string]any{
-			"format":                option.Format,
-			"quality":               option.Quality,
-			"captureBeyondViewport": option.CaptureBeyondViewport,
-			"optimizeForSpeed":      true,
-			"clip": map[string]float64{
-				"x":      rect.X,
-				"y":      rect.Y,
-				"width":  rect.Width,
-				"height": rect.Height,
-				"scale":  1,
-			},
-		},
+		Params: params,
 	})
 }
 func (obj *WebSock) PageGetLayoutMetrics(ctx context.Context) (RecvData, error) {

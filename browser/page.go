@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	uurl "net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -62,24 +61,16 @@ func (obj *Page) AddScript(ctx context.Context, script string) error {
 	_, err := obj.webSock.PageAddScriptToEvaluateOnNewDocument(ctx, script)
 	return err
 }
-func (obj *Page) Png(ctx context.Context, path string) error {
-	rect, err := obj.Rect(ctx)
+func (obj *Page) Img(ctx context.Context, options ...cdp.ScreenShotOption) ([]byte, error) {
+	rs, err := obj.webSock.PageCaptureScreenshot(ctx, cdp.Rect{}, options...)
 	if err != nil {
-		return err
-	}
-	rs, err := obj.webSock.PageCaptureScreenshot(ctx, rect)
-	if err != nil {
-		return err
+		return nil, err
 	}
 	imgData, ok := rs.Result["data"].(string)
 	if !ok {
-		return errors.New("not img data")
+		return nil, errors.New("not img data")
 	}
-	imgCon, err := tools.Base64Decode(imgData)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, imgCon, 0777)
+	return tools.Base64Decode(imgData)
 }
 
 func (obj *Page) Rect(ctx context.Context) (cdp.Rect, error) {
@@ -88,7 +79,7 @@ func (obj *Page) Rect(ctx context.Context) (cdp.Rect, error) {
 	if err != nil {
 		return result, err
 	}
-	return result, tools.Any2struct(rs.Result["CssContentSize"], &result)
+	return result, tools.Any2struct(rs.Result["cssContentSize"], &result)
 }
 func (obj *Page) Reload(ctx context.Context) error {
 	_, err := obj.webSock.PageReload(ctx)
