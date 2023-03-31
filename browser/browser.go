@@ -567,6 +567,7 @@ func (obj *Client) init() error {
 		fmt.Sprintf("ws://%s:%d/devtools/browser/%s", obj.host, obj.port, browWsRs.Group(1)),
 		cdp.WebSockOption{},
 		obj.db,
+		"",
 	)
 	if err != nil {
 		return err

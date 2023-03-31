@@ -44,6 +44,7 @@ func (obj *Page) init(globalReqCli *requests.Client, option PageOption, db *db.C
 		fmt.Sprintf("ws://%s:%d/devtools/page/%s", obj.host, obj.port, obj.id),
 		cdp.WebSockOption(option),
 		db,
+		obj.id,
 	); err != nil {
 		return err
 	}

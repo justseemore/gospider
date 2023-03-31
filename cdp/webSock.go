@@ -49,13 +49,14 @@ type WebSock struct {
 	ctx        context.Context
 	cnl        context.CancelCauseFunc
 	id         atomic.Int64
+	pageId     string
 	RouteFunc  func(context.Context, *Route)
 	reqCli     *requests.Client
 	lock       sync.Mutex
 
-	PageStartId atomic.Int64
-	PageEndId   atomic.Int64
-	PageDone    chan struct{}
+	PageStarId int64
+	pageEndId  int64
+	PageDone   chan struct{}
 }
 
 type DataEntrie struct {
@@ -104,17 +105,21 @@ func (obj *WebSock) routeMain() (err error) {
 	}
 }
 func (obj *WebSock) PageStop() bool {
-	return obj.PageEndId.Load() >= obj.PageStartId.Load()
+	return obj.pageEndId >= obj.PageStarId
 }
 func (obj *WebSock) recv(ctx context.Context, rd RecvData) error {
 	switch rd.Method {
 	case "Page.frameStartedLoading":
-		if rd.Id > obj.PageStartId.Load() {
-			obj.PageStartId.Store(rd.Id)
+		if obj.pageId == rd.Params["frameId"].(string) {
+			if rd.Id > obj.PageStarId {
+				obj.PageStarId = rd.Id
+			}
 		}
 	case "Page.frameStoppedLoading":
-		if rd.Id > obj.PageEndId.Load() {
-			obj.PageEndId.Store(rd.Id)
+		if obj.pageId == rd.Params["frameId"].(string) {
+			if rd.Id > obj.pageEndId {
+				obj.pageEndId = rd.Id
+			}
 		}
 		if obj.PageStop() {
 			select {
@@ -190,7 +195,7 @@ type WebSockOption struct {
 	Ja3          bool
 }
 
-func NewWebSock(preCtx context.Context, globalReqCli *requests.Client, ws string, option WebSockOption, db *db.Client[FulData]) (*WebSock, error) {
+func NewWebSock(preCtx context.Context, globalReqCli *requests.Client, ws string, option WebSockOption, db *db.Client[FulData], pageId string) (*WebSock, error) {
 	response, err := globalReqCli.Request(preCtx, "get", ws, requests.RequestOption{DisProxy: true})
 	if err != nil {
 		return nil, err
@@ -203,6 +208,7 @@ func NewWebSock(preCtx context.Context, globalReqCli *requests.Client, ws string
 		db:      db,
 		reqCli:  globalReqCli,
 		option:  option,
+		pageId:  pageId,
 	}
 	cli.ctx, cli.cnl = context.WithCancelCause(preCtx)
 	go cli.recvMain()
