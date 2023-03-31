@@ -115,17 +115,19 @@ func (obj *WebSock) recv(ctx context.Context, rd RecvData) error {
 				obj.PageStarId = rd.Id
 			}
 		}
+		select {
+		case obj.PageDone <- struct{}{}:
+		default:
+		}
 	case "Page.frameStoppedLoading":
 		if obj.pageId == rd.Params["frameId"].(string) {
 			if rd.Id > obj.pageEndId {
 				obj.pageEndId = rd.Id
 			}
 		}
-		if obj.PageStop() {
-			select {
-			case obj.PageDone <- struct{}{}:
-			default:
-			}
+		select {
+		case obj.PageDone <- struct{}{}:
+		default:
 		}
 	}
 	obj.idLock.RLock()

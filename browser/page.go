@@ -94,7 +94,15 @@ func (obj *Page) Reload(ctx context.Context) error {
 	_, err := obj.webSock.PageReload(ctx)
 	return err
 }
-func (obj *Page) WaitStop(ctx context.Context) error {
+func (obj *Page) WaitStop(preCtx context.Context) error {
+	var ctx context.Context
+	var cnl context.CancelFunc
+	if preCtx == nil {
+		ctx, cnl = context.WithTimeout(obj.ctx, time.Second*30)
+		defer cnl()
+	} else {
+		ctx = preCtx
+	}
 	for {
 		select {
 		case <-ctx.Done():
