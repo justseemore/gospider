@@ -52,6 +52,10 @@ type WebSock struct {
 	RouteFunc  func(context.Context, *Route)
 	reqCli     *requests.Client
 	lock       sync.Mutex
+
+	PageStartId atomic.Int64
+	PageEndId   atomic.Int64
+	PageDone    chan struct{}
 }
 
 type DataEntrie struct {
@@ -99,8 +103,26 @@ func (obj *WebSock) routeMain() (err error) {
 		}
 	}
 }
-
+func (obj *WebSock) PageStop() bool {
+	return obj.PageEndId.Load() >= obj.PageStartId.Load()
+}
 func (obj *WebSock) recv(ctx context.Context, rd RecvData) error {
+	switch rd.Method {
+	case "Page.frameStartedLoading":
+		if rd.Id > obj.PageStartId.Load() {
+			obj.PageStartId.Store(rd.Id)
+		}
+	case "Page.frameStoppedLoading":
+		if rd.Id > obj.PageEndId.Load() {
+			obj.PageEndId.Store(rd.Id)
+		}
+		if obj.PageStop() {
+			select {
+			case obj.PageDone <- struct{}{}:
+			default:
+			}
+		}
+	}
 	obj.idLock.RLock()
 	cmdData, ok := obj.ids[rd.Id]
 	obj.idLock.RUnlock()

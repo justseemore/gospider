@@ -93,6 +93,21 @@ func (obj *Page) Reload(ctx context.Context) error {
 	_, err := obj.webSock.PageReload(ctx)
 	return err
 }
+func (obj *Page) WaitStop(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-obj.ctx.Done():
+			return obj.ctx.Err()
+		case <-obj.webSock.PageDone:
+		case <-time.After(time.Millisecond * 1500):
+			if obj.webSock.PageStop() {
+				return nil
+			}
+		}
+	}
+}
 func (obj *Page) GoTo(preCtx context.Context, url string) error {
 	var err error
 	obj.baseUrl = url
@@ -108,35 +123,7 @@ func (obj *Page) GoTo(preCtx context.Context, url string) error {
 	if err != nil {
 		return err
 	}
-	methodEvent := obj.webSock.RegMethod(ctx, "Page.frameStartedLoading", "Page.frameStoppedLoading")
-	defer methodEvent.Cnl()
-waitLoading:
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-obj.Done():
-			return errors.New("websocks closed")
-		case methodRecvData := <-methodEvent.RecvData:
-			if methodRecvData.Method == "Page.frameStoppedLoading" {
-				methodId := methodRecvData.Id
-				for {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case <-obj.Done():
-						return errors.New("websocks closed")
-					case methodRecvData := <-methodEvent.RecvData:
-						if methodRecvData.Method == "Page.frameStartedLoading" && methodRecvData.Id > methodId {
-							goto waitLoading
-						}
-					case <-time.After(time.Millisecond * 1500):
-						return nil
-					}
-				}
-			}
-		}
-	}
+	return obj.WaitStop(ctx)
 }
 
 // ex:   ()=>{}  或者  (params)=>{}
