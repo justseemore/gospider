@@ -260,6 +260,26 @@ func (obj *Dom) Box(ctx context.Context) (cdp.BoxData, error) {
 	return boxData, nil
 }
 
+func (obj *Dom) Png(ctx context.Context) ([]byte, error) {
+	rect, err := obj.Box(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rs, err := obj.webSock.PageCaptureScreenshot(ctx, cdp.Rect{
+		X:      rect.Point.X,
+		Y:      rect.Point.Y,
+		Width:  rect.Width,
+		Height: rect.Height,
+	})
+	if err != nil {
+		return nil, err
+	}
+	imgData, ok := rs.Result["data"].(string)
+	if !ok {
+		return nil, errors.New("not img data")
+	}
+	return tools.Base64Decode(imgData)
+}
 func (obj *Dom) Show(ctx context.Context) error {
 	_, err := obj.webSock.DOMScrollIntoViewIfNeeded(ctx, obj.nodeId)
 	return err

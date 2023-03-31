@@ -16,11 +16,6 @@ type Rect struct {
 	Height float64 `json:"height"`
 	Width  float64 `json:"width"`
 }
-type LayoutMetrics struct {
-	CssLayoutViewport VisualViewport `json:"cssLayoutViewport"`
-	CssVisualViewport VisualViewport `json:"cssVisualViewport"`
-	CssContentSize    Rect           `json:"cssContentSize"`
-}
 
 type Point struct {
 	X float64 `json:"x"`

@@ -18,17 +18,17 @@ func (obj *WebSock) PageAddScriptToEvaluateOnNewDocument(ctx context.Context, so
 	})
 }
 
-func (obj *WebSock) PageCaptureScreenshot(ctx context.Context, option LayoutMetrics) (RecvData, error) {
+func (obj *WebSock) PageCaptureScreenshot(ctx context.Context, rect Rect) (RecvData, error) {
 	return obj.send(ctx, commend{
 		Method: "Page.captureScreenshot",
 		Params: map[string]any{
 			"format":                "png",
 			"captureBeyondViewport": true,
 			"clip": map[string]float64{
-				"x":      option.CssContentSize.X,
-				"y":      option.CssContentSize.Y,
-				"width":  option.CssContentSize.Width,
-				"height": option.CssContentSize.Height,
+				"x":      rect.X,
+				"y":      rect.Y,
+				"width":  rect.Width,
+				"height": rect.Height,
 				"scale":  1,
 			},
 		},

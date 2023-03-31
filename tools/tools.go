@@ -165,7 +165,7 @@ func Any2json(data any, path ...string) gjson.Result {
 }
 
 // 转成struct
-func Map2struct(data any, stru any) error {
+func Any2struct(data any, stru any) error {
 	con, err := json.Marshal(data)
 	if err != nil {
 		return err

@@ -63,7 +63,7 @@ func (obj *Page) AddScript(ctx context.Context, script string) error {
 	return err
 }
 func (obj *Page) Png(ctx context.Context, path string) error {
-	rect, err := obj.GetLayoutMetrics(ctx)
+	rect, err := obj.Rect(ctx)
 	if err != nil {
 		return err
 	}
@@ -82,17 +82,20 @@ func (obj *Page) Png(ctx context.Context, path string) error {
 	return os.WriteFile(path, imgCon, 0777)
 }
 
-func (obj *Page) GetLayoutMetrics(ctx context.Context) (cdp.LayoutMetrics, error) {
+func (obj *Page) Rect(ctx context.Context) (cdp.Rect, error) {
 	rs, err := obj.webSock.PageGetLayoutMetrics(ctx)
-	var result cdp.LayoutMetrics
+	var result cdp.Rect
 	if err != nil {
 		return result, err
 	}
-	return result, tools.Map2struct(rs.Result, &result)
+	return result, tools.Any2struct(rs.Result["CssContentSize"], &result)
 }
 func (obj *Page) Reload(ctx context.Context) error {
 	_, err := obj.webSock.PageReload(ctx)
 	return err
+}
+func (obj *Page) PageLoadDone() <-chan struct{} {
+	return obj.webSock.PageDone
 }
 func (obj *Page) WaitStop(preCtx context.Context) error {
 	var ctx context.Context
