@@ -30,13 +30,14 @@ func readCookies(cookies string) Cookies {
 	return readCookiesLink(http.Header{"Cookie": []string{cookies}}, "")
 }
 
-var UserAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36`
+var UserAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36`
+var AcceptLanguage = `"zh-CN,zh;q=0.9"`
 
 // 请求操作========================================================================= start
 var defaultHeaders = http.Header{
 	"Accept-encoding": []string{"gzip, deflate, br"},
 	"Accept":          []string{"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"},
-	"Accept-Language": []string{"zh-CN,zh;q=0.9"},
+	"Accept-Language": []string{AcceptLanguage},
 	"User-Agent":      []string{UserAgent},
 }
 

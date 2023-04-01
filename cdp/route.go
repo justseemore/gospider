@@ -75,6 +75,9 @@ func (obj *Route) Headers() map[string]string {
 	if _, ok := obj.recvData.Request.Headers["If-Modified-Since"]; ok {
 		delete(obj.recvData.Request.Headers, "If-Modified-Since")
 	}
+	if _, ok := obj.recvData.Request.Headers["Accept-Language"]; !ok {
+		obj.recvData.Request.Headers["Accept-Language"] = requests.AcceptLanguage
+	}
 	return obj.recvData.Request.Headers
 }
 

@@ -129,6 +129,8 @@ func (obj *WebSock) recv(ctx context.Context, rd RecvData) error {
 		case obj.PageDone <- struct{}{}:
 		default:
 		}
+	case "Page.javascriptDialogOpening":
+		obj.PageHandleJavaScriptDialog(ctx, true)
 	}
 	obj.idLock.RLock()
 	cmdData, ok := obj.ids[rd.Id]

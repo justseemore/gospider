@@ -36,7 +36,6 @@ func (obj *WebSock) PageCaptureScreenshot(ctx context.Context, rect Rect, option
 		"format":                option.Format,
 		"quality":               option.Quality,
 		"captureBeyondViewport": option.CaptureBeyondViewport,
-		"optimizeForSpeed":      true,
 		"clip": map[string]float64{
 			"x":      rect.X,
 			"y":      rect.Y,
@@ -47,6 +46,9 @@ func (obj *WebSock) PageCaptureScreenshot(ctx context.Context, rect Rect, option
 	}
 	if rect.Width == 0 || rect.Height == 0 {
 		delete(params, "clip")
+	}
+	if option.Quality == 0 {
+		delete(params, "quality")
 	}
 	return obj.send(ctx, commend{
 		Method: "Page.captureScreenshot",
@@ -73,5 +75,18 @@ func (obj *WebSock) PageNavigate(ctx context.Context, url string) (RecvData, err
 			"width":  1080,
 			"height": 720,
 		},
+	})
+}
+
+func (obj *WebSock) PageHandleJavaScriptDialog(ctx context.Context, accept bool, txts ...string) (RecvData, error) {
+	params := map[string]any{
+		"accept": accept,
+	}
+	if len(txts) > 0 {
+		params["promptText"] = txts[0]
+	}
+	return obj.send(ctx, commend{
+		Method: "Page.handleJavaScriptDialog",
+		Params: params,
 	})
 }

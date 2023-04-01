@@ -113,6 +113,9 @@ var stealth string
 //go:embed stealth2.min.js
 var stealth2 string
 
+//go:embed stealth3.min.js
+var stealth3 string
+
 type Client struct {
 	db           *db.Client[cdp.FulData]
 	cmdCli       *cmd.Client
@@ -215,7 +218,7 @@ func (obj *downClient) getChromePath(preCtx context.Context) (string, error) {
 		return "", errors.New("dont know goos")
 	}
 	if !tools.PathExist(chromePath) {
-		if err = DownLoadChrome(preCtx, 1079946); err != nil {
+		if err = DownChrome(preCtx); err != nil {
 			return "", err
 		}
 		if !tools.PathExist(chromePath) {
@@ -283,7 +286,7 @@ func runChrome(ctx context.Context, option *ClientOption) (*cmd.Client, error) {
 		args = append(args, fmt.Sprintf("--user-agent=%s", option.UserAgent))
 	}
 	if option.Headless {
-		args = append(args, "--headless")
+		args = append(args, "--headless=new")
 	}
 	if option.Proxy != "" {
 		args = append(args, fmt.Sprintf(`--proxy-server=%s`, option.Proxy))
@@ -309,26 +312,30 @@ var chromeArgs = []string{
 	"--useAutomationExtension=false",                //禁用自动化扩展。
 	"--excludeSwitches=enable-automation",           //禁用自动化
 	"--disable-blink-features=AutomationControlled", //禁用 Blink 引擎的自动化控制。
-	"--disable-web-security",                        //禁用同源策略。
-	"--no-pings",                                    //禁用 ping。
-	"--no-zygote",                                   //禁用 zygote 进程。
-	"--mute-audio",                                  //禁用音频。
-	"--no-first-run",                                //不显示欢迎页面。
-	"--no-default-browser-check",                    //不检查是否为默认浏览器。
-	"--disable-software-rasterizer",                 //禁用软件光栅化器
-	"--disable-cloud-import",                        //禁用云导入。
-	"--disable-gesture-typing",                      //禁用手势输入。
-	"--disable-offer-store-unmasked-wallet-cards",   //禁用钱包卡。
-	"--disable-offer-upload-credit-cards",           //禁用上传信用卡。
-	"--disable-print-preview",                       //禁用打印预览。
-	"--disable-voice-input",                         //禁用语音输入。
-	"--disable-wake-on-wifi",                        //禁用 Wi-Fi 唤醒。
-	"--disable-cookie-encryption",                   //禁用 cookie 加密
-	"--ignore-gpu-blocklist",                        //忽略 GPU 阻止列表。
-	"--enable-async-dns",                            //启用异步 DNS。
-	"--enable-simple-cache-backend",                 //启用简单缓存后端
-	"--enable-tcp-fast-open",                        //启用 TCP 快速打开。
-	"--prerender-from-omnibox=disabled",             //用于禁用从地址栏预渲染页面
+	"--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4,imagesEnabled=true", //Blink 设置。
+	"--ignore-ssl-errors=true",   //忽略 SSL 错误。
+	"--virtual-time-budget=1000", //缩短setTimeout  setInterval 是的时间1000秒
+
+	"--disable-web-security",                      //禁用同源策略。
+	"--no-pings",                                  //禁用 ping。
+	"--no-zygote",                                 //禁用 zygote 进程。
+	"--mute-audio",                                //禁用音频。
+	"--no-first-run",                              //不显示欢迎页面。
+	"--no-default-browser-check",                  //不检查是否为默认浏览器。
+	"--disable-software-rasterizer",               //禁用软件光栅化器
+	"--disable-cloud-import",                      //禁用云导入。
+	"--disable-gesture-typing",                    //禁用手势输入。
+	"--disable-offer-store-unmasked-wallet-cards", //禁用钱包卡。
+	"--disable-offer-upload-credit-cards",         //禁用上传信用卡。
+	"--disable-print-preview",                     //禁用打印预览。
+	"--disable-voice-input",                       //禁用语音输入。
+	"--disable-wake-on-wifi",                      //禁用 Wi-Fi 唤醒。
+	"--disable-cookie-encryption",                 //禁用 cookie 加密
+	"--ignore-gpu-blocklist",                      //忽略 GPU 阻止列表。
+	"--enable-async-dns",                          //启用异步 DNS。
+	"--enable-simple-cache-backend",               //启用简单缓存后端
+	"--enable-tcp-fast-open",                      //启用 TCP 快速打开。
+	"--prerender-from-omnibox=disabled",           //用于禁用从地址栏预渲染页面
 	"--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,TranslateUI,BlinkGenPropertyTrees", // 禁用一些 Chrome 功能。
 	"--aggressive-cache-discard",                                      //启用缓存丢弃。
 	"--disable-ipc-flooding-protection",                               //禁用 IPC 洪水保护。
@@ -360,9 +367,7 @@ var chromeArgs = []string{
 	"--disable-renderer-backgrounding", //禁用渲染器后台化。
 	"--font-render-hinting=none",       //禁用字体渲染提示
 	"--disable-logging",                //禁用日志记录。
-	"--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4,imagesEnabled=true", //Blink 设置。
 
-	"--ignore-ssl-errors=true",                             //忽略 SSL 错误。
 	"--ssl-protocol=any",                                   //使用任何 SSL 协议。
 	"--disable-partial-raster",                             //禁用部分光栅化
 	"--disable-component-extensions-with-background-pages", //禁用具有后台页面的组件扩展。
@@ -457,7 +462,7 @@ func downLoadChrome(preCtx context.Context, dirUrl string, version int) error {
 	}
 	return err
 }
-func DownLoadChrome(preCtx context.Context, versions ...int) error {
+func DownChrome(preCtx context.Context, versions ...int) error {
 	var version int
 	if len(versions) > 0 {
 		version = versions[0]

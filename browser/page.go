@@ -54,6 +54,9 @@ func (obj *Page) init(globalReqCli *requests.Client, option PageOption, db *db.C
 		if err = obj.AddScript(obj.ctx, stealth); err != nil {
 			return err
 		}
+		if err = obj.AddScript(obj.ctx, stealth3); err != nil {
+			return err
+		}
 	}
 	return obj.AddScript(obj.ctx, stealth2)
 }
@@ -83,7 +86,10 @@ func (obj *Page) Rect(ctx context.Context) (cdp.Rect, error) {
 }
 func (obj *Page) Reload(ctx context.Context) error {
 	_, err := obj.webSock.PageReload(ctx)
-	return err
+	if err != nil {
+		return err
+	}
+	return obj.WaitStop(ctx)
 }
 func (obj *Page) PageLoadDone() <-chan struct{} {
 	return obj.webSock.PageDone
