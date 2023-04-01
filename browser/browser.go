@@ -314,7 +314,7 @@ var chromeArgs = []string{
 	"--disable-blink-features=AutomationControlled", //禁用 Blink 引擎的自动化控制。
 	"--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4,imagesEnabled=true", //Blink 设置。
 	"--ignore-ssl-errors=true",   //忽略 SSL 错误。
-	"--virtual-time-budget=1000", //缩短setTimeout  setInterval 是的时间1000秒
+	"--virtual-time-budget=1000", //缩短setTimeout  setInterval 的时间1000秒
 
 	"--disable-web-security",                      //禁用同源策略。
 	"--no-pings",                                  //禁用 ping。
