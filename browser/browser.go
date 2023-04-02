@@ -184,6 +184,7 @@ type downClient struct {
 }
 
 var oneDown = &downClient{}
+var chromeVersion = 1108766
 
 func verifyEvalPath(path string) error {
 	if !tools.PathExist(path) {
@@ -202,6 +203,8 @@ func (obj *downClient) getChromePath(preCtx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	chromDir = tools.PathJoin(chromDir, strconv.Itoa(chromeVersion))
+
 	var chromePath string
 	switch runtime.GOOS {
 	case "windows":
@@ -218,7 +221,7 @@ func (obj *downClient) getChromePath(preCtx context.Context) (string, error) {
 		return "", errors.New("dont know goos")
 	}
 	if !tools.PathExist(chromePath) {
-		if err = DownChrome(preCtx); err != nil {
+		if err = DownChrome(preCtx, chromeVersion); err != nil {
 			return "", err
 		}
 		if !tools.PathExist(chromePath) {
@@ -399,23 +402,20 @@ func downLoadChrome(preCtx context.Context, dirUrl string, version int) error {
 	}
 	var fileDir string
 	var fileTime int64
+	var ver int
 	for _, dir := range resp.Json().Array() {
-		tempTime, err := time.Parse(fmt.Sprintf("%sT%sZ", time.DateOnly, time.TimeOnly), dir.Get("date").String())
-		if err == nil {
-			if version != 0 {
-				versionRe := re.Search(`\d+`, dir.Get("name").String())
-				if versionRe != nil {
-					versionInt, err := strconv.Atoi(versionRe.Group())
-					if err == nil && versionInt == version {
+		if tempTime, err := time.Parse(fmt.Sprintf("%sT%sZ", time.DateOnly, time.TimeOnly), dir.Get("date").String()); err == nil {
+			if versionRe := re.Search(`\d+`, dir.Get("name").String()); versionRe != nil {
+				if versionInt, err := strconv.Atoi(versionRe.Group()); err == nil {
+					if versionInt == version || tempTime.Unix() > fileTime {
 						fileDir = dir.Get("url").String()
 						fileTime = tempTime.Unix()
-						break
+						ver = versionInt
+						if versionInt == version {
+							break
+						}
 					}
 				}
-			}
-			if tempTime.Unix() > fileTime {
-				fileDir = dir.Get("url").String()
-				fileTime = tempTime.Unix()
 			}
 		}
 	}
@@ -439,6 +439,7 @@ func downLoadChrome(preCtx context.Context, dirUrl string, version int) error {
 	if err != nil {
 		return err
 	}
+	mainDir = tools.PathJoin(mainDir, strconv.Itoa(ver))
 	for _, file := range zipData.File {
 		filePath := tools.PathJoin(mainDir, file.Name)
 		fileDirPath := tools.PathJoin(filePath, "..")

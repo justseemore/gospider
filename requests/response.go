@@ -54,7 +54,7 @@ func (obj Cookies) String() string {
 
 // 获取符合key 条件的所有cookies
 func (obj Cookies) Gets(name string) Cookies {
-	var result []*http.Cookie
+	var result Cookies
 	for _, cook := range obj {
 		if cook.Name == name {
 			result = append(result, cook)

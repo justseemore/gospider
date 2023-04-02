@@ -80,7 +80,12 @@ func (obj *Route) Headers() map[string]string {
 	}
 	return obj.recvData.Request.Headers
 }
-
+func (obj *Route) Cookies() requests.Cookies {
+	if cook, ok := obj.recvData.Request.Headers["Cookie"]; ok {
+		return requests.ReadCookies(cook)
+	}
+	return nil
+}
 func keyMd5(key RequestOption, resourceType string) [16]byte {
 	var md5Str string
 	nt := strconv.Itoa(int(time.Now().Unix() / 1000))
@@ -203,10 +208,53 @@ type Header struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 }
+type Headers []Header
+
+// 获取符合key 条件的所有headers
+func (obj Headers) Gets(name string) Headers {
+	var result Headers
+	for _, head := range obj {
+		if head.Name == name {
+			result = append(result, head)
+		}
+	}
+	return result
+}
+
+// 获取符合key 条件的cookies
+func (obj Headers) Get(name string) (Header, bool) {
+	vals := obj.Gets(name)
+	if i := len(vals); i == 0 {
+		return Header{}, false
+	} else {
+		return vals[i-1], true
+	}
+}
+
+// 获取符合key 条件的所有cookies的值
+func (obj Headers) GetVals(name string) []string {
+	var result []string
+	for _, cook := range obj {
+		if cook.Name == name {
+			result = append(result, cook.Value)
+		}
+	}
+	return result
+}
+
+// 获取符合key 条件的cookies的值
+func (obj Headers) GetVal(name string) (string, bool) {
+	vals := obj.GetVals(name)
+	if i := len(vals); i == 0 {
+		return "", false
+	} else {
+		return vals[i-1], true
+	}
+}
 
 type FulData struct {
-	StatusCode     int      `json:"responseCode"`
-	Headers        []Header `json:"responseHeaders"`
-	Body           string   `json:"body"`
-	ResponsePhrase string   `json:"responsePhrase"`
+	StatusCode     int     `json:"responseCode"`
+	Headers        Headers `json:"responseHeaders"`
+	Body           string  `json:"body"`
+	ResponsePhrase string  `json:"responsePhrase"`
 }

@@ -26,7 +26,7 @@ import (
 //go:linkname readCookiesLink net/http.readCookies
 func readCookiesLink(h http.Header, filter string) []*http.Cookie
 
-func readCookies(cookies string) Cookies {
+func ReadCookies(cookies string) Cookies {
 	return readCookiesLink(http.Header{"Cookie": []string{cookies}}, "")
 }
 
@@ -205,7 +205,7 @@ func (obj *RequestOption) newCookies() error {
 		obj.Cookies = []*http.Cookie(cookies)
 		return nil
 	case string:
-		obj.Cookies = readCookies(cookies)
+		obj.Cookies = ReadCookies(cookies)
 		return nil
 	case gjson.Result:
 		if !cookies.IsObject() {
