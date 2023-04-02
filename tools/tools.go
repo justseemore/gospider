@@ -310,7 +310,7 @@ func PathJoin(elem ...string) string {
 func GetHost(addrTypes ...int) net.IP {
 	hosts := GetHosts(addrTypes...)
 	if len(hosts) == 0 {
-		return net.IPv4(0, 0, 0, 0)
+		return nil
 	} else {
 		return hosts[0]
 	}

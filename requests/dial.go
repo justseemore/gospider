@@ -30,6 +30,7 @@ type DialClient struct {
 	ja3Spec     ja3.ClientHelloSpec
 	disDnsCache bool   //是否关闭dns 缓存
 	dns         string //dns
+	haveIpv6    bool
 	resolver    *net.Resolver
 }
 type msgClient struct {
@@ -84,6 +85,7 @@ func NewDail(option DialOption) (*DialClient, error) {
 		ja3Spec:     option.Ja3Spec,
 		disDnsCache: option.DisDnsCache,
 		dns:         option.Dns,
+		haveIpv6:    tools.GetHost(6) != nil,
 	}
 	dialCli.resolver = &net.Resolver{
 		PreferGo: true,
@@ -302,6 +304,9 @@ func (obj *DialClient) lookupIPAddr(ctx context.Context, host string) (net.IP, e
 		addrType = int(obj.addrType)
 	} else if obj.getAddrType != nil {
 		addrType = int(obj.getAddrType(host))
+	}
+	if !obj.haveIpv6 {
+		addrType = 4
 	}
 	ips, err := obj.resolver.LookupIPAddr(ctx, host)
 	if err != nil {
