@@ -107,7 +107,8 @@ func (obj *Client) getSocketAddr(client *ProxyConn) (string, error) {
 	if _, err = io.ReadFull(client.reader, buf[:2]); err != nil { //读取端口号
 		return addr, fmt.Errorf("read port failed:%w", err)
 	}
-	return net.JoinHostPort(addr, strconv.Itoa(int(binary.BigEndian.Uint16(buf[:2])))), nil
+	_, err = client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	return net.JoinHostPort(addr, strconv.Itoa(int(binary.BigEndian.Uint16(buf[:2])))), err
 }
 func (obj *Client) verifySocket(client *ProxyConn) error {
 	ver, err := client.reader.ReadByte() //读取第一个字节判断是否是socks5协议
@@ -160,9 +161,6 @@ func (obj *Client) verifySocket(client *ProxyConn) error {
 		return err
 	}
 	if _, err = client.Write([]byte{5, 0}); err != nil { //协商成功
-		return err
-	}
-	if _, err = client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil { //响应客户端连接成功
 		return err
 	}
 	return err

@@ -71,7 +71,7 @@ func (obj *Client) http21Copy(preCtx context.Context, client *ProxyConn, server 
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			startSize.Add(1)
 			r.URL.Scheme = "https"
-			r.URL.Host = net.JoinHostPort(client.option.host, client.option.port)
+			r.URL.Host = net.JoinHostPort(tools.GetServerName(client.option.host), client.option.port)
 			r.Proto = "HTTP/1.1"
 			r.ProtoMajor = 1
 			r.ProtoMinor = 1

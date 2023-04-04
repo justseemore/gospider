@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -88,8 +89,7 @@ func NewDail(option DialOption) (*DialClient, error) {
 		haveIpv6:    tools.GetHost(6) != nil,
 	}
 	dialCli.resolver = &net.Resolver{
-		PreferGo: true,
-		Dial:     dialCli.DnsDialContext,
+		Dial: dialCli.DnsDialContext,
 	}
 
 	if option.Proxy != "" {
@@ -289,6 +289,7 @@ func cloneUrl(u *url.URL) *url.URL {
 	return &r
 }
 func (obj *DialClient) DnsDialContext(ctx context.Context, netword string, addr string) (net.Conn, error) {
+	log.Print("我開始解析了")
 	if obj.dns != "" {
 		if strings.Contains(obj.dns, ":") {
 			addr = obj.dns
@@ -418,10 +419,18 @@ func (obj *DialClient) clientVerifyHttps(ctx context.Context, proxyUrl *url.URL,
 		if recvHost, err = obj.AddrToIp(ctx, addr); err != nil {
 			return
 		}
+		cHost := host
+		_, hport, _ := net.SplitHostPort(host)
+		if hport == "" {
+			_, aport, _ := net.SplitHostPort(addr)
+			if aport != "" {
+				cHost = net.JoinHostPort(cHost, aport)
+			}
+		}
 		connectReq := &http.Request{
 			Method: http.MethodConnect,
 			URL:    &url.URL{Opaque: recvHost},
-			Host:   host,
+			Host:   cHost,
 			Header: hdr,
 		}
 		if err = connectReq.Write(conn); err != nil {

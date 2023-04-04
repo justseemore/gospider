@@ -851,14 +851,11 @@ func LoadCertData(data []byte) (*x509.Certificate, error) {
 }
 
 func GetServerName(addr string) string {
-	colonPos := strings.LastIndex(addr, ":")
-	if colonPos == -1 {
-		colonPos = len(addr)
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
 	}
-	if _, ipType := ParseHost(addr[:colonPos]); ipType == 0 {
-		return addr[:colonPos]
-	}
-	return ""
+	return host
 }
 func CopySlices[T any](value []T) []T {
 	copyValue := make([]T, len(value))
