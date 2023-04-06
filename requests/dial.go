@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -289,7 +288,6 @@ func cloneUrl(u *url.URL) *url.URL {
 	return &r
 }
 func (obj *DialClient) DnsDialContext(ctx context.Context, netword string, addr string) (net.Conn, error) {
-	log.Print("我開始解析了")
 	if obj.dns != "" {
 		if strings.Contains(obj.dns, ":") {
 			addr = obj.dns
