@@ -13,7 +13,7 @@ import (
 
 	"gitee.com/baixudong/gospider/cmd"
 )
-func TestJs(t *testing.T) {
+func TestJs() {
 	script := `
 	function sign(val,val2){
 		return {"signval":val,"signval2":val2}
@@ -27,27 +27,27 @@ func TestJs(t *testing.T) {
 		Names:  []string{"sign", "sign2"},
 	})
 	if err != nil {
-		t.Fatal(err)
+		log.Fatal(err)
 	}
 	rs, err := jsCli.Call("sign", 1, 2)
 	if err != nil {
-		t.Fatal(err)
+		log.Fatal(err)
 	}
 	if rs.Get("signval").Int() != 1 || rs.Get("signval2").Int() != 2 {
-		t.Fatal("sign error")
+		log.Fatal("sign error")
 	}
 	rs, err = jsCli.Call("sign2", 1, 2)
 	if err != nil {
-		t.Fatal(err)
+		log.Fatal(err)
 	}
 	if rs.Get("sign2val").Int() != 1 || rs.Get("sign2val2").Int() != 2 {
-		t.Fatal("sign error")
+		log.Fatal("sign error")
 	}
 }
 ~~~
 ## 执行python代码示例
 ~~~go
-func TestPy(t *testing.T) {
+func TestPy() {
 	script := `def sign(val,val2):
 	return {"val":val,"val2":val2}`
 	pyCli, err := cmd.NewPyClient(nil, cmd.PyClientOption{
@@ -55,14 +55,14 @@ func TestPy(t *testing.T) {
 		Names:  []string{"sign"},
 	})
 	if err != nil {
-		t.Fatal(err)
+		log.Fatal(err)
 	}
 	rs, err := pyCli.Call("sign", 1, 2)
 	if err != nil {
-		t.Fatal(err)
+		log.Fatal(err)
 	}
 	if rs.Get("val").Int() != 1 || rs.Get("val2").Int() != 2 {
-		t.Fatal("sign error")
+		log.Fatal("sign error")
 	}
 }
 ~~~
