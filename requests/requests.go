@@ -572,9 +572,17 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		return response, tools.WrapError(ErrFatal, "headers 转换错误")
 	}
 
-	if !ctxData.ws && reqs.Header.Get("Content-type") == "" && request_option.contentType != "" {
-		reqs.Header.Add("Content-Type", request_option.contentType)
+	if reqs.Header.Get("Content-type") == "" && request_option.contentType != "" {
+		reqs.Header.Set("Content-Type", request_option.contentType)
 	}
+
+	if reqs.Header.Get("Accept-Language") == "" {
+		reqs.Header.Set("Accept-Language", AcceptLanguage)
+	}
+	if reqs.Header.Get("User-Agent") == "" {
+		reqs.Header.Set("User-Agent", UserAgent)
+	}
+
 	//host构造
 	if request_option.Host != "" {
 		reqs.Host = request_option.Host

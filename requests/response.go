@@ -215,7 +215,10 @@ func (obj *Response) ContentLength() int64 {
 	if obj.filePath != "" {
 		return int64(len(obj.content))
 	}
-	return obj.response.ContentLength
+	if obj.response.ContentLength >= 0 {
+		return obj.response.ContentLength
+	}
+	return int64(len(obj.content))
 }
 
 type barBody struct {
