@@ -37,7 +37,7 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	if proxyServer, err = obj.dialer.DialContextForProxy(ctx, network, client.option.schema, addr, host, proxyUrl); err != nil {
 		return err
 	}
-	server := NewProxyCon(ctx, proxyServer, bufio.NewReader(proxyServer), *client.option, false)
+	server := newProxyCon(ctx, proxyServer, bufio.NewReader(proxyServer), *client.option, false)
 	defer server.Close()
 	if clientReq.Method == http.MethodConnect {
 		if _, err = client.Write([]byte(fmt.Sprintf("%s 200 Connection established\r\n\r\n", clientReq.Proto))); err != nil {
@@ -67,5 +67,5 @@ func (obj *Client) httpsHandle(ctx context.Context, client *ProxyConn) error {
 		Certificates:       []tls.Certificate{obj.cert},
 	})
 	defer tlsClient.Close()
-	return obj.httpHandle(ctx, NewProxyCon(ctx, tlsClient, bufio.NewReader(tlsClient), *client.option, true))
+	return obj.httpHandle(ctx, newProxyCon(ctx, tlsClient, bufio.NewReader(tlsClient), *client.option, true))
 }

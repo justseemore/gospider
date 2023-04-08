@@ -35,7 +35,7 @@ type ProxyConn struct {
 	option *ProxyOption
 }
 
-func NewProxyCon(preCtx context.Context, conn net.Conn, reader *bufio.Reader, option ProxyOption, client bool) *ProxyConn {
+func newProxyCon(preCtx context.Context, conn net.Conn, reader *bufio.Reader, option ProxyOption, client bool) *ProxyConn {
 	option.ctx, option.cnl = context.WithCancel(preCtx)
 
 	return &ProxyConn{conn: conn, reader: reader, option: &option, client: client}

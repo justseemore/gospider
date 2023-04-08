@@ -14,26 +14,26 @@ import (
 
 type DefaultClient = Client[bool]
 
-type Client[runVal any] struct {
-	Debug        bool               //是否显示调试信息
-	valFunc      func(int64) runVal //返回请求客户端
-	valCallback  func(runVal)
-	ctx2         context.Context    //控制各个协程
-	cnl2         context.CancelFunc //控制各个协程
-	ctx          context.Context    //控制主进程，不会关闭各个协程
-	cnl          context.CancelFunc //控制主进程，不会关闭各个协程
-	ctx3         context.Context    //chanx 的协程控制
-	cnl3         context.CancelFunc //chanx 的协程控制
-	tasks        chan *Task
-	sones        chan *Task
-	threadTokens chan struct{}
-	tasks2       *chanx.Client[*Task] //chanx 的队列任务
-	threadNum    atomic.Int64         //正在运行的协程数量
-	timeOut      int
-	callBack     func(*Task) error //任务回调
-	err          error
-	maxThreadId  atomic.Int64
-	threadIds    *chanx.Client[int64]
+type Client[T any] struct {
+	Debug               bool          //是否显示调试信息
+	threadStartCallBack func(int64) T //返回请求客户端
+	threadEndCallBack   func(T)
+	ctx2                context.Context    //控制各个协程
+	cnl2                context.CancelFunc //控制各个协程
+	ctx                 context.Context    //控制主进程，不会关闭各个协程
+	cnl                 context.CancelFunc //控制主进程，不会关闭各个协程
+	ctx3                context.Context    //chanx 的协程控制
+	cnl3                context.CancelFunc //chanx 的协程控制
+	tasks               chan *Task
+	sones               chan *Task
+	threadTokens        chan struct{}
+	tasks2              *chanx.Client[*Task] //chanx 的队列任务
+	threadNum           atomic.Int64         //正在运行的协程数量
+	timeOut             int
+	taskCallBack        func(*Task) error //任务回调
+	err                 error
+	maxThreadId         atomic.Int64
+	threadIds           *chanx.Client[int64]
 }
 
 type Task struct {
@@ -51,27 +51,27 @@ func (obj *Task) Done() <-chan struct{} {
 	return obj.ctx.Done()
 }
 
-type ValClientOption[T any] struct {
-	Timeout  int               //任务超时时间
-	CallBack func(*Task) error //有序的任务完成回调
+type BaseClientOption[T any] struct {
+	Timeout      int               //任务超时时间
+	TaskCallBack func(*Task) error //有序的任务完成回调
 
-	ValFunc     func(int64) T //每一个线程根据线程id,创建一个局部对象
-	ValCallback func(T)       //线程被消毁时的回调,再这里可以安全的释放局部对象资源
+	ThreadStartCallBack func(int64) T //每一个线程开始时，根据线程id,创建一个局部对象
+	ThreadEndCallBack   func(T)       //线程被消毁时的回调,再这里可以安全的释放局部对象资源
 }
-type ClientOption = ValClientOption[bool]
+type ClientOption = BaseClientOption[bool]
 
 func NewClient(preCtx context.Context, maxNum int, options ...ClientOption) *DefaultClient {
-	return NewValClient(preCtx, maxNum, options...)
+	return NewBaseClient(preCtx, maxNum, options...)
 }
 
-func NewValClient[T any](preCtx context.Context, maxNum int, options ...ValClientOption[T]) *Client[T] {
+func NewBaseClient[T any](preCtx context.Context, maxNum int, options ...BaseClientOption[T]) *Client[T] {
 	if preCtx == nil {
 		preCtx = context.TODO()
 	}
 	if maxNum < 1 {
 		maxNum = 1
 	}
-	var option ValClientOption[T]
+	var option BaseClientOption[T]
 	if len(options) > 0 {
 		option = options[0]
 	}
@@ -88,16 +88,16 @@ func NewValClient[T any](preCtx context.Context, maxNum int, options ...ValClien
 		threadTokens <- struct{}{}
 	}
 	pool := &Client[T]{
-		threadIds: chanx.NewClient[int64](ctx),
-		callBack:  option.CallBack,
-		timeOut:   option.Timeout,
-		ctx2:      ctx2, cnl2: cnl2, ctx: ctx, cnl: cnl,
+		threadIds:    chanx.NewClient[int64](ctx),
+		taskCallBack: option.TaskCallBack,
+		timeOut:      option.Timeout,
+		ctx2:         ctx2, cnl2: cnl2, ctx: ctx, cnl: cnl,
 		tasks: tasks, sones: sones,
-		threadTokens: threadTokens,
-		valFunc:      option.ValFunc,
-		valCallback:  option.ValCallback,
+		threadTokens:        threadTokens,
+		threadStartCallBack: option.ThreadStartCallBack,
+		threadEndCallBack:   option.ThreadEndCallBack,
 	}
-	if option.CallBack != nil {
+	if option.TaskCallBack != nil {
 		ctx3, cnl3 := context.WithCancel(preCtx)
 		pool.tasks2 = chanx.NewClient[*Task](preCtx)
 		pool.ctx3 = ctx3
@@ -167,15 +167,15 @@ func (obj *Client[T]) taskMain2() {
 		if obj.err != nil {
 			return
 		}
-		if err := obj.callBack(task); err != nil {
+		if err := obj.taskCallBack(task); err != nil {
 			obj.err = err
 			return
 		}
 	}
 }
 func (obj *Client[T]) subThreadNum(runVal T, taskId int64) {
-	if obj.valFunc != nil && obj.valCallback != nil { //处理回调
-		obj.valCallback(runVal)
+	if obj.threadEndCallBack != nil { //处理回调
+		obj.threadEndCallBack(runVal)
 	}
 	obj.setTaskId(taskId) //回收线程id
 	obj.threadNum.Add(-1) //线程池数量减1
@@ -192,8 +192,8 @@ func (obj *Client[T]) runMain() {
 	var runVal T
 	obj.threadNum.Add(1)
 	threadId := obj.getTaskId()
-	if obj.valFunc != nil {
-		runVal = obj.valFunc(threadId)
+	if obj.threadStartCallBack != nil {
+		runVal = obj.threadStartCallBack(threadId)
 	}
 	defer obj.subThreadNum(runVal, threadId)
 	for {
@@ -225,7 +225,7 @@ func (obj *Client[T]) verify(fun any, args []any) error {
 	}
 	typeOfFun := reflect.TypeOf(fun)
 	index := 1
-	if obj.valFunc != nil {
+	if obj.threadStartCallBack != nil {
 		index = 2
 		var tmpVal T
 		if reflect.TypeOf(tmpVal).String() != typeOfFun.In(1).String() {
@@ -319,12 +319,12 @@ func (obj *Client[T]) run(task *Task, option T, threadId int64) {
 	defer task.cnl()                                       //函数结束，任务完成
 	ctx := context.WithValue(task.ctx, ThreadId, threadId) //线程id 值写入ctx
 	index := 1
-	if obj.valFunc != nil {
+	if obj.threadStartCallBack != nil {
 		index = 2
 	}
 	params := make([]reflect.Value, len(task.Args)+index)
 	params[0] = reflect.ValueOf(ctx)
-	if obj.valFunc != nil {
+	if obj.threadStartCallBack != nil {
 		params[1] = reflect.ValueOf(option)
 	}
 	for k, param := range task.Args {

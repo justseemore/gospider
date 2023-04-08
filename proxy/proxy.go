@@ -269,16 +269,16 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) (err error) 
 	}
 	if obj.vpn {
 		if firstCons[0] == 22 {
-			return obj.httpsHandle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}, true))
+			return obj.httpsHandle(ctx, newProxyCon(ctx, client, clientReader, ProxyOption{}, true))
 		}
 		return errors.New("vpn error")
 	}
 	switch firstCons[0] {
 	case 5: //socks5 代理
-		return obj.sockes5Handle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}, true))
+		return obj.sockes5Handle(ctx, newProxyCon(ctx, client, clientReader, ProxyOption{}, true))
 	case 22: //https 代理
-		return obj.httpsHandle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}, true))
+		return obj.httpsHandle(ctx, newProxyCon(ctx, client, clientReader, ProxyOption{}, true))
 	default: //http 代理
-		return obj.httpHandle(ctx, NewProxyCon(ctx, client, clientReader, ProxyOption{}, true))
+		return obj.httpHandle(ctx, newProxyCon(ctx, client, clientReader, ProxyOption{}, true))
 	}
 }

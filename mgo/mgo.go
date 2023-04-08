@@ -565,7 +565,7 @@ func (obj *Client) ClearOplog(preCctx context.Context, Func func(context.Context
 	var lastOid Timestamp
 	taskMap := kinds.NewSet[ObjectID]()
 	pool := thread.NewClient(pre_ctx, clearOption.Thread, thread.ClientOption{
-		CallBack: func(t *thread.Task) error {
+		TaskCallBack: func(t *thread.Task) error {
 			cur++
 			if t.Result[2] != nil {
 				return t.Result[2].(error)
@@ -701,7 +701,7 @@ func (obj *Table) clearTable(preCtx context.Context, Func any, tag string, clear
 	var lastOid ObjectID
 	bar := bar.NewClient(barTotal, bar.ClientOption{Cur: barCur})
 	pool := thread.NewClient(pre_ctx, clearOption.Thread, thread.ClientOption{
-		CallBack: func(t *thread.Task) error {
+		TaskCallBack: func(t *thread.Task) error {
 			if t.Result[1] != nil {
 				return t.Result[1].(error)
 			}

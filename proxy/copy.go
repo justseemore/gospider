@@ -432,8 +432,8 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 		return err
 	}
 	client.option.http2 = http2
-	clientProxy := NewProxyCon(ctx, tlsClient, bufio.NewReader(tlsClient), *client.option, true)
-	serverProxy := NewProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option, false)
+	clientProxy := newProxyCon(ctx, tlsClient, bufio.NewReader(tlsClient), *client.option, true)
+	serverProxy := newProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option, false)
 	return obj.copyHttpMain(ctx, clientProxy, serverProxy)
 }
 func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, ws bool, cert tls.Certificate) (tlsConn *tls.Conn, http2 bool, err error) {
