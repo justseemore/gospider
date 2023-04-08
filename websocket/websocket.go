@@ -129,7 +129,7 @@ const (
 )
 
 func secWebSocketAccept(secWebSocketKey string) string {
-	return tools.Base64Encode(secWebSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+	return tools.Base64Encode(tools.Sha1(secWebSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
 }
 func secWebSocketKey() string {
 	b := make([]byte, 16)

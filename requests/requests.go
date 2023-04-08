@@ -35,7 +35,7 @@ var AcceptLanguage = `"zh-CN,zh;q=0.9"`
 
 // 请求操作========================================================================= start
 var defaultHeaders = http.Header{
-	"Accept-encoding": []string{"gzip, deflate, br"},
+	"Accept-Encoding": []string{"gzip, deflate, br"},
 	"Accept":          []string{"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"},
 	"Accept-Language": []string{AcceptLanguage},
 	"User-Agent":      []string{UserAgent},
@@ -574,13 +574,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 
 	if reqs.Header.Get("Content-type") == "" && request_option.contentType != "" {
 		reqs.Header.Set("Content-Type", request_option.contentType)
-	}
-
-	if reqs.Header.Get("Accept-Language") == "" {
-		reqs.Header.Set("Accept-Language", AcceptLanguage)
-	}
-	if reqs.Header.Get("User-Agent") == "" {
-		reqs.Header.Set("User-Agent", UserAgent)
 	}
 
 	//host构造
