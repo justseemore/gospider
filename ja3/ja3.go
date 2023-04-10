@@ -600,9 +600,6 @@ type Ja3ContextData struct {
 
 func (obj Ja3ContextData) Md5() string {
 	var md5Str string
-	for _, val := range obj.ClientHello.SupportedProtos {
-		md5Str += val
-	}
 	for _, val := range obj.ClientHello.SupportedPoints {
 		md5Str += fmt.Sprintf("%d", val)
 	}
