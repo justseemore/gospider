@@ -25,8 +25,8 @@ var (
 	HelloFirefox_63   = utls.HelloFirefox_63
 	HelloFirefox_65   = utls.HelloFirefox_65
 	HelloFirefox_99   = utls.HelloFirefox_99
-	HelloFirefox_102  = utls.HelloFirefox_102
-	HelloFirefox_105  = utls.HelloFirefox_105
+
+	HelloFirefox_105 = utls.HelloFirefox_105
 
 	HelloChrome_Auto        = utls.HelloChrome_Auto
 	HelloChrome_58          = utls.HelloChrome_58
@@ -69,7 +69,6 @@ var ClientHelloIDs = []ClientHelloId{
 	HelloFirefox_63,
 	HelloFirefox_65,
 	HelloFirefox_99,
-	HelloFirefox_102,
 	HelloFirefox_105,
 
 	HelloChrome_Auto,
@@ -547,22 +546,21 @@ type ClientHello struct {
 }
 
 var ja3Db = map[string]string{
-	"488e60390163900f2f8017b1a529fb71": "Firefox",
-	"dd9ff85d6cf3dda49608196462e523d4": "Firefox",
-	"60b4c43df20ec1e3b12338f36a3bb2ac": "Firefox",
-	"479c1e69605c4fdfbf1f20ce7a94e2c5": "Firefox",
-	"e2e2f297474a013695275e093bae0765": "Firefox",
-	"017a847bdd23336891f3177b12eeeb11": "Chrome",
-	"984835adab330788cc23dbca98bd0729": "Chrome",
-	"4ebfa507a641965bc7b681da6b3eef0f": "Chrome",
-	"fd3e1e3ffa5a9cbfe286d570172b6d11": "Chrome",
-	"fa02513ba7bc98366d780cc67511bb11": "iOS",
-	"c1d4aef20ee8c9373aaae75fe5e18fe3": "iOS",
-	"3be6eceab63f23928637fba0c9d60f72": "iOS",
-	"88fcc8e1c8b91a7ae3fd17d62aff1317": "iOS",
+	"41c1a0a0b7fea468f579fe3100c6d48a": "Firefox",
+	"149e406721fa906e06d7f44589139e0e": "Firefox",
+	"e92a163261a4777ba6ae540f587468ea": "Firefox",
+	"ff5fb9c500cb93592dc619b21746d610": "Firefox",
+	"88bd3cb92eb400fabc11d5c7ef336658": "Chrome",
+	"43818547191c95092fd5c7145d07ca33": "Chrome",
+	"4297e191aadbb83bcca9ad0a824c5d18": "Chrome",
+	"ebcb348cdbaaf5e7a47b197bb9b1255f": "Chrome",
+	"2a5649bb0a3c364491777ddf2678b396": "iOS",
+	"2dcb3f02b926b086a068d10db1c5ea63": "iOS",
+	"7e8d9723c8236b9e159d2310c574054f": "iOS",
+	"0062ef304d078cdf567bbe32349fd446": "iOS",
 	"811b5bb18faa39a6927a393b4a084249": "Android",
-	"97ab38518a3b2569ebfa4997a6aba778": "Safari",
-	"6f1c1aa30872aff0d2ed761f219f6a99": "360Browser",
+	"3a2220ccf3b251502c646249252d8fe5": "Safari",
+	"e58713f1e65a280ce3bec3b85e6a3485": "360Browser",
 }
 
 func newClientHello(chi *tls.ClientHelloInfo) ClientHello {
@@ -617,9 +615,13 @@ func (obj Ja3ContextData) Md5() string {
 	}
 	return tools.Hex(tools.Md5(md5Str))
 }
-func (obj Ja3ContextData) Verify() (string, bool) {
-	ja3Name, ja3Ok := ja3Db[obj.Md5()]
+
+func VerifyWithMd5(md string) (string, bool) {
+	ja3Name, ja3Ok := ja3Db[md]
 	return ja3Name, ja3Ok
+}
+func (obj Ja3ContextData) Verify() (string, bool) {
+	return VerifyWithMd5(obj.Md5())
 }
 
 const keyPrincipalID = "Ja3ContextData"
