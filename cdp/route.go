@@ -2,7 +2,9 @@ package cdp
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strconv"
 	"time"
@@ -14,10 +16,10 @@ import (
 )
 
 type RequestOption struct {
-	Url      string            `json:"url"`
-	Method   string            `json:"method"`
-	PostData string            `json:"postData"`
-	Headers  map[string]string `json:"headers"`
+	Url      string      `json:"url"`
+	Method   string      `json:"method"`
+	PostData string      `json:"postData"`
+	Headers  http.Header `json:"headers"`
 }
 type RequestData struct {
 	Url              string            `json:"url"`
@@ -36,8 +38,8 @@ type RouteData struct {
 	RequestId    string      `json:"requestId"`
 	Request      RequestData `json:"request"`
 	FrameId      string      `json:"frameId"`
-	ResourceType string      `json:"resourceType"`
 	NetworkId    string      `json:"networkId"`
+	ResourceType string      `json:"resourceType"`
 
 	ResponseErrorReason string   `json:"responseErrorReason"`
 	ResponseStatusCode  int      `json:"responseStatusCode"`
@@ -50,6 +52,34 @@ type Route struct {
 	recvData RouteData
 }
 
+func (obj *Route) IsResponse() bool {
+	if obj.recvData.ResponseErrorReason != "" ||
+		obj.recvData.ResponseStatusCode != 0 || obj.recvData.ResponseStatusText != "" ||
+		obj.recvData.ResponseHeaders != nil {
+		return true
+	}
+	return false
+}
+func (obj *Route) Error() error {
+	if obj.recvData.ResponseErrorReason != "" {
+		return errors.New(obj.recvData.ResponseErrorReason)
+	}
+	return nil
+}
+func (obj *Route) StatusCode() int {
+	return obj.recvData.ResponseStatusCode
+}
+func (obj *Route) StatusText() string {
+	return obj.recvData.ResponseStatusText
+}
+func (obj *Route) ResponseHeaders() http.Header {
+	head := http.Header{}
+	for _, hd := range obj.recvData.ResponseHeaders {
+		head.Add(hd.Name, hd.Value)
+	}
+	return head
+}
+
 func (obj *Route) NewRequestOption() RequestOption {
 	return RequestOption{
 		Url:      obj.Url(),
@@ -57,6 +87,20 @@ func (obj *Route) NewRequestOption() RequestOption {
 		PostData: obj.PostData(),
 		Headers:  obj.Headers(),
 	}
+}
+func (obj *Route) NewFulData(ctx context.Context) (fulData FulData, err error) {
+	if !obj.IsResponse() {
+		err = errors.New("not response route")
+		return
+	}
+	if err = obj.Error(); err != nil {
+		return
+	}
+	fulData.Body, err = obj.ResponseBody(ctx)
+	fulData.StatusCode = obj.StatusCode()
+	fulData.Headers = obj.ResponseHeaders()
+	fulData.ResponsePhrase = obj.StatusText()
+	return
 }
 
 func (obj *Route) ResourceType() string {
@@ -71,17 +115,18 @@ func (obj *Route) Method() string {
 func (obj *Route) PostData() string {
 	return obj.recvData.Request.PostData
 }
-func (obj *Route) Headers() map[string]string {
+func (obj *Route) Headers() http.Header {
 	if _, ok := obj.recvData.Request.Headers["If-Modified-Since"]; ok {
 		delete(obj.recvData.Request.Headers, "If-Modified-Since")
 	}
-	return obj.recvData.Request.Headers
+	head := http.Header{}
+	for kk, vv := range obj.recvData.Request.Headers {
+		head.Add(kk, vv)
+	}
+	return head
 }
 func (obj *Route) Cookies() requests.Cookies {
-	if cook, ok := obj.recvData.Request.Headers["Cookie"]; ok {
-		return requests.ReadCookies(cook)
-	}
-	return nil
+	return requests.ReadCookies(obj.Headers())
 }
 func keyMd5(key RequestOption, resourceType string) [16]byte {
 	var md5Str string
@@ -128,7 +173,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	var fulData FulData
 	var err error
 	routeKey := keyMd5(routeOption, resourceType)
-	if !obj.webSock.option.DisDataCache {
+	if obj.webSock.option.DataCache {
 		if fulData, err = obj.webSock.db.Get(routeKey); err == nil { //如果有緩存
 			return fulData, err
 		}
@@ -137,55 +182,65 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	if err != nil {
 		return fulData, err
 	}
-	headers := []Header{}
-	for kk, vvs := range rs.Headers() {
-		for _, vv := range vvs {
-			headers = append(headers, Header{
-				Name:  kk,
-				Value: vv,
-			})
-		}
-	}
 	fulData.StatusCode = rs.StatusCode()
 	fulData.Body = rs.Text()
-	fulData.Headers = headers
+	fulData.Headers = rs.Headers()
 	fulData.ResponsePhrase = rs.Status()
-	if !obj.webSock.option.DisDataCache && fulData.StatusCode == 200 && fulData.Body != "" {
+	if obj.webSock.option.DataCache && fulData.StatusCode == 200 && fulData.Body != "" {
 		obj.webSock.db.Put(routeKey, fulData)
 	}
 	return fulData, nil
 }
-
 func (obj *Route) FulFill(ctx context.Context, fulDatas ...FulData) error {
 	var fulData FulData
 	if len(fulDatas) > 0 {
 		fulData = fulDatas[0]
 	}
-	if _, err := obj.webSock.FetchFulfillRequest(ctx, obj.recvData.RequestId, fulData); err != nil {
-		if err2 := obj.Fail(nil); err2 != nil {
-			return err2
-		}
-		return err
-	}
-	return nil
-}
-func (obj *Route) Continue(ctx context.Context) error {
-	fulData, err := obj.Request(ctx, obj.NewRequestOption())
-	var err2 error
+	_, err := obj.webSock.FetchFulfillRequest(ctx, obj.recvData.RequestId, fulData)
 	if err != nil {
-		err2 = obj.Fail(ctx)
+		obj.Fail(nil)
+	}
+	return err
+}
+func (obj *Route) RequestContinue(ctx context.Context) (FulData, error) {
+	fulData, err := obj.Request(ctx, obj.NewRequestOption())
+	if err != nil {
+		obj.Fail(ctx)
 	} else {
 		err = obj.FulFill(ctx, fulData)
 	}
-	if err != nil {
-		return err
-	}
-	return err2
+	return fulData, err
 }
 
-func (obj *Route) _continue(ctx context.Context) error {
-	_, err := obj.webSock.FetchContinueRequest(ctx, obj.recvData.RequestId)
+func (obj *Route) Continue(ctx context.Context, options ...RequestOption) error {
+	_, err := obj.webSock.FetchContinueRequest(ctx, obj.recvData.RequestId, options...)
+	if err != nil {
+		obj.Fail(ctx)
+	}
 	return err
+}
+func (obj *Route) ResponseBody(ctx context.Context) (string, error) {
+	if err := obj.Error(); err != nil {
+		obj.Continue(ctx)
+		return "", err
+	}
+	rs, err := obj.webSock.FetchGetResponseBody(ctx, obj.recvData.RequestId)
+	if err != nil {
+		return "", err
+	}
+	jsonData := tools.Any2json(rs.Result)
+	body := jsonData.Get("body").String()
+	if body == "" {
+		return body, nil
+	}
+	if jsonData.Get("base64Encoded").Bool() {
+		bodyByte, err := tools.Base64Decode(body)
+		if err != nil {
+			return body, err
+		}
+		body = tools.BytesToString(bodyByte)
+	}
+	return body, nil
 }
 
 // Failed, Aborted, TimedOut, AccessDenied, ConnectionClosed, ConnectionReset, ConnectionRefused, ConnectionAborted, ConnectionFailed, NameNotResolved, InternetDisconnected, AddressUnreachable, BlockedByClient, BlockedByResponse
@@ -205,53 +260,14 @@ type Header struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 }
-type Headers []Header
-
-// 获取符合key 条件的所有headers
-func (obj Headers) Gets(name string) Headers {
-	var result Headers
-	for _, head := range obj {
-		if head.Name == name {
-			result = append(result, head)
-		}
-	}
-	return result
-}
-
-// 获取符合key 条件的cookies
-func (obj Headers) Get(name string) (Header, bool) {
-	vals := obj.Gets(name)
-	if i := len(vals); i == 0 {
-		return Header{}, false
-	} else {
-		return vals[i-1], true
-	}
-}
-
-// 获取符合key 条件的所有cookies的值
-func (obj Headers) GetVals(name string) []string {
-	var result []string
-	for _, cook := range obj {
-		if cook.Name == name {
-			result = append(result, cook.Value)
-		}
-	}
-	return result
-}
-
-// 获取符合key 条件的cookies的值
-func (obj Headers) GetVal(name string) (string, bool) {
-	vals := obj.GetVals(name)
-	if i := len(vals); i == 0 {
-		return "", false
-	} else {
-		return vals[i-1], true
-	}
-}
 
 type FulData struct {
-	StatusCode     int     `json:"responseCode"`
-	Headers        Headers `json:"responseHeaders"`
-	Body           string  `json:"body"`
-	ResponsePhrase string  `json:"responsePhrase"`
+	StatusCode     int         `json:"responseCode"`
+	Headers        http.Header `json:"responseHeaders"`
+	Body           string      `json:"body"`
+	ResponsePhrase string      `json:"responsePhrase"`
+}
+
+func (obj FulData) Cookies() requests.Cookies {
+	return requests.ReadSetCookies(obj.Headers)
 }

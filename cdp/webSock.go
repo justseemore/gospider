@@ -39,24 +39,19 @@ type RecvData struct {
 }
 
 type WebSock struct {
-	option     WebSockOption
-	db         *db.Client[FulData]
-	ids        map[int64]*event
-	methods    map[string]*event
-	methodLock sync.RWMutex
-	idLock     sync.RWMutex
-	conn       *websocket.Conn
-	ctx        context.Context
-	cnl        context.CancelCauseFunc
-	id         atomic.Int64
-	pageId     string
-	RouteFunc  func(context.Context, *Route)
-	reqCli     *requests.Client
-	lock       sync.Mutex
-
-	PageStarId int64
-	pageEndId  int64
-	PageDone   chan struct{}
+	option       WebSockOption
+	db           *db.Client[FulData]
+	ids          map[int64]*event
+	methodLock   sync.RWMutex
+	idLock       sync.RWMutex
+	conn         *websocket.Conn
+	ctx          context.Context
+	cnl          context.CancelCauseFunc
+	id           atomic.Int64
+	RequestFunc  func(context.Context, *Route)
+	ResponseFunc func(context.Context, *Route)
+	reqCli       *requests.Client
+	onEvents     map[string]func(ctx context.Context, rd RecvData)
 }
 
 type DataEntrie struct {
@@ -66,72 +61,31 @@ type DataEntrie struct {
 func (obj *WebSock) Done() <-chan struct{} {
 	return obj.ctx.Done()
 }
-func (obj *WebSock) routeMain() (err error) {
-	event := obj.RegMethod(obj.ctx, "Fetch.requestPaused")
-	pool := thread.NewClient(obj.ctx, 65535)
-	defer obj.Close(err)
-	defer pool.Close()
-	defer event.Cnl()
-	for {
-		select {
-		case <-obj.Done():
-			return errors.New("websocks closed")
-		case <-event.Ctx.Done():
-			return errors.New("event closed")
-		case recvData := <-event.RecvData:
-			routeData := RouteData{}
-			temData, err := json.Marshal(recvData.Params)
-			if err == nil && json.Unmarshal(temData, &routeData) == nil {
-				route := &Route{
-					webSock:  obj,
-					recvData: routeData,
-				}
-				if obj.RouteFunc != nil {
-					if _, err := pool.Write(&thread.Task{
-						Func: obj.RouteFunc,
-						Args: []any{route},
-					}); err != nil {
-						return err
-					}
-				} else {
-					if _, err := pool.Write(&thread.Task{
-						Func: route._continue,
-					}); err != nil {
-						return err
-					}
-				}
+func (obj *WebSock) routeMain(ctx context.Context, recvData RecvData) {
+	routeData := RouteData{}
+	temData, err := json.Marshal(recvData.Params)
+	if err == nil && json.Unmarshal(temData, &routeData) == nil {
+		route := &Route{
+			webSock:  obj,
+			recvData: routeData,
+		}
+		if route.IsResponse() {
+			if obj.ResponseFunc != nil {
+				obj.ResponseFunc(ctx, route)
+			} else {
+				route.Continue(ctx)
+			}
+		} else {
+			if obj.RequestFunc != nil {
+				obj.RequestFunc(ctx, route)
+			} else {
+				route.Continue(ctx)
 			}
 		}
 	}
 }
-func (obj *WebSock) PageStop() bool {
-	return obj.pageEndId >= obj.PageStarId
-}
+
 func (obj *WebSock) recv(ctx context.Context, rd RecvData) error {
-	switch rd.Method {
-	case "Page.frameStartedLoading":
-		if obj.pageId == rd.Params["frameId"].(string) {
-			if rd.Id > obj.PageStarId {
-				obj.PageStarId = rd.Id
-			}
-		}
-		select {
-		case obj.PageDone <- struct{}{}:
-		default:
-		}
-	case "Page.frameStoppedLoading":
-		if obj.pageId == rd.Params["frameId"].(string) {
-			if rd.Id > obj.pageEndId {
-				obj.pageEndId = rd.Id
-			}
-		}
-		select {
-		case obj.PageDone <- struct{}{}:
-		default:
-		}
-	case "Page.javascriptDialogOpening":
-		obj.PageHandleJavaScriptDialog(ctx, true)
-	}
 	obj.idLock.RLock()
 	cmdData, ok := obj.ids[rd.Id]
 	obj.idLock.RUnlock()
@@ -149,20 +103,10 @@ func (obj *WebSock) recv(ctx context.Context, rd RecvData) error {
 		}
 	}
 	obj.methodLock.RLock()
-	cmdData, ok = obj.methods[rd.Method]
+	methodFunc, ok := obj.onEvents[rd.Method]
 	obj.methodLock.RUnlock()
-	if ok {
-		select {
-		case <-obj.Done():
-			return errors.New("websocks closed")
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-cmdData.Ctx.Done():
-			obj.methodLock.Lock()
-			delete(obj.methods, rd.Method)
-			obj.methodLock.Unlock()
-		case cmdData.RecvData <- rd:
-		}
+	if ok && methodFunc != nil {
+		methodFunc(ctx, rd)
 	}
 	return nil
 }
@@ -193,32 +137,42 @@ func (obj *WebSock) recvMain() (err error) {
 }
 
 type WebSockOption struct {
-	Proxy        string
-	DisDataCache bool //关闭数据缓存
-	Ja3Spec      ja3.ClientHelloSpec
-	Ja3          bool
+	Proxy     string
+	DataCache bool //开启数据缓存
+	Ja3Spec   ja3.ClientHelloSpec
+	Ja3       bool
 }
 
-func NewWebSock(preCtx context.Context, globalReqCli *requests.Client, ws string, option WebSockOption, db *db.Client[FulData], pageId string) (*WebSock, error) {
+func NewWebSock(preCtx context.Context, globalReqCli *requests.Client, ws string, option WebSockOption, db *db.Client[FulData]) (*WebSock, error) {
 	response, err := globalReqCli.Request(preCtx, "get", ws, requests.RequestOption{DisProxy: true})
 	if err != nil {
 		return nil, err
 	}
 	response.WebSocket().SetReadLimit(1024 * 1024 * 1024) //1G
 	cli := &WebSock{
-		ids:     make(map[int64]*event),
-		methods: make(map[string]*event),
-		conn:    response.WebSocket(),
-		db:      db,
-		reqCli:  globalReqCli,
-		option:  option,
-		pageId:  pageId,
+		ids:      make(map[int64]*event),
+		conn:     response.WebSocket(),
+		db:       db,
+		reqCli:   globalReqCli,
+		option:   option,
+		onEvents: map[string]func(ctx context.Context, rd RecvData){},
 	}
 	cli.ctx, cli.cnl = context.WithCancelCause(preCtx)
 	go cli.recvMain()
-	go cli.routeMain()
+	cli.AddEvent("Fetch.requestPaused", cli.routeMain)
 	return cli, err
 }
+func (obj *WebSock) AddEvent(method string, fun func(ctx context.Context, rd RecvData)) {
+	obj.methodLock.Lock()
+	obj.onEvents[method] = fun
+	obj.methodLock.Unlock()
+}
+func (obj *WebSock) DelEvent(method string) {
+	obj.methodLock.Lock()
+	delete(obj.onEvents, method)
+	obj.methodLock.Unlock()
+}
+
 func (obj *WebSock) Close(err error) error {
 	obj.cnl(err)
 	return obj.conn.Close("close")
@@ -232,17 +186,6 @@ func (obj *WebSock) regId(preCtx context.Context, ids ...int64) *event {
 		obj.idLock.Lock()
 		obj.ids[id] = data
 		obj.idLock.Unlock()
-	}
-	return data
-}
-func (obj *WebSock) RegMethod(preCtx context.Context, methods ...string) *event {
-	data := new(event)
-	data.Ctx, data.Cnl = context.WithCancel(preCtx)
-	data.RecvData = make(chan RecvData)
-	for _, method := range methods {
-		obj.methodLock.Lock()
-		obj.methods[method] = data
-		obj.methodLock.Unlock()
 	}
 	return data
 }

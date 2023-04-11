@@ -117,6 +117,8 @@ var stealth2 string
 var stealth3 string
 
 type Client struct {
+	proxy        string
+	getProxy     func(ctx context.Context, url *url.URL) (string, error)
 	db           *db.Client[cdp.FulData]
 	cmdCli       *cmd.Client
 	globalReqCli *requests.Client
@@ -127,28 +129,26 @@ type Client struct {
 	cnl          context.CancelFunc
 	webSock      *cdp.WebSock
 	proxyCli     *proxy.Client
-	disRoute     bool //关闭默认路由
-	disDataCache bool
+	dataCache    bool
 	headless     bool
 	stealth      bool //是否开启随机指纹
 }
 type ClientOption struct {
-	ChromePath   string   //chrome浏览器执行路径
-	Host         string   //连接host
-	Port         int      //连接port
-	UserDir      string   //设置用户目录
-	Args         []string //启动参数
-	Headless     bool     //是否使用无头
-	DisDataCache bool     //关闭数据缓存
-	Ja3Spec      ja3.ClientHelloSpec
-	Ja3          bool
-	UserAgent    string
-	Proxy        string                                                  //代理http,https,socks5,ex: http://127.0.0.1:7005
-	GetProxy     func(ctx context.Context, url *url.URL) (string, error) //代理
-	DisRoute     bool                                                    //关闭默认路由
-	Width        int64                                                   //浏览器的宽
-	Height       int64                                                   //浏览器的高
-	Stealth      bool                                                    //是否开启随机指纹
+	ChromePath string   //chrome浏览器执行路径
+	Host       string   //连接host
+	Port       int      //连接port
+	UserDir    string   //设置用户目录
+	Args       []string //启动参数
+	Headless   bool     //是否使用无头
+	DataCache  bool     //开启数据缓存
+	Ja3Spec    ja3.ClientHelloSpec
+	Ja3        bool
+	UserAgent  string
+	Proxy      string                                                  //代理http,https,socks5,ex: http://127.0.0.1:7005
+	GetProxy   func(ctx context.Context, url *url.URL) (string, error) //代理
+	Width      int64                                                   //浏览器的宽
+	Height     int64                                                   //浏览器的高
+	Stealth    bool                                                    //是否开启随机指纹
 }
 
 //go:embed browserCmd.exe
@@ -523,7 +523,9 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 	globalReqCli.RedirectNum = -1
 	globalReqCli.DisDecode = true
 	client = &Client{
-		disDataCache: option.DisDataCache,
+		proxy:        option.Proxy,
+		getProxy:     option.GetProxy,
+		dataCache:    option.DataCache,
 		headless:     option.Headless,
 		ctx:          ctx,
 		cnl:          cnl,
@@ -532,7 +534,6 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 		host:         option.Host,
 		port:         option.Port,
 		globalReqCli: globalReqCli,
-		disRoute:     option.DisRoute,
 		stealth:      option.Stealth,
 	}
 	return client, client.init()
@@ -576,7 +577,6 @@ func (obj *Client) init() error {
 		fmt.Sprintf("ws://%s:%d/devtools/browser/%s", obj.host, obj.port, browWsRs.Group(1)),
 		cdp.WebSockOption{},
 		obj.db,
-		"",
 	)
 	if err != nil {
 		return err
@@ -626,11 +626,11 @@ func (obj *Client) Close() (err error) {
 }
 
 type PageOption struct {
-	Proxy        string
-	DisDataCache bool //关闭数据缓存
-	Ja3Spec      ja3.ClientHelloSpec
-	Ja3          bool
-	Stealth      bool //是否开启随机指纹
+	Proxy     string
+	DataCache bool //开启数据缓存
+	Ja3Spec   ja3.ClientHelloSpec
+	Ja3       bool
+	Stealth   bool //是否开启随机指纹
 }
 
 // 新建标签页
@@ -639,9 +639,17 @@ func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page
 	if len(options) > 0 {
 		option = options[0]
 	}
-	if !option.DisDataCache {
-		option.DisDataCache = obj.disDataCache
+	if !option.DataCache {
+		option.DataCache = obj.dataCache
 	}
+	if option.Ja3 || option.Ja3Spec.IsSet() {
+		option.DataCache = true
+	} else if option.Proxy != "" && option.Proxy != obj.proxy {
+		option.DataCache = true
+	} else if obj.getProxy != nil {
+		option.DataCache = true
+	}
+
 	rs, err := obj.webSock.TargetCreateTarget(preCtx, "")
 	if err != nil {
 		return nil, err
@@ -665,8 +673,8 @@ func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page
 	if err = page.init(obj.globalReqCli, option, obj.db); err != nil {
 		return nil, err
 	}
-	if !obj.disRoute {
-		if err = page.Route(preCtx, func(ctx context.Context, r *cdp.Route) { r.Continue(ctx) }); err != nil {
+	if option.DataCache {
+		if err = page.Request(preCtx, func(ctx context.Context, r *cdp.Route) { r.RequestContinue(ctx) }); err != nil {
 			return nil, err
 		}
 	}

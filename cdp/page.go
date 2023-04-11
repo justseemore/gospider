@@ -18,14 +18,14 @@ func (obj *WebSock) PageAddScriptToEvaluateOnNewDocument(ctx context.Context, so
 	})
 }
 
-type ScreenShotOption struct {
+type ScreenshotOption struct {
 	Format                string //图像压缩格式（默认为 webp）,允许的值：jpeg,png,webp
 	Quality               int    //范围 [0..100] 的压缩质量（仅限 jpeg）。
 	CaptureBeyondViewport bool   //捕获视口之外的屏幕截图。默认为 false。
 }
 
-func (obj *WebSock) PageCaptureScreenshot(ctx context.Context, rect Rect, options ...ScreenShotOption) (RecvData, error) {
-	var option ScreenShotOption
+func (obj *WebSock) PageCaptureScreenshot(ctx context.Context, rect Rect, options ...ScreenshotOption) (RecvData, error) {
+	var option ScreenshotOption
 	if len(options) > 0 {
 		option = options[0]
 	}

@@ -362,10 +362,11 @@ func isGREASEUint16(v uint16) bool {
 type ClientHelloSpec utls.ClientHelloSpec
 
 func (obj ClientHelloSpec) IsSet() bool {
-	if obj.CipherSuites == nil && obj.Extensions == nil && obj.CompressionMethods == nil && obj.TLSVersMax == 0 && obj.TLSVersMin == 0 {
-		return false
+	if obj.CipherSuites != nil || obj.Extensions != nil || obj.CompressionMethods != nil ||
+		obj.TLSVersMax != 0 || obj.TLSVersMin != 0 {
+		return true
 	}
-	return true
+	return false
 }
 
 // ja3 clientHelloId 生成 clientHello

@@ -34,8 +34,43 @@ type Page struct {
 	baseUrl      string
 	webSock      *cdp.WebSock
 	stealth      bool
+
+	pageStarId int64
+	pageEndId  int64
+	pageDone   chan struct{}
 }
 
+func (obj *Page) pageStop() bool {
+	return obj.pageEndId >= obj.pageStarId
+}
+func (obj *Page) pageStartLoadMain(ctx context.Context, rd cdp.RecvData) {
+	if obj.id == rd.Params["frameId"].(string) {
+		if rd.Id > obj.pageStarId {
+			obj.pageStarId = rd.Id
+		}
+	}
+	select {
+	case obj.pageDone <- struct{}{}:
+	default:
+	}
+}
+func (obj *Page) pageEndLoadMain(ctx context.Context, rd cdp.RecvData) {
+	if obj.id == rd.Params["frameId"].(string) {
+		if rd.Id > obj.pageEndId {
+			obj.pageEndId = rd.Id
+		}
+	}
+	select {
+	case obj.pageDone <- struct{}{}:
+	default:
+	}
+}
+func (obj *Page) addEvent(method string, fun func(ctx context.Context, rd cdp.RecvData)) {
+	obj.webSock.AddEvent(method, fun)
+}
+func (obj *Page) delEvent(method string) {
+	obj.webSock.DelEvent(method)
+}
 func (obj *Page) init(globalReqCli *requests.Client, option PageOption, db *db.Client[cdp.FulData]) error {
 	var err error
 	if obj.webSock, err = cdp.NewWebSock(
@@ -43,16 +78,17 @@ func (obj *Page) init(globalReqCli *requests.Client, option PageOption, db *db.C
 		globalReqCli,
 		fmt.Sprintf("ws://%s:%d/devtools/page/%s", obj.host, obj.port, obj.id),
 		cdp.WebSockOption{
-			Proxy:        option.Proxy,
-			DisDataCache: option.DisDataCache,
-			Ja3Spec:      option.Ja3Spec,
-			Ja3:          option.Ja3,
+			Proxy:     option.Proxy,
+			DataCache: option.DataCache,
+			Ja3Spec:   option.Ja3Spec,
+			Ja3:       option.Ja3,
 		},
 		db,
-		obj.id,
 	); err != nil {
 		return err
 	}
+	obj.addEvent("Page.frameStartedLoading", obj.pageStartLoadMain)
+	obj.addEvent("Page.frameStoppedLoading", obj.pageEndLoadMain)
 	if _, err = obj.webSock.PageEnable(obj.ctx); err != nil {
 		return err
 	}
@@ -75,7 +111,7 @@ func (obj *Page) AddScript(ctx context.Context, script string) error {
 	_, err := obj.webSock.PageAddScriptToEvaluateOnNewDocument(ctx, script)
 	return err
 }
-func (obj *Page) Img(ctx context.Context, options ...cdp.ScreenShotOption) ([]byte, error) {
+func (obj *Page) Screenshot(ctx context.Context, options ...cdp.ScreenshotOption) ([]byte, error) {
 	rs, err := obj.webSock.PageCaptureScreenshot(ctx, cdp.Rect{}, options...)
 	if err != nil {
 		return nil, err
@@ -103,7 +139,7 @@ func (obj *Page) Reload(ctx context.Context) error {
 	return obj.WaitStop(ctx)
 }
 func (obj *Page) PageLoadDone() <-chan struct{} {
-	return obj.webSock.PageDone
+	return obj.pageDone
 }
 func (obj *Page) WaitStop(preCtx context.Context) error {
 	var ctx context.Context
@@ -120,9 +156,9 @@ func (obj *Page) WaitStop(preCtx context.Context) error {
 			return ctx.Err()
 		case <-obj.ctx.Done():
 			return obj.ctx.Err()
-		case <-obj.webSock.PageDone:
+		case <-obj.pageDone:
 		case <-time.After(time.Millisecond * 1500):
-			if obj.webSock.PageStop() {
+			if obj.pageStop() {
 				return nil
 			}
 		}
@@ -183,12 +219,22 @@ func (obj *Page) close() error {
 func (obj *Page) Done() <-chan struct{} {
 	return obj.webSock.Done()
 }
-func (obj *Page) Route(ctx context.Context, routeFunc func(context.Context, *cdp.Route)) error {
-	obj.webSock.RouteFunc = routeFunc
+func (obj *Page) Request(ctx context.Context, RequestFunc func(context.Context, *cdp.Route)) error {
+	obj.webSock.RequestFunc = RequestFunc
 	var err error
-	if obj.webSock.RouteFunc != nil {
-		_, err = obj.webSock.FetchEnable(ctx)
-	} else {
+	if obj.webSock.RequestFunc != nil {
+		_, err = obj.webSock.FetchRequestEnable(ctx)
+	} else if obj.webSock.ResponseFunc == nil {
+		_, err = obj.webSock.FetchDisable(ctx)
+	}
+	return err
+}
+func (obj *Page) Response(ctx context.Context, ResponseFunc func(context.Context, *cdp.Route)) error {
+	obj.webSock.ResponseFunc = ResponseFunc
+	var err error
+	if obj.webSock.ResponseFunc != nil {
+		_, err = obj.webSock.FetchResponseEnable(ctx)
+	} else if obj.webSock.RequestFunc == nil {
 		_, err = obj.webSock.FetchDisable(ctx)
 	}
 	return err
