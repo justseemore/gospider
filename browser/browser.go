@@ -130,6 +130,7 @@ type Client struct {
 	disRoute     bool //关闭默认路由
 	disDataCache bool
 	headless     bool
+	stealth      bool //是否开启随机指纹
 }
 type ClientOption struct {
 	ChromePath   string   //chrome浏览器执行路径
@@ -147,6 +148,7 @@ type ClientOption struct {
 	DisRoute     bool                                                    //关闭默认路由
 	Width        int64                                                   //浏览器的宽
 	Height       int64                                                   //浏览器的高
+	Stealth      bool                                                    //是否开启随机指纹
 }
 
 //go:embed browserCmd.exe
@@ -319,7 +321,7 @@ var chromeArgs = []string{
 	"--ignore-ssl-errors=true",   //忽略 SSL 错误。
 	"--virtual-time-budget=1000", //缩短setTimeout  setInterval 的时间1000秒
 
-	"--disable-web-security",                      //禁用同源策略。
+	"--single-process",                            //单个进程中运行浏览器实例
 	"--no-pings",                                  //禁用 ping。
 	"--no-zygote",                                 //禁用 zygote 进程。
 	"--mute-audio",                                //禁用音频。
@@ -531,6 +533,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 		port:         option.Port,
 		globalReqCli: globalReqCli,
 		disRoute:     option.DisRoute,
+		stealth:      option.Stealth,
 	}
 	return client, client.init()
 }
@@ -627,6 +630,7 @@ type PageOption struct {
 	DisDataCache bool //关闭数据缓存
 	Ja3Spec      ja3.ClientHelloSpec
 	Ja3          bool
+	Stealth      bool //是否开启随机指纹
 }
 
 // 新建标签页
@@ -656,6 +660,7 @@ func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page
 		cnl:          cnl,
 		headless:     obj.headless,
 		globalReqCli: obj.globalReqCli,
+		stealth:      obj.stealth,
 	}
 	if err = page.init(obj.globalReqCli, option, obj.db); err != nil {
 		return nil, err

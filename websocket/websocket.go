@@ -323,13 +323,13 @@ func (obj *Conn) Option() Option {
 	return obj.option
 }
 
-func (obj *Conn) RecvJson(ctx context.Context, v interface{}) error {
+func (obj *Conn) RecvJson(ctx context.Context, v any) error {
 	if ctx == nil {
 		ctx = context.TODO()
 	}
 	return wsjson.Read(ctx, obj.conn, v)
 }
-func (obj *Conn) SendJson(ctx context.Context, v interface{}) error {
+func (obj *Conn) SendJson(ctx context.Context, v any) error {
 	if ctx == nil {
 		ctx = context.TODO()
 	}
@@ -348,11 +348,23 @@ func (obj *Conn) Recv(ctx context.Context) (MessageType, []byte, error) {
 	}
 	return obj.conn.Read(ctx)
 }
-func (obj *Conn) Send(ctx context.Context, typ MessageType, p []byte) error {
+func (obj *Conn) Send(ctx context.Context, typ MessageType, p any) error {
 	if ctx == nil {
 		ctx = context.TODO()
 	}
-	return obj.conn.Write(ctx, typ, p)
+	switch val := p.(type) {
+	case []byte:
+		return obj.conn.Write(ctx, typ, val)
+	case string:
+		return obj.conn.Write(ctx, typ, tools.StringToBytes(val))
+	default:
+		jsonData := tools.Any2json(p)
+		if jsonData.IsObject() {
+			return obj.conn.Write(ctx, typ, tools.StringToBytes(jsonData.Raw))
+		} else {
+			return errors.New("类型错误")
+		}
+	}
 }
 func (obj *Conn) Close(reasons ...string) error {
 	var reason string

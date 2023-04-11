@@ -608,6 +608,8 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			if r.StatusCode != 101 && err == nil {
 				err = errors.New("statusCode not 101")
 			}
+		} else if r.Header.Get("Content-Type") == "text/event-stream" {
+			request_option.DisRead = true
 		}
 		r.Close = request_option.DisAlive
 		if response, err2 = obj.newResponse(r, cancel, request_option); err2 != nil { //创建 response

@@ -33,6 +33,7 @@ type Page struct {
 	nodeId       int64
 	baseUrl      string
 	webSock      *cdp.WebSock
+	stealth      bool
 }
 
 func (obj *Page) init(globalReqCli *requests.Client, option PageOption, db *db.Client[cdp.FulData]) error {
@@ -41,7 +42,12 @@ func (obj *Page) init(globalReqCli *requests.Client, option PageOption, db *db.C
 		obj.ctx,
 		globalReqCli,
 		fmt.Sprintf("ws://%s:%d/devtools/page/%s", obj.host, obj.port, obj.id),
-		cdp.WebSockOption(option),
+		cdp.WebSockOption{
+			Proxy:        option.Proxy,
+			DisDataCache: option.DisDataCache,
+			Ja3Spec:      option.Ja3Spec,
+			Ja3:          option.Ja3,
+		},
 		db,
 		obj.id,
 	); err != nil {
@@ -50,15 +56,20 @@ func (obj *Page) init(globalReqCli *requests.Client, option PageOption, db *db.C
 	if _, err = obj.webSock.PageEnable(obj.ctx); err != nil {
 		return err
 	}
-	if obj.headless {
-		if err = obj.AddScript(obj.ctx, stealth); err != nil {
-			return err
-		}
-		if err = obj.AddScript(obj.ctx, stealth3); err != nil {
+	// if obj.headless {
+	// 	if err = obj.AddScript(obj.ctx, stealth); err != nil {
+	// 		return err
+	// 	}
+	// 	if err = obj.AddScript(obj.ctx, stealth3); err != nil {
+	// 		return err
+	// 	}
+	// }
+	if option.Stealth || obj.stealth {
+		if err = obj.AddScript(obj.ctx, stealth2); err != nil {
 			return err
 		}
 	}
-	return obj.AddScript(obj.ctx, stealth2)
+	return obj.AddScript(obj.ctx, `Object.defineProperty(window, "RTCPeerConnection",{"get":undefined});Object.defineProperty(window, "mozRTCPeerConnection",{"get":undefined});Object.defineProperty(window, "webkitRTCPeerConnection",{"get":undefined});`)
 }
 func (obj *Page) AddScript(ctx context.Context, script string) error {
 	_, err := obj.webSock.PageAddScriptToEvaluateOnNewDocument(ctx, script)

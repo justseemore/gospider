@@ -21,4 +21,31 @@ func main() {
 	log.Print("结束了")
 }
 ```
+## 获取线程id
+```go
+package main
 
+import (
+	"context"
+	"log"
+	"time"
+
+	"gitee.com/baixudong/gospider/thread"
+)
+func test(ctx context.Context, num int) {
+	log.Printf("第%d个线程池中的第%d个请求开始", thread.GetThreadId(ctx), num)
+	time.Sleep(time.Second)
+	log.Printf("第%d个线程池中的第%d个请求结束", thread.GetThreadId(ctx), num)
+}
+func main() {
+	threadCli := thread.NewClient(nil, 3) //限制并发为3
+	for i := 0; i < 10; i++ {
+		//读取任务
+		threadCli.Write(&thread.Task{
+			Func: test,
+			Args: []any{i},
+		})
+	}
+	threadCli.Join()
+}
+```

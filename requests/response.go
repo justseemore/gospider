@@ -1,6 +1,7 @@
 package requests
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"gitee.com/baixudong/gospider/bar"
@@ -27,18 +29,59 @@ type Response struct {
 	disDecode bool
 	disUnzip  bool
 	filePath  string
+	bar       bool
+	closed    bool
+}
+
+type SseClient struct {
+	reader *bufio.Reader
+}
+type Event struct {
+	Data    string
+	Event   string
+	Id      string
+	Retry   int
+	Comment string
+}
+
+func newSseClient(rd io.Reader) *SseClient {
+	return &SseClient{reader: bufio.NewReader(rd)}
+}
+func (obj *SseClient) Recv() (Event, error) {
+	var event Event
+	for {
+		readStr, err := obj.reader.ReadString('\n')
+		if err != nil || readStr == "\n" {
+			return event, err
+		}
+		if strings.HasPrefix(readStr, "data: ") {
+			event.Data += readStr[6 : len(readStr)-1]
+		} else if strings.HasPrefix(readStr, "event: ") {
+			event.Event = readStr[7 : len(readStr)-1]
+		} else if strings.HasPrefix(readStr, "id: ") {
+			event.Id = readStr[4 : len(readStr)-1]
+		} else if strings.HasPrefix(readStr, "retry: ") {
+			if event.Retry, err = strconv.Atoi(readStr[7 : len(readStr)-1]); err != nil {
+				return event, err
+			}
+		} else if strings.HasPrefix(readStr, ": ") {
+			event.Comment = readStr[2 : len(readStr)-1]
+		} else {
+			return event, errors.New("内容解析错误：" + readStr)
+		}
+	}
 }
 
 func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request_option RequestOption) (*Response, error) {
-	response := &Response{response: r, cnl: cnl}
+	response := &Response{response: r, cnl: cnl, bar: request_option.Bar}
 	if request_option.DisRead { //是否预读
 		return response, nil
 	}
 	if request_option.DisUnZip || r.Uncompressed { //是否解压
 		response.disUnzip = true
 	}
-	response.disDecode = request_option.DisDecode      //是否解码
-	return response, response.read(request_option.Bar) //读取内容
+	response.disDecode = request_option.DisDecode //是否解码
+	return response, response.read()              //读取内容
 }
 
 type Cookies []*http.Cookie
@@ -103,6 +146,12 @@ func (obj *Response) Response() *http.Response {
 func (obj *Response) WebSocket() *websocket.Conn {
 	return obj.webSocket
 }
+func (obj *Response) SseClient() *SseClient {
+	if obj.closed {
+		return newSseClient(bytes.NewBuffer(obj.Content()))
+	}
+	return newSseClient(obj.Response().Body)
+}
 
 // 返回当前的Location
 func (obj *Response) Location() (*url.URL, error) {
@@ -155,14 +204,14 @@ func (obj *Response) Headers() http.Header {
 func (obj *Response) Decode(encoding string) {
 	if obj.encoding != encoding {
 		obj.encoding = encoding
-		obj.content = tools.Decode(obj.content, encoding)
+		obj.Content(tools.Decode(obj.Content(), encoding))
 	}
 }
 
 // 尝试将内容解析成map
 func (obj *Response) Map() map[string]any {
 	var data map[string]any
-	if err := json.Unmarshal(obj.content, &data); err != nil {
+	if err := json.Unmarshal(obj.Content(), &data); err != nil {
 		return nil
 	}
 	return data
@@ -170,21 +219,28 @@ func (obj *Response) Map() map[string]any {
 
 // 尝试将请求解析成json
 func (obj *Response) Json(path ...string) gjson.Result {
-	return tools.Any2json(obj.content, path...)
+	return tools.Any2json(obj.Content(), path...)
 }
 
 // 返回内容的字符串形式，也可设置内容
 func (obj *Response) Text(val ...string) string {
 	if len(val) > 0 {
-		obj.content = tools.StringToBytes(val[0])
+		return tools.BytesToString(obj.Content(tools.StringToBytes(val[0])))
 	}
-	return tools.BytesToString(obj.content)
+	return tools.BytesToString(obj.Content())
 }
 
 // 返回内容的二进制，也可设置内容
 func (obj *Response) Content(val ...[]byte) []byte {
 	if len(val) > 0 {
 		obj.content = val[0]
+		return obj.content
+	}
+	if !obj.closed {
+		defer obj.Close()
+		bytesWrite := bytes.NewBuffer(nil)
+		io.Copy(bytesWrite, obj)
+		obj.content = bytesWrite.Bytes()
 	}
 	return obj.content
 }
@@ -218,7 +274,10 @@ func (obj *Response) ContentLength() int64 {
 	if obj.response.ContentLength >= 0 {
 		return obj.response.ContentLength
 	}
-	return int64(len(obj.content))
+	if obj.closed {
+		return int64(len(obj.content))
+	}
+	return 0
 }
 
 type barBody struct {
@@ -246,11 +305,18 @@ func (obj *Response) verifyBytes() bool {
 	return strings.Contains(obj.Headers().Get("Accept-Ranges"), "bytes")
 }
 
-func (obj *Response) read(bar bool) error { //读取body,对body 解压，解码操作
+func (obj *Response) Read(con []byte) (int, error) { //读取body
+	if obj.closed {
+		return 0, errors.New("closed")
+	}
+	return obj.response.Body.Read(con)
+}
+
+func (obj *Response) read() error { //读取body,对body 解压，解码操作
 	defer obj.Close()
 	var bBody *bytes.Buffer
 	var err error
-	if bar && obj.ContentLength() > 0 { //是否打印进度条,读取内容
+	if obj.bar && obj.ContentLength() > 0 { //是否打印进度条,读取内容
 		bBody, err = obj.barRead()
 	} else {
 		bBody = bytes.NewBuffer(nil)
@@ -278,6 +344,7 @@ func (obj *Response) read(bar bool) error { //读取body,对body 解压，解码
 
 // 关闭response ,当disRead 为true 请一定要手动关闭
 func (obj *Response) Close() error {
+	obj.closed = true
 	if obj.cnl != nil {
 		defer obj.cnl()
 	}
