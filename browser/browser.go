@@ -511,11 +511,10 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 		}
 	}
 	globalReqCli, err := requests.NewClient(preCtx, requests.ClientOption{
-		Proxy:     option.Proxy,
-		GetProxy:  option.GetProxy,
-		Ja3Spec:   option.Ja3Spec,
-		Ja3:       option.Ja3,
-		DisCookie: true,
+		Proxy:    option.Proxy,
+		GetProxy: option.GetProxy,
+		Ja3Spec:  option.Ja3Spec,
+		Ja3:      option.Ja3,
 	})
 	if err != nil {
 		return nil, err
@@ -537,6 +536,9 @@ func NewClient(preCtx context.Context, options ...ClientOption) (client *Client,
 		stealth:      option.Stealth,
 	}
 	return client, client.init()
+}
+func (obj *Client) RequestClient() *requests.Client {
+	return obj.globalReqCli
 }
 
 // 浏览器初始化
