@@ -318,8 +318,8 @@ var chromeArgs = []string{
 	"--excludeSwitches=enable-automation",           //禁用自动化
 	"--disable-blink-features=AutomationControlled", //禁用 Blink 引擎的自动化控制。
 	"--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4,imagesEnabled=true", //Blink 设置。
-	"--ignore-ssl-errors=true",   //忽略 SSL 错误。
-	"--virtual-time-budget=1000", //缩短setTimeout  setInterval 的时间1000秒
+	"--ignore-ssl-errors=true", //忽略 SSL 错误。
+	// "--virtual-time-budget=1000", //缩短setTimeout  setInterval 的时间1000秒:目前不生效，不知道以后会不会生效，等生效了再打开
 
 	"--single-process",                            //单个进程中运行浏览器实例
 	"--no-pings",                                  //禁用 ping。
