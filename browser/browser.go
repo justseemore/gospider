@@ -671,12 +671,13 @@ func (obj *Client) NewPage(preCtx context.Context, options ...PageOption) (*Page
 		headless:     obj.headless,
 		globalReqCli: obj.globalReqCli,
 		stealth:      obj.stealth,
+		dataCache:    option.DataCache,
 	}
 	if err = page.init(obj.globalReqCli, option, obj.db); err != nil {
 		return nil, err
 	}
 	if option.DataCache {
-		if err = page.Request(preCtx, func(ctx context.Context, r *cdp.Route) { r.RequestContinue(ctx) }); err != nil {
+		if err = page.Request(preCtx, defaultRequestFunc); err != nil {
 			return nil, err
 		}
 	}

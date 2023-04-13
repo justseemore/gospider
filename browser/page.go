@@ -34,12 +34,14 @@ type Page struct {
 	baseUrl      string
 	webSock      *cdp.WebSock
 	stealth      bool
+	dataCache    bool
 
 	pageStarId int64
 	pageEndId  int64
 	pageDone   chan struct{}
 }
 
+func defaultRequestFunc(ctx context.Context, r *cdp.Route) { r.RequestContinue(ctx) }
 func (obj *Page) pageStop() bool {
 	return obj.pageEndId >= obj.pageStarId
 }
@@ -220,7 +222,15 @@ func (obj *Page) Done() <-chan struct{} {
 	return obj.webSock.Done()
 }
 func (obj *Page) Request(ctx context.Context, RequestFunc func(context.Context, *cdp.Route)) error {
-	obj.webSock.RequestFunc = RequestFunc
+	if RequestFunc == nil {
+		if obj.dataCache {
+			obj.webSock.RequestFunc = defaultRequestFunc
+		} else {
+			obj.webSock.RequestFunc = nil
+		}
+	} else {
+		obj.webSock.RequestFunc = RequestFunc
+	}
 	var err error
 	if obj.webSock.RequestFunc != nil {
 		_, err = obj.webSock.FetchRequestEnable(ctx)
