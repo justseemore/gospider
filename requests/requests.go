@@ -132,15 +132,15 @@ type RequestOption struct {
 	Headers       any      //请求头,支持：json,map，header
 	Cookies       any      // cookies,支持json,map,str
 	Files         []File   //文件
-	Params        any      //url 中的参数，用以拼接url,支持json,map,string
+	Params        any      //url 中的参数，用以拼接url,支持json,map
 	Form          any      //发送multipart/form-data,适用于文件上传,支持json,map
-	Data          any      //发送application/x-www-form-urlencoded,适用于key,val,支持json,map
+	Data          any      //发送application/x-www-form-urlencoded,适用于key,val,支持string,[]bytes,json,map
 	body          io.Reader
 	Body          io.Reader
-	Json          any                        //发送application/json,支持：json,map
-	Text          any                        //发送text/xml,支持string,json,map
+	Json          any                        //发送application/json,支持：string,[]bytes,json,map
+	Text          any                        //发送text/xml,支持string,[]bytes,json,map
+	Raw           any                        //不设置context-type,支持string,[]bytes,json,map
 	TempData      any                        //临时变量，用于回调存储或自由度更高的用法
-	Bytes         []byte                     //二进制内容
 	DisCookie     bool                       //关闭cookies管理,这个请求不用cookies池
 	DisDecode     bool                       //关闭自动解码
 	Bar           bool                       //是否开启bar
@@ -169,7 +169,7 @@ func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reade
 			return nil, errors.New("body-type错误")
 		}
 		switch valType {
-		case "json", "text":
+		case "json", "text", "raw":
 			return bytes.NewReader(tools.StringToBytes(value.Raw)), nil
 		case "data":
 			tempVal := url.Values{}
@@ -201,14 +201,14 @@ func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reade
 		}
 	case string:
 		switch valType {
-		case "json", "text", "data":
+		case "json", "text", "data", "raw":
 			return bytes.NewReader(tools.StringToBytes(value)), nil
 		default:
 			return nil, errors.New("未知的content-type：" + valType)
 		}
 	case []byte:
 		switch valType {
-		case "json", "text", "data":
+		case "json", "text", "data", "raw":
 			return bytes.NewReader(value), nil
 		default:
 			return nil, errors.New("未知的content-type：" + valType)
@@ -291,8 +291,10 @@ func (obj *RequestOption) optionInit() error {
 	obj.converUrl = obj.Url.String()
 	var err error
 	//构造body
-	if obj.Bytes != nil {
-		obj.body = bytes.NewReader(obj.Bytes)
+	if obj.Raw != nil {
+		if obj.body, err = newBody(obj.Raw, "raw", nil); err != nil {
+			return err
+		}
 	} else if obj.Form != nil {
 		dataMap := map[string][]string{}
 		if obj.body, err = newBody(obj.Form, "form", dataMap); err != nil {
@@ -462,7 +464,7 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 		}
 	}
 	if rawOption.Body != nil {
-		if rawOption.Bytes, err = io.ReadAll(rawOption.Body); err != nil {
+		if rawOption.Raw, err = io.ReadAll(rawOption.Body); err != nil {
 			return
 		}
 	}

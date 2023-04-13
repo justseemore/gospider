@@ -161,7 +161,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 		option = options[0]
 	}
 	if routeOption.PostData != "" {
-		option.Bytes = tools.StringToBytes(routeOption.PostData)
+		option.Raw = routeOption.PostData
 	}
 	option.Headers = routeOption.Headers
 	resourceType := obj.ResourceType()
