@@ -11,7 +11,6 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 	_ "unsafe"
@@ -540,7 +539,9 @@ func verifyProxy(proxyUrl string) (*url.URL, error) {
 		return nil, tools.WrapError(ErrFatal, "不支持的代理协议")
 	}
 }
-
+func finalFunc(r *Response) {
+	r.Close()
+}
 func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOption) (response *Response, err error) {
 	method := strings.ToUpper(request_option.Method)
 	href := request_option.converUrl
@@ -573,10 +574,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			cancel()
 			if response != nil {
 				response.Close()
-			}
-		} else {
-			if !response.closed {
-				runtime.SetFinalizer(response, response.Close())
 			}
 		}
 	}()
