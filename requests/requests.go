@@ -11,6 +11,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 	_ "unsafe"
@@ -572,6 +573,10 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			cancel()
 			if response != nil {
 				response.Close()
+			}
+		} else {
+			if !response.closed {
+				runtime.SetFinalizer(response, response.Close())
 			}
 		}
 	}()
