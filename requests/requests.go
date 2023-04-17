@@ -651,7 +651,9 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			reqs.AddCookie(vv)
 		}
 	}
-	reqs.Close = request_option.DisAlive
+	if !request_option.Http2 {
+		reqs.Close = request_option.DisAlive
+	}
 	//开始发送请求
 	var r *http.Response
 	var err2 error
