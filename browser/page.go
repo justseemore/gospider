@@ -143,9 +143,13 @@ func (obj *Page) Reload(ctx context.Context) error {
 func (obj *Page) PageLoadDone() <-chan struct{} {
 	return obj.pageDone
 }
-func (obj *Page) WaitStop(preCtx context.Context) error {
+func (obj *Page) WaitStop(preCtx context.Context, waits ...int) error {
 	var ctx context.Context
 	var cnl context.CancelFunc
+	wait := 2
+	if len(waits) > 0 {
+		wait = waits[0]
+	}
 	if preCtx == nil {
 		ctx, cnl = context.WithTimeout(obj.ctx, time.Second*30)
 		defer cnl()
@@ -159,7 +163,7 @@ func (obj *Page) WaitStop(preCtx context.Context) error {
 		case <-obj.ctx.Done():
 			return obj.ctx.Err()
 		case <-obj.pageDone:
-		case <-time.After(time.Millisecond * 1500):
+		case <-time.After(time.Second * time.Duration(wait)):
 			if obj.pageStop() {
 				return nil
 			}
