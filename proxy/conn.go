@@ -22,8 +22,10 @@ type ProxyOption struct {
 	http2    bool
 	host     string
 	schema   string
+	method   string
 	port     string
 	isWs     bool
+	tls      bool
 	wsOption websocket.Option
 	ctx      context.Context
 	cnl      context.CancelFunc
@@ -118,10 +120,13 @@ func (obj *ProxyConn) readResponse(req *http.Request) (*http.Response, error) {
 	}
 	return response, err
 }
-func (obj *ProxyConn) readRequest() (*http.Request, error) {
+func (obj *ProxyConn) readRequest(readRequestCallBack func(*http.Request)) (*http.Request, error) {
 	clientReq, err := readRequest(obj.reader)
 	if err != nil {
 		return clientReq, err
+	}
+	if readRequestCallBack != nil {
+		readRequestCallBack(clientReq)
 	}
 	obj.option.init = true
 	if clientReq.Header.Get("Upgrade") == "websocket" {
@@ -130,6 +135,7 @@ func (obj *ProxyConn) readRequest() (*http.Request, error) {
 	}
 
 	hostName := clientReq.URL.Hostname()
+	obj.option.method = clientReq.Method
 	if obj.option.host == "" {
 		if headHost := clientReq.Header.Get("Host"); headHost != "" {
 			obj.option.host = headHost

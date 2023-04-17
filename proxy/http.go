@@ -2,10 +2,12 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -14,7 +16,7 @@ import (
 func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	defer client.Close()
 	var err error
-	clientReq, err := client.readRequest()
+	clientReq, err := client.readRequest(obj.ReadRequestCallBack)
 	if err != nil {
 		return err
 	}
@@ -43,19 +45,20 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 			return err
 		}
 	} else {
-		if err = clientReq.Write(server); err != nil {
+		tempBytes := bytes.NewBuffer(nil)
+		if err = clientReq.Write(tempBytes); err != nil {
 			return err
 		}
-		if obj.RequestCallBack != nil {
-			response, err := server.readResponse(clientReq)
-			if err != nil {
-				return err
-			}
-			obj.RequestCallBack(clientReq, response)
-			if err = response.Write(client); err != nil {
-				return err
-			}
-		}
+		client.reader = bufio.NewReader(io.MultiReader(tempBytes, client.reader))
+		// if client.option.schema == "https" {
+		// 	tlsServer, http2, _, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// 	server.option.http2 = http2
+		// 	server.option.tls = true
+		// 	server = newProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option, false)
+		// }
 	}
 	return obj.copyMain(ctx, client, server)
 }

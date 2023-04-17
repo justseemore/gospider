@@ -90,8 +90,8 @@ func (obj *Client) http21Copy(preCtx context.Context, client *ProxyConn, server 
 				return
 			}
 			lock.Unlock()
-			if obj.RequestCallBack != nil {
-				obj.RequestCallBack(r, resp)
+			if obj.ResponseCallBack != nil {
+				obj.ResponseCallBack(r, resp)
 			}
 			for kk, vvs := range resp.Header {
 				for _, vv := range vvs {
@@ -170,8 +170,8 @@ func (obj *Client) http22Copy(preCtx context.Context, client *ProxyConn, server 
 					client.Close()
 					return
 				}
-				if obj.RequestCallBack != nil {
-					obj.RequestCallBack(r, resp)
+				if obj.ResponseCallBack != nil {
+					obj.ResponseCallBack(r, resp)
 				}
 				for kk, vvs := range resp.Header {
 					for _, vv := range vvs {
@@ -243,7 +243,7 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 		defer client.Close()
 		defer server.Close()
 		for {
-			if req, err = client.readRequest(); err != nil {
+			if req, err = client.readRequest(obj.ReadRequestCallBack); err != nil {
 				return
 			}
 			startSize.Add(1)
@@ -253,8 +253,8 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 			if resp, err = serverConn.RoundTrip(req); err != nil {
 				return
 			}
-			if obj.RequestCallBack != nil {
-				obj.RequestCallBack(req, resp)
+			if obj.ResponseCallBack != nil {
+				obj.ResponseCallBack(req, resp)
 			}
 			resp.Proto = "HTTP/1.1"
 			resp.ProtoMajor = 1
@@ -290,7 +290,7 @@ func (obj *Client) http11Copy(ctx context.Context, client *ProxyConn, server *Pr
 	go func() {
 		defer close(donCha)
 		for !server.option.isWs {
-			if req, err = client.readRequest(); err != nil {
+			if req, err = client.readRequest(obj.ReadRequestCallBack); err != nil {
 				server.Close()
 				client.Close()
 				return
@@ -306,8 +306,8 @@ func (obj *Client) http11Copy(ctx context.Context, client *ProxyConn, server *Pr
 				client.Close()
 				return
 			}
-			if obj.RequestCallBack != nil {
-				obj.RequestCallBack(req, rsp)
+			if obj.ResponseCallBack != nil {
+				obj.ResponseCallBack(req, rsp)
 			}
 			if err = rsp.Write(client); err != nil {
 				server.Close()
@@ -349,11 +349,12 @@ func (obj *Client) http11Copy(ctx context.Context, client *ProxyConn, server *Pr
 		return
 	}
 }
+
 func (obj *Client) copyMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	if client.option.schema == "http" {
 		return obj.copyHttpMain(ctx, client, server)
 	} else if client.option.schema == "https" {
-		if obj.RequestCallBack != nil || obj.WsCallBack != nil || obj.ja3 || obj.capture {
+		if obj.ReadRequestCallBack != nil || obj.ResponseCallBack != nil || obj.WsCallBack != nil || obj.ja3 || obj.capture || http.MethodConnect != client.option.method {
 			return obj.copyHttpsMain(ctx, client, server)
 		}
 		return obj.copyHttpMain(ctx, client, server)
@@ -371,7 +372,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		return obj.http12Copy(ctx, client, server)
 	}
 	if client.option.http2 && server.option.http2 {
-		if obj.RequestCallBack == nil {
+		if obj.ResponseCallBack == nil {
 			go func() {
 				defer client.Close()
 				defer server.Close()
@@ -383,7 +384,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 			return obj.http22Copy(ctx, client, server)
 		}
 	}
-	if obj.RequestCallBack == nil && obj.WsCallBack == nil { //没有回调直接返回
+	if obj.ResponseCallBack == nil && obj.WsCallBack == nil { //没有回调直接返回
 		go func() {
 			defer client.Close()
 			defer server.Close()
@@ -418,6 +419,9 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 		return err
 	}
 	server.option.http2 = http2
+	if client.option.method != http.MethodConnect {
+		return obj.copyHttpMain(ctx, client, newProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option, false))
+	}
 	var cert tls.Certificate
 	if len(certs) > 0 {
 		cert, err = getCert2(certs[0])

@@ -88,12 +88,14 @@ type ClientOption struct {
 }
 
 type Client struct {
-	Debug           bool  //是否打印debug
-	Err             error //错误
-	DisVerify       bool  //关闭验证
-	RequestCallBack func(*http.Request, *http.Response)
-	WsCallBack      func(websocket.MessageType, []byte, string)
-	capture         bool
+	Debug               bool  //是否打印debug
+	Err                 error //错误
+	DisVerify           bool  //关闭验证
+	ResponseCallBack    func(*http.Request, *http.Response)
+	WsCallBack          func(websocket.MessageType, []byte, string)
+	ReadRequestCallBack func(*http.Request)
+
+	capture bool
 
 	http2Server    *http2.Server
 	http2Transport *http2.Transport
@@ -133,7 +135,6 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		server.usr = option.Usr
 		server.pwd = option.Pwd
 	}
-
 	if option.Ja3 {
 		server.ja3 = true
 	} else if option.Ja3Spec.IsSet() {
