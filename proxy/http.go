@@ -50,15 +50,6 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 			return err
 		}
 		client.reader = bufio.NewReader(io.MultiReader(tempBytes, client.reader))
-		// if client.option.schema == "https" {
-		// 	tlsServer, http2, _, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// 	server.option.http2 = http2
-		// 	server.option.tls = true
-		// 	server = newProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option, false)
-		// }
 	}
 	return obj.copyMain(ctx, client, server)
 }

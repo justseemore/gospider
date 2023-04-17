@@ -143,6 +143,9 @@ func (obj *Page) Reload(ctx context.Context) error {
 func (obj *Page) PageLoadDone() <-chan struct{} {
 	return obj.pageDone
 }
+func (obj *Page) LoadId() int64 {
+	return obj.pageStarId
+}
 func (obj *Page) WaitStop(preCtx context.Context, waits ...int) error {
 	var ctx context.Context
 	var cnl context.CancelFunc

@@ -384,7 +384,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 			return obj.http22Copy(ctx, client, server)
 		}
 	}
-	if obj.ResponseCallBack == nil && obj.WsCallBack == nil { //没有回调直接返回
+	if obj.ResponseCallBack == nil && obj.WsCallBack == nil && obj.ReadRequestCallBack == nil { //没有回调直接返回
 		go func() {
 			defer client.Close()
 			defer server.Close()
