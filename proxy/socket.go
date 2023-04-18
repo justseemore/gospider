@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -49,6 +50,7 @@ func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
 	client.option.schema = "http"
 	if httpsBytes[0] == 22 {
 		client.option.schema = "https"
+		client.option.method = http.MethodConnect
 	}
 	netword := "tcp"
 	proxyServer, err := obj.dialer.DialContextForProxy(ctx, netword, client.option.schema, addr, host, proxyUrl)

@@ -354,7 +354,10 @@ func (obj *Client) copyMain(ctx context.Context, client *ProxyConn, server *Prox
 	if client.option.schema == "http" {
 		return obj.copyHttpMain(ctx, client, server)
 	} else if client.option.schema == "https" {
-		if obj.ReadRequestCallBack != nil || obj.ResponseCallBack != nil || obj.WsCallBack != nil || obj.ja3 || obj.capture || http.MethodConnect != client.option.method {
+		if obj.ReadRequestCallBack != nil ||
+			obj.ResponseCallBack != nil || obj.WsCallBack != nil ||
+			obj.ja3 || obj.capture ||
+			http.MethodConnect != client.option.method {
 			return obj.copyHttpsMain(ctx, client, server)
 		}
 		return obj.copyHttpMain(ctx, client, server)
