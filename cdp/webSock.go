@@ -189,12 +189,15 @@ func (obj *WebSock) regId(preCtx context.Context, ids ...int64) *event {
 	}
 	return data
 }
-func (obj *WebSock) send(ctx context.Context, cmd commend) (RecvData, error) {
+func (obj *WebSock) send(preCtx context.Context, cmd commend) (RecvData, error) {
 	var cnl context.CancelFunc
-	if ctx == nil {
+	var ctx context.Context
+	if preCtx == nil {
 		ctx, cnl = context.WithTimeout(obj.ctx, time.Second*60)
-		defer cnl()
+	} else {
+		ctx, cnl = context.WithTimeout(preCtx, time.Second*60)
 	}
+	defer cnl()
 	select {
 	case <-obj.Done():
 		return RecvData{}, context.Cause(obj.ctx)
