@@ -88,16 +88,20 @@ func NewBaseClient[T any](preCtx context.Context, maxNum int, options ...BaseCli
 		threadTokens <- struct{}{}
 	}
 	pool := &Client[T]{
-		threadIds:    chanx.NewClient[int64](ctx),
-		taskCallBack: option.TaskCallBack,
-		timeOut:      option.Timeout,
-		ctx2:         ctx2, cnl2: cnl2, ctx: ctx, cnl: cnl,
-		tasks: tasks, sones: sones,
-		threadTokens:        threadTokens,
-		threadStartCallBack: option.ThreadStartCallBack,
-		threadEndCallBack:   option.ThreadEndCallBack,
+		threadIds:           chanx.NewClient[int64](ctx), //任务id
+		taskCallBack:        option.TaskCallBack,         //任务回调
+		timeOut:             option.Timeout,
+		ctx2:                ctx2,
+		cnl2:                cnl2, //关闭协程
+		ctx:                 ctx,
+		cnl:                 cnl,                        //通知关闭
+		tasks:               tasks,                      //任务队列
+		sones:               sones,                      //write sones
+		threadTokens:        threadTokens,               //线程开启总数
+		threadStartCallBack: option.ThreadStartCallBack, //线程开始回调
+		threadEndCallBack:   option.ThreadEndCallBack,   //线程结束回调
 	}
-	if option.TaskCallBack != nil {
+	if option.TaskCallBack != nil { //任务完成回调
 		ctx3, cnl3 := context.WithCancel(preCtx)
 		pool.tasks2 = chanx.NewClient[*Task](preCtx)
 		pool.ctx3 = ctx3
@@ -122,26 +126,27 @@ func (obj *Client[T]) setTaskId(taskId int64) { //回收任务id
 func (obj *Client[T]) caseMain(task *Task) error {
 	for {
 		select {
-		case <-obj.ctx2.Done():
+		case <-obj.ctx2.Done(): //线程关闭了
 			return obj.ctx2.Err()
-		case obj.tasks <- task:
+		case obj.tasks <- task: //加入任务成功
 			if obj.tasks2 != nil {
 				if err := obj.tasks2.Add(task); err != nil {
 					return err
 				}
 			}
 			return obj.Err()
-		case <-obj.threadTokens:
-			go obj.runMain()
+		case <-obj.threadTokens: //等待线程空闲
+			go obj.runMain() //开启线程
 		}
 	}
 }
 
 func (obj *Client[T]) taskMain() {
-	defer obj.cnl2()
+	defer close(obj.sones)
+	defer obj.cnl()
 	for {
 		select {
-		case <-obj.ctx2.Done():
+		case <-obj.ctx2.Done(): //线程关闭推出
 			return
 		case task := <-obj.sones:
 			if err := obj.caseMain(task); err != nil {
@@ -157,61 +162,64 @@ func (obj *Client[T]) taskMain2() {
 	defer obj.tasks2.Close()
 	for task := range obj.tasks2.Chan() {
 		select {
-		case <-obj.ctx2.Done():
+		case <-obj.ctx2.Done(): //接到关闭线程通知
 			obj.err = obj.ctx2.Err()
 		case <-task.Done():
-			if task.Error != nil {
+			if task.Error != nil { //任务报错，线程报错
 				obj.err = task.Error
 			}
 		}
-		if obj.err != nil {
+		if obj.err != nil { //任务报错，开始关闭线程
 			return
 		}
-		if err := obj.taskCallBack(task); err != nil {
+		if err := obj.taskCallBack(task); err != nil { //任务回调报错，关闭线程
 			obj.err = err
 			return
 		}
 	}
 }
 func (obj *Client[T]) subThreadNum(runVal T, taskId int64) {
+	defer obj.threadNum.Add(-1) //线程池数量减1
+	defer obj.setTaskId(taskId) //回收线程id
+
 	if obj.threadEndCallBack != nil { //处理回调
 		obj.threadEndCallBack(runVal)
 	}
-	obj.setTaskId(taskId) //回收线程id
-	obj.threadNum.Add(-1) //线程池数量减1
 	select {
 	case <-obj.ctx.Done(): //判断是否是最后一个,如果是最后一个，就关闭线程池
 		if obj.Empty() {
 			obj.cnl2()
 		}
+	// case obj.threadTokens <- struct{}{}: //线程令牌
 	default:
 	}
-	obj.threadTokens <- struct{}{} //只要放入，就会生成一个线程，所以要放到最后
+	obj.threadTokens <- struct{}{} //线程令牌
+	// obj.threadTokens <- struct{}{}
 }
 func (obj *Client[T]) runMain() {
 	var runVal T
-	obj.threadNum.Add(1)
-	threadId := obj.getTaskId()
-	if obj.threadStartCallBack != nil {
+	obj.threadNum.Add(1)                     //正在运行的线程数量加1
+	threadId := obj.getTaskId()              //获取线程id
+	defer obj.subThreadNum(runVal, threadId) //线程销毁回调
+	if obj.threadStartCallBack != nil {      //线程开始回调
 		runVal = obj.threadStartCallBack(threadId)
 	}
-	defer obj.subThreadNum(runVal, threadId)
 	for {
 		select {
-		case <-obj.ctx2.Done():
+		case <-obj.ctx2.Done(): //通知线程关闭
 			return
-		case <-obj.ctx.Done():
+		case <-obj.ctx.Done(): //通知完成任务后关闭
 			select {
-			case <-obj.ctx2.Done():
+			case <-obj.ctx2.Done(): //通知线程关闭
 				return
-			case task := <-obj.tasks:
-				obj.run(task, runVal, threadId)
-			default:
+			case task := <-obj.tasks: //接收任务
+				obj.run(task, runVal, threadId) //运行任务
+			default: //没有任务关闭线程
 				return
 			}
-		case task := <-obj.tasks:
+		case task := <-obj.tasks: //接收任务
 			obj.run(task, runVal, threadId)
-		case <-time.After(time.Second * time.Duration(obj.timeOut)):
+		case <-time.After(time.Second * time.Duration(obj.timeOut)): //等待线程超时
 			return
 		}
 	}
@@ -255,35 +263,22 @@ func (obj *Client[T]) verify(fun any, args []any) error {
 
 // 创建task
 func (obj *Client[T]) Write(task *Task) (*Task, error) {
-	task.ctx, task.cnl = context.WithCancel(obj.ctx2)
-	if err := obj.verify(task.Func, task.Args); err != nil {
+	task.ctx, task.cnl = context.WithCancel(obj.ctx2)        //设置任务ctx
+	if err := obj.verify(task.Func, task.Args); err != nil { //验证参数
 		task.Error = err
 		task.cnl()
-		return task, task.Error
-	}
-	if obj.Err() != nil {
-		task.Error = obj.Err()
-		task.cnl()
-		return task, task.Error
+		return task, err
 	}
 	select {
-	case <-obj.ctx2.Done():
-		if obj.Err() != nil {
-			task.Error = obj.Err()
-		} else {
-			task.Error = ErrPoolClosed
-		}
+	case <-obj.ctx2.Done(): //接到线程关闭通知
+		task.Error = ErrPoolClosed
 		task.cnl()
-		return task, task.Error
-	case <-obj.ctx.Done():
-		if obj.Err() != nil {
-			task.Error = obj.Err()
-		} else {
-			task.Error = ErrPoolClosed
-		}
+		return task, ErrPoolClosed
+	case <-obj.ctx.Done(): //接到线程关闭通知
+		task.Error = ErrPoolClosed
 		task.cnl()
-		return task, task.Error
-	case obj.sones <- task:
+		return task, ErrPoolClosed
+	case obj.sones <- task: //将任务传递到sones
 		return task, nil
 	}
 }
