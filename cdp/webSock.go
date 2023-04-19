@@ -26,24 +26,17 @@ type event struct {
 	Cnl      context.CancelFunc
 	RecvData chan RecvData
 }
-type RecvError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
 type RecvData struct {
 	Id     int64          `json:"id"`
 	Method string         `json:"method"`
 	Params map[string]any `json:"params"`
 	Result map[string]any `json:"result"`
-	Error  RecvError      `json:"error"`
 }
 
 type WebSock struct {
 	option       WebSockOption
 	db           *db.Client[FulData]
-	ids          map[int64]*event
-	methodLock   sync.RWMutex
-	idLock       sync.RWMutex
+	ids          sync.Map
 	conn         *websocket.Conn
 	ctx          context.Context
 	cnl          context.CancelCauseFunc
@@ -51,7 +44,8 @@ type WebSock struct {
 	RequestFunc  func(context.Context, *Route)
 	ResponseFunc func(context.Context, *Route)
 	reqCli       *requests.Client
-	onEvents     map[string]func(ctx context.Context, rd RecvData)
+	// onEvents     map[string]func(ctx context.Context, rd RecvData)
+	onEvents sync.Map
 }
 
 type DataEntrie struct {
@@ -86,27 +80,21 @@ func (obj *WebSock) routeMain(ctx context.Context, recvData RecvData) {
 }
 
 func (obj *WebSock) recv(ctx context.Context, rd RecvData) error {
-	obj.idLock.RLock()
-	cmdData, ok := obj.ids[rd.Id]
-	obj.idLock.RUnlock()
+	cmdDataAny, ok := obj.ids.LoadAndDelete(rd.Id)
 	if ok {
+		cmdData := cmdDataAny.(*event)
 		select {
 		case <-obj.Done():
 			return errors.New("websocks closed")
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-cmdData.Ctx.Done():
-			obj.idLock.Lock()
-			delete(obj.ids, rd.Id)
-			obj.idLock.Unlock()
 		case cmdData.RecvData <- rd:
 		}
 	}
-	obj.methodLock.RLock()
-	methodFunc, ok := obj.onEvents[rd.Method]
-	obj.methodLock.RUnlock()
-	if ok && methodFunc != nil {
-		methodFunc(ctx, rd)
+	methodFuncAny, ok := obj.onEvents.Load(rd.Method)
+	if ok && methodFuncAny != nil {
+		methodFuncAny.(func(ctx context.Context, rd RecvData))(ctx, rd)
 	}
 	return nil
 }
@@ -150,12 +138,10 @@ func NewWebSock(preCtx context.Context, globalReqCli *requests.Client, ws string
 	}
 	response.WebSocket().SetReadLimit(1024 * 1024 * 1024) //1G
 	cli := &WebSock{
-		ids:      make(map[int64]*event),
-		conn:     response.WebSocket(),
-		db:       db,
-		reqCli:   globalReqCli,
-		option:   option,
-		onEvents: map[string]func(ctx context.Context, rd RecvData){},
+		conn:   response.WebSocket(),
+		db:     db,
+		reqCli: globalReqCli,
+		option: option,
 	}
 	cli.ctx, cli.cnl = context.WithCancelCause(preCtx)
 	go cli.recvMain()
@@ -163,16 +149,11 @@ func NewWebSock(preCtx context.Context, globalReqCli *requests.Client, ws string
 	return cli, err
 }
 func (obj *WebSock) AddEvent(method string, fun func(ctx context.Context, rd RecvData)) {
-	obj.methodLock.Lock()
-	obj.onEvents[method] = fun
-	obj.methodLock.Unlock()
+	obj.onEvents.Store(method, fun)
 }
 func (obj *WebSock) DelEvent(method string) {
-	obj.methodLock.Lock()
-	delete(obj.onEvents, method)
-	obj.methodLock.Unlock()
+	obj.onEvents.Delete(method)
 }
-
 func (obj *WebSock) Close(err error) error {
 	obj.cnl(err)
 	return obj.conn.Close("close")
@@ -183,9 +164,7 @@ func (obj *WebSock) regId(preCtx context.Context, ids ...int64) *event {
 	data.Ctx, data.Cnl = context.WithCancel(preCtx)
 	data.RecvData = make(chan RecvData)
 	for _, id := range ids {
-		obj.idLock.Lock()
-		obj.ids[id] = data
-		obj.idLock.Unlock()
+		obj.ids.Store(id, data)
 	}
 	return data
 }
@@ -216,9 +195,6 @@ func (obj *WebSock) send(preCtx context.Context, cmd commend) (RecvData, error) 
 		case <-ctx.Done():
 			return RecvData{}, ctx.Err()
 		case idRecvData := <-idEvent.RecvData:
-			if idRecvData.Error.Message != "" {
-				return idRecvData, errors.New(idRecvData.Error.Message)
-			}
 			return idRecvData, nil
 		}
 	}
