@@ -563,11 +563,11 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	}
 	//构造ctx,cnl
 	var cancel context.CancelFunc
-	reqCtx := context.WithValue(preCtx, keyPrincipalID, ctxData)
+	var reqCtx context.Context
 	if request_option.Timeout > 0 { //超时
-		reqCtx, cancel = context.WithTimeout(reqCtx, time.Duration(request_option.Timeout)*time.Second)
+		reqCtx, cancel = context.WithTimeout(context.WithValue(preCtx, keyPrincipalID, ctxData), time.Duration(request_option.Timeout)*time.Second)
 	} else {
-		reqCtx, cancel = context.WithCancel(reqCtx)
+		reqCtx, cancel = context.WithCancel(context.WithValue(preCtx, keyPrincipalID, ctxData))
 	}
 	defer func() {
 		if err != nil {

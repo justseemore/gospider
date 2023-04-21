@@ -92,7 +92,7 @@ func (obj Cookies) String() string {
 	for _, cook := range obj {
 		cooks = append(cooks, fmt.Sprintf("%s=%s", cook.Name, cook.Value))
 	}
-	return strings.Join(cooks, "&")
+	return strings.Join(cooks, "; ")
 }
 
 // 获取符合key 条件的所有cookies
