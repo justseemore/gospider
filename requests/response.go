@@ -23,6 +23,7 @@ import (
 type Response struct {
 	response  *http.Response
 	webSocket *websocket.Conn
+	ctx       context.Context
 	cnl       context.CancelFunc
 	content   []byte
 	encoding  string
@@ -30,7 +31,6 @@ type Response struct {
 	disUnzip  bool
 	filePath  string
 	bar       bool
-	closed    bool
 }
 
 type SseClient struct {
@@ -72,8 +72,8 @@ func (obj *SseClient) Recv() (Event, error) {
 	}
 }
 
-func (obj *Client) newResponse(r *http.Response, cnl context.CancelFunc, request_option RequestOption) (*Response, error) {
-	response := &Response{response: r, cnl: cnl, bar: request_option.Bar}
+func (obj *Client) newResponse(ctx context.Context, cnl context.CancelFunc, r *http.Response, request_option RequestOption) (*Response, error) {
+	response := &Response{response: r, ctx: ctx, cnl: cnl, bar: request_option.Bar}
 	if request_option.DisRead { //是否预读
 		return response, nil
 	}
@@ -147,10 +147,12 @@ func (obj *Response) WebSocket() *websocket.Conn {
 	return obj.webSocket
 }
 func (obj *Response) SseClient() *SseClient {
-	if obj.closed {
+	select {
+	case <-obj.ctx.Done():
 		return newSseClient(bytes.NewBuffer(obj.Content()))
+	default:
+		return newSseClient(obj)
 	}
-	return newSseClient(obj.Response().Body)
 }
 
 // 返回当前的Location
@@ -236,10 +238,12 @@ func (obj *Response) Content(val ...[]byte) []byte {
 		obj.content = val[0]
 		return obj.content
 	}
-	if !obj.closed {
+	select {
+	case <-obj.ctx.Done():
+	default:
 		defer obj.Close()
 		bytesWrite := bytes.NewBuffer(nil)
-		io.Copy(bytesWrite, obj)
+		tools.CopyWitchContext(obj.ctx, bytesWrite, obj)
 		obj.content = bytesWrite.Bytes()
 	}
 	return obj.content
@@ -274,10 +278,7 @@ func (obj *Response) ContentLength() int64 {
 	if obj.response.ContentLength >= 0 {
 		return obj.response.ContentLength
 	}
-	if obj.closed {
-		return int64(len(obj.content))
-	}
-	return 0
+	return int64(len(obj.content))
 }
 
 type barBody struct {
@@ -306,10 +307,12 @@ func (obj *Response) verifyBytes() bool {
 }
 
 func (obj *Response) Read(con []byte) (int, error) { //读取body
-	if obj.closed {
-		return 0, errors.New("closed")
+	select {
+	case <-obj.ctx.Done():
+		return 0, obj.ctx.Err()
+	default:
+		return obj.response.Body.Read(con)
 	}
-	return obj.response.Body.Read(con)
 }
 
 func (obj *Response) read() error { //读取body,对body 解压，解码操作
@@ -326,7 +329,7 @@ func (obj *Response) read() error { //读取body,对body 解压，解码操作
 		return errors.New("io.Copy error: " + err.Error())
 	}
 	if !obj.disUnzip {
-		if bBody, err = tools.ZipDecode(bBody, obj.ContentEncoding()); err != nil {
+		if bBody, err = tools.ZipDecode(obj.ctx, bBody, obj.ContentEncoding()); err != nil {
 			return errors.New("gzip NewReader error: " + err.Error())
 		}
 	}
@@ -344,7 +347,6 @@ func (obj *Response) read() error { //读取body,对body 解压，解码操作
 
 // 关闭response ,当disRead 为true 请一定要手动关闭
 func (obj *Response) Close() error {
-	obj.closed = true
 	if obj.cnl != nil {
 		defer obj.cnl()
 	}
@@ -352,7 +354,7 @@ func (obj *Response) Close() error {
 		obj.webSocket.Close("close")
 	}
 	if obj.response != nil && obj.response.Body != nil {
-		io.Copy(io.Discard, obj.response.Body)
+		tools.CopyWitchContext(obj.ctx, io.Discard, obj.response.Body)
 		return obj.response.Body.Close()
 	}
 	return nil

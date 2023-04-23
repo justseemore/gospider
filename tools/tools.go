@@ -47,9 +47,10 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/tidwall/gjson"
 
+	_ "image/png"
+
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/re"
-
 	_ "golang.org/x/image/webp"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -446,11 +447,11 @@ func AesDecode(val string, key []byte) ([]byte, error) {
 }
 
 // 压缩解码
-func ZipDecode(r *bytes.Buffer, encoding string) (*bytes.Buffer, error) {
+func ZipDecode(ctx context.Context, r *bytes.Buffer, encoding string) (*bytes.Buffer, error) {
 	rs := bytes.NewBuffer(nil)
 	var err error
 	if encoding == "br" {
-		_, err = io.Copy(rs, brotli.NewReader(r))
+		err = CopyWitchContext(ctx, rs, brotli.NewReader(r))
 		return rs, err
 	}
 	var reader io.ReadCloser
@@ -469,7 +470,7 @@ func ZipDecode(r *bytes.Buffer, encoding string) (*bytes.Buffer, error) {
 	default:
 		return r, err
 	}
-	_, err = io.Copy(rs, reader)
+	err = CopyWitchContext(ctx, rs, reader)
 	return rs, err
 }
 

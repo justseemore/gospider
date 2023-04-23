@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"sync"
@@ -99,7 +98,7 @@ func (obj *Client) http21Copy(preCtx context.Context, client *ProxyConn, server 
 				}
 			}
 			w.WriteHeader(resp.StatusCode)
-			if _, err = io.Copy(w, resp.Body); err != nil {
+			if err = tools.CopyWitchContext(r.Context(), w, resp.Body); err != nil {
 				server.Close()
 				client.Close()
 				return
@@ -179,7 +178,7 @@ func (obj *Client) http22Copy(preCtx context.Context, client *ProxyConn, server 
 					}
 				}
 				w.WriteHeader(resp.StatusCode)
-				_, err = io.Copy(w, resp.Body)
+				err = tools.CopyWitchContext(r.Context(), w, resp.Body)
 				if err != nil {
 					server.Close()
 					client.Close()
@@ -379,10 +378,9 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 			go func() {
 				defer client.Close()
 				defer server.Close()
-				io.Copy(client, server)
+				tools.CopyWitchContext(ctx, client, server)
 			}()
-			_, err = io.Copy(server, client)
-			return err
+			return tools.CopyWitchContext(ctx, server, client)
 		} else {
 			return obj.http22Copy(ctx, client, server)
 		}
@@ -391,10 +389,9 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		go func() {
 			defer client.Close()
 			defer server.Close()
-			io.Copy(client, server)
+			tools.CopyWitchContext(ctx, client, server)
 		}()
-		_, err = io.Copy(server, client)
-		return err
+		return tools.CopyWitchContext(ctx, server, client)
 	}
 	if err = obj.http11Copy(ctx, client, server); err != nil { //http 开始回调
 		return err
@@ -403,10 +400,9 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		go func() {
 			defer client.Close()
 			defer server.Close()
-			io.Copy(client, server)
+			tools.CopyWitchContext(ctx, client, server)
 		}()
-		_, err = io.Copy(server, client)
-		return err
+		return tools.CopyWitchContext(ctx, server, client)
 	}
 	//ws 开始回调
 	wsClient := websocket.NewConn(client, false, client.option.wsOption)

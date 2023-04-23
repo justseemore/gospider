@@ -671,7 +671,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			request_option.DisRead = true
 		}
 		r.Close = request_option.DisAlive
-		if response, err2 = obj.newResponse(r, cancel, request_option); err2 != nil { //创建 response
+		if response, err2 = obj.newResponse(reqCtx, cancel, r, request_option); err2 != nil { //创建 response
 			return response, err2
 		}
 		if ctxData.ws && r.StatusCode == 101 {

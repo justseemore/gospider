@@ -33,7 +33,7 @@ type Client[T any] struct {
 	taskCallBack        func(*Task) error //任务回调
 	err                 error
 	maxThreadId         atomic.Int64
-	threadIds           *chanx.Client[int64]
+	threadIds           chan int64
 }
 
 type Task struct {
@@ -84,12 +84,13 @@ func NewBaseClient[T any](preCtx context.Context, maxNum int, options ...BaseCli
 	tasks := make(chan *Task)
 	sones := make(chan *Task)
 	threadTokens := make(chan struct{}, maxNum)
+	threadIds := make(chan int64, maxNum)
 	for i := 0; i < maxNum; i++ {
 		threadTokens <- struct{}{}
 	}
 	pool := &Client[T]{
-		threadIds:           chanx.NewClient[int64](ctx), //任务id
-		taskCallBack:        option.TaskCallBack,         //任务回调
+		threadIds:           threadIds,           //任务id
+		taskCallBack:        option.TaskCallBack, //任务回调
 		timeOut:             option.Timeout,
 		ctx2:                ctx2,
 		cnl2:                cnl2, //关闭协程
@@ -113,14 +114,14 @@ func NewBaseClient[T any](preCtx context.Context, maxNum int, options ...BaseCli
 }
 func (obj *Client[T]) getTaskId() int64 { //获取任务id
 	select {
-	case taskId := <-obj.threadIds.Chan():
+	case taskId := <-obj.threadIds:
 		return taskId
 	default:
 		return obj.maxThreadId.Add(1)
 	}
 }
 func (obj *Client[T]) setTaskId(taskId int64) { //回收任务id
-	obj.threadIds.Add(taskId)
+	obj.threadIds <- taskId
 }
 
 func (obj *Client[T]) caseMain(task *Task) error {
@@ -142,7 +143,6 @@ func (obj *Client[T]) caseMain(task *Task) error {
 }
 
 func (obj *Client[T]) taskMain() {
-	defer close(obj.sones)
 	defer obj.cnl()
 	for {
 		select {
@@ -351,7 +351,6 @@ loop:
 			}
 		}
 	}
-	obj.threadIds.Close()
 	return obj.Err()
 }
 
@@ -361,7 +360,6 @@ func (obj *Client[T]) Close() { //告诉所有协程，立即结束任务
 	if obj.tasks2 != nil {
 		obj.tasks2.Close()
 	}
-	obj.threadIds.Close()
 }
 func (obj *Client[T]) Err() error { //错误
 	return obj.err
