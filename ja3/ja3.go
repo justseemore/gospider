@@ -380,9 +380,6 @@ func CreateSpecWithId(ja3Id ClientHelloId) (clientHelloSpec ClientHelloSpec, err
 
 // TLSVersion，Ciphers，Extensions，EllipticCurves，EllipticCurvePointFormats
 func createTlsVersion(ver uint16, extensions []string) (tlsVersion uint16, tlsSuppor utls.TLSExtension, err error) {
-	if slices.Index(extensions, "43") == -1 {
-		err = errors.New("Extensions 缺少tlsVersion 扩展,检查ja3 字符串是否合法")
-	}
 	switch ver {
 	case utls.VersionTLS13:
 		tlsVersion = utls.VersionTLS13

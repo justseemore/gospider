@@ -8,10 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
-	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"sync"
 	"time"
 
@@ -19,9 +18,6 @@ import (
 	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/tools"
 	"github.com/tidwall/gjson"
-	"github.com/ysmood/leakless"
-	"github.com/ysmood/leakless/pkg/shared"
-	"github.com/ysmood/leakless/pkg/utils"
 )
 
 type ClientOption struct {
@@ -31,58 +27,15 @@ type ClientOption struct {
 	TimeOut int      //程序超时时间
 }
 type Client struct {
-	err error
-	cmd *exec.Cmd
-	ctx context.Context
-	cnl context.CancelFunc
-}
-
-// 没有内存泄漏的cmd 客户端
-func NewLeakClient(preCtx context.Context, option ClientOption) *Client {
-	cliCmd := leakless.New()
-	name := leakless.GetLeaklessBin()
-	leakless.LockPort(cliCmd.Lock)()
-
-	srv, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		log.Print("leak cmd error: ", err)
-		return nil
-	}
-	uid := fmt.Sprintf("%x", utils.RandBytes(16))
-	if preCtx == nil {
-		preCtx = context.TODO()
-	}
-	addr := srv.Addr().String()
-	option.Args = append([]string{uid, addr, option.Name}, option.Args...)
-	option.Name = name
-	client := NewClient(preCtx, option)
-	go func() {
-		defer client.Close()
-		defer srv.Close()
-		conn, err := srv.Accept()
-		if err != nil {
-			log.Panic(err)
-			return
-		}
-		enc := json.NewEncoder(conn)
-		if err = enc.Encode(shared.Message{UID: uid}); err != nil {
-			log.Panic(err)
-			return
-		}
-		dec := json.NewDecoder(conn)
-		var msg shared.Message
-		if err = dec.Decode(&msg); err != nil {
-			log.Panic(err)
-			return
-		}
-		dec.Decode(&msg)
-	}()
-	return client
+	err           error
+	cmd           *exec.Cmd
+	ctx           context.Context
+	cnl           context.CancelFunc
+	CloseCallBack func() //关闭时执行的函数
 }
 
 // 普通的cmd 客户端
 func NewClient(pre_ctx context.Context, option ClientOption) *Client {
-	var cmd *exec.Cmd
 	var ctx context.Context
 	var cnl context.CancelFunc
 	if pre_ctx == nil {
@@ -93,13 +46,14 @@ func NewClient(pre_ctx context.Context, option ClientOption) *Client {
 	} else {
 		ctx, cnl = context.WithCancel(pre_ctx)
 	}
-	cmd = exec.CommandContext(ctx, option.Name, option.Args...)
+	cmd := exec.CommandContext(ctx, option.Name, option.Args...)
 	cmd.Dir = option.Dir
 	result := &Client{
 		cmd: cmd,
 		ctx: ctx,
 		cnl: cnl,
 	}
+	go result.sign(ctx)
 	return result
 }
 
@@ -354,6 +308,20 @@ func (obj *Client) Run() error {
 func (obj *Client) StdInPipe() (io.WriteCloser, error) {
 	return obj.cmd.StdinPipe()
 }
+func (obj *Client) sign(preCtx context.Context) {
+	ch := make(chan os.Signal)
+	signal.Notify(ch)
+	select {
+	case <-obj.Done():
+	case s := <-ch:
+		obj.Close()
+		signal.Stop(ch)
+		signal.Reset(s)
+		if p, err := os.FindProcess(os.Getpid()); err == nil && p != nil {
+			p.Signal(os.Kill)
+		}
+	}
+}
 func (obj *Client) Err() error {
 	if obj.cmd.Err != nil {
 		return obj.cmd.Err
@@ -393,9 +361,12 @@ func (obj *Client) Join() {
 
 // 关闭客户端
 func (obj *Client) Close() {
-	obj.cnl()
 	if obj.cmd.Process != nil {
 		obj.cmd.Process.Kill()
+	}
+	obj.cnl()
+	if obj.CloseCallBack != nil {
+		obj.CloseCallBack()
 	}
 }
 

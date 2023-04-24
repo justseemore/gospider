@@ -14,7 +14,6 @@ require (
 	github.com/pkg/sftp v1.13.5
 	github.com/refraction-networking/utls v1.3.1
 	github.com/tidwall/gjson v1.14.4
-	github.com/ysmood/leakless v0.8.0
 	go.mongodb.org/mongo-driver v1.11.3
 	go.uber.org/atomic v1.10.0
 	go.uber.org/zap v1.24.0
