@@ -393,6 +393,10 @@ func (obj *Client) Close() {
 	}
 }
 
+func (obj *Client) Ctx() context.Context {
+	return obj.ctx
+}
+
 // 运行是否结束的 chan
 func (obj *Client) Done() <-chan struct{} {
 	return obj.ctx.Done()
