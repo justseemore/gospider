@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"sync"
 	"time"
 
@@ -53,7 +52,7 @@ func NewClient(pre_ctx context.Context, option ClientOption) *Client {
 		ctx: ctx,
 		cnl: cnl,
 	}
-	go result.sign(ctx)
+	go tools.Signal(ctx, result.Close)
 	return result
 }
 
@@ -308,20 +307,6 @@ func (obj *Client) Run() error {
 func (obj *Client) StdInPipe() (io.WriteCloser, error) {
 	return obj.cmd.StdinPipe()
 }
-func (obj *Client) sign(preCtx context.Context) {
-	ch := make(chan os.Signal)
-	signal.Notify(ch)
-	select {
-	case <-obj.Done():
-	case s := <-ch:
-		obj.Close()
-		signal.Stop(ch)
-		signal.Reset(s)
-		if p, err := os.FindProcess(os.Getpid()); err == nil && p != nil {
-			p.Signal(os.Kill)
-		}
-	}
-}
 func (obj *Client) Err() error {
 	if obj.cmd.Err != nil {
 		return obj.cmd.Err
@@ -361,10 +346,10 @@ func (obj *Client) Join() {
 
 // 关闭客户端
 func (obj *Client) Close() {
+	obj.cnl()
 	if obj.cmd.Process != nil {
 		obj.cmd.Process.Kill()
 	}
-	obj.cnl()
 	if obj.CloseCallBack != nil {
 		obj.CloseCallBack()
 	}
