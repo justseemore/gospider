@@ -904,9 +904,14 @@ func ImgDiffer(c, c2 []byte) (float64, error) {
 }
 func Signal(preCtx context.Context, fun func()) {
 	ch := make(chan os.Signal)
-	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGILL, syscall.SIGTRAP, syscall.SIGABRT, syscall.SIGBUS, syscall.SIGFPE, syscall.SIGKILL, syscall.SIGSEGV, syscall.SIGPIPE, syscall.SIGALRM, syscall.SIGTERM)
+	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGILL, syscall.SIGTRAP,
+		syscall.SIGABRT, syscall.SIGBUS, syscall.SIGFPE, syscall.SIGKILL, syscall.SIGSEGV, syscall.SIGPIPE,
+		syscall.SIGALRM, syscall.SIGTERM, os.Interrupt, os.Kill)
 	select {
 	case <-preCtx.Done():
+		if fun != nil {
+			fun()
+		}
 	case s := <-ch:
 		if fun != nil {
 			fun()

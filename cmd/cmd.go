@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"sync"
@@ -17,6 +18,9 @@ import (
 	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/tools"
 	"github.com/tidwall/gjson"
+	"github.com/ysmood/leakless"
+	"github.com/ysmood/leakless/pkg/shared"
+	"github.com/ysmood/leakless/pkg/utils"
 )
 
 type ClientOption struct {
@@ -31,6 +35,40 @@ type Client struct {
 	ctx           context.Context
 	cnl           context.CancelFunc
 	CloseCallBack func() //关闭时执行的函数
+}
+
+// 没有内存泄漏的cmd 客户端
+func NewLeakClient(preCtx context.Context, option ClientOption) (*Client, error) {
+	if preCtx == nil {
+		preCtx = context.TODO()
+	}
+	srv, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
+	}
+	uid := fmt.Sprintf("%x", utils.RandBytes(16))
+	option.Args = append([]string{uid, srv.Addr().String(), option.Name}, option.Args...)
+	option.Name = leakless.GetLeaklessBin()
+	client := NewClient(preCtx, option)
+	go func() {
+		defer client.Close()
+		defer srv.Close()
+		conn, err := srv.Accept()
+		if err != nil {
+			return
+		}
+		enc := json.NewEncoder(conn)
+		if err = enc.Encode(shared.Message{UID: uid}); err != nil {
+			return
+		}
+		dec := json.NewDecoder(conn)
+		var msg shared.Message
+		if err = dec.Decode(&msg); err != nil {
+			return
+		}
+		dec.Decode(&msg)
+	}()
+	return client, nil
 }
 
 // 普通的cmd 客户端

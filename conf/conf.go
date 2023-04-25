@@ -18,10 +18,23 @@ func GetMainDirPath() (string, error) {
 	}
 	return dir, nil
 }
-
-var TempChromeDir = "goBrowser"
+func GetTempDirPath() (string, error) {
+	dir, err := GetMainDirPath()
+	if err != nil {
+		return "", err
+	}
+	tempDir := tools.PathJoin(dir, "TempDir")
+	if !tools.PathExist(tempDir) {
+		return tempDir, os.MkdirAll(tempDir, 0777)
+	}
+	return tempDir, nil
+}
 
 // 浏览器需要删除的临时目录
-func GetTempChromeDirPath() string {
-	return tools.PathJoin(os.TempDir(), TempChromeDir)
+func GetTempChromeDirPath() (string, error) {
+	dir, err := GetTempDirPath()
+	if err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(dir, "chrome")
 }
