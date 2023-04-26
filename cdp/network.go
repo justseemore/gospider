@@ -1,6 +1,10 @@
 package cdp
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"strings"
+)
 
 type Cookie struct {
 	Name         string  `json:"name,omitempty"`  //必填
@@ -19,6 +23,44 @@ type Cookie struct {
 	PartitionKey int     `json:"partitionKey,omitempty"`
 	Session      bool    `json:"session,omitempty"`
 	Size         int64   `json:"size,omitempty"`
+}
+type Cookies []Cookie
+
+func (obj Cookies) String() string {
+	cooks := []string{}
+	for _, cook := range obj {
+		cooks = append(cooks, fmt.Sprintf("%s=%s", cook.Name, cook.Value))
+	}
+	return strings.Join(cooks, "; ")
+}
+func (obj Cookies) Gets(key string) []string {
+	vals := []string{}
+	for _, cook := range obj {
+		if cook.Name == key {
+			vals = append(vals, cook.Value)
+		}
+	}
+	return vals
+}
+func (obj Cookies) Get(key string) (string, bool) {
+	vals := obj.Gets(key)
+	if l := len(vals); l == 0 {
+		return "", false
+	} else {
+		return vals[l-1], true
+	}
+}
+func (obj Cookies) Map() map[string][]string {
+	data := map[string][]string{}
+	for _, cook := range obj {
+		dds, ok := data[cook.Name]
+		if ok {
+			dds = append(dds, cook.Value)
+		} else {
+			data[cook.Name] = []string{cook.Value}
+		}
+	}
+	return data
 }
 
 func (obj *WebSock) NetworkSetCookies(preCtx context.Context, cookies []Cookie) (RecvData, error) {

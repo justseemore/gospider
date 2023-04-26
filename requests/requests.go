@@ -29,6 +29,7 @@ func readCookies(h http.Header, filter string) []*http.Cookie
 //go:linkname readSetCookies net/http.readSetCookies
 func readSetCookies(h http.Header) []*http.Cookie
 
+// 支持json,map,[]string,http.Header,string
 func ReadCookies(val any) Cookies {
 	switch cook := val.(type) {
 	case string:

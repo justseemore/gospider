@@ -50,6 +50,7 @@ type RouteData struct {
 type Route struct {
 	webSock  *WebSock
 	recvData RouteData
+	isRoute  bool
 }
 
 func (obj *Route) IsResponse() bool {
@@ -103,6 +104,7 @@ func (obj *Route) NewFulData(ctx context.Context) (fulData FulData, err error) {
 	return
 }
 
+// Document, Stylesheet, Image, Media, Font, Script, TextTrack, XHR, Fetch, Prefetch, EventSource, WebSocket, Manifest, SignedExchange, Ping, CSPViolationReport, Preflight, Other
 func (obj *Route) ResourceType() string {
 	return obj.recvData.ResourceType
 }
@@ -139,10 +141,10 @@ func keyMd5(key RequestOption, resourceType string) [16]byte {
 
 	key.Url = re.Sub(`=0\.\d{10,}&`, "=&", key.Url)
 	key.Url = re.Sub(`=0\.\d{10,}$`, "=", key.Url)
-
 	md5Str += fmt.Sprintf("%s,%s,%s", key.Method, key.Url, key.PostData)
 
-	if resourceType == "Document" || resourceType == "XHR" {
+	switch resourceType {
+	case "Document", "XHR", "Script", "Fetch", "Other":
 		kks := maps.Keys(key.Headers)
 		sort.Strings(kks)
 		for _, k := range kks {
@@ -165,9 +167,10 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	}
 	option.Headers = routeOption.Headers
 	resourceType := obj.ResourceType()
-	if resourceType == "Document" || resourceType == "XHR" {
+	switch resourceType {
+	case "Document", "XHR", "Script", "Fetch", "Other":
 		option.TryNum = 2
-	} else {
+	default:
 		option.TryNum = 1
 	}
 	var fulData FulData
@@ -192,6 +195,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	return fulData, nil
 }
 func (obj *Route) FulFill(ctx context.Context, fulDatas ...FulData) error {
+	obj.isRoute = true
 	var fulData FulData
 	if len(fulDatas) > 0 {
 		fulData = fulDatas[0]
@@ -203,6 +207,7 @@ func (obj *Route) FulFill(ctx context.Context, fulDatas ...FulData) error {
 	return err
 }
 func (obj *Route) RequestContinue(ctx context.Context) (FulData, error) {
+	obj.isRoute = true
 	fulData, err := obj.Request(ctx, obj.NewRequestOption())
 	if err != nil {
 		obj.Fail(ctx)
@@ -213,6 +218,7 @@ func (obj *Route) RequestContinue(ctx context.Context) (FulData, error) {
 }
 
 func (obj *Route) Continue(ctx context.Context, options ...RequestOption) error {
+	obj.isRoute = true
 	_, err := obj.webSock.FetchContinueRequest(ctx, obj.recvData.RequestId, options...)
 	if err != nil {
 		obj.Fail(ctx)
@@ -245,6 +251,7 @@ func (obj *Route) ResponseBody(ctx context.Context) (string, error) {
 
 // Failed, Aborted, TimedOut, AccessDenied, ConnectionClosed, ConnectionReset, ConnectionRefused, ConnectionAborted, ConnectionFailed, NameNotResolved, InternetDisconnected, AddressUnreachable, BlockedByClient, BlockedByResponse
 func (obj *Route) Fail(ctx context.Context, errorReasons ...string) error {
+	obj.isRoute = true
 	var errorReason string
 	if len(errorReasons) > 0 {
 		errorReason = errorReasons[0]

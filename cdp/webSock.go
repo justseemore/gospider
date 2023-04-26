@@ -44,8 +44,7 @@ type WebSock struct {
 	RequestFunc  func(context.Context, *Route)
 	ResponseFunc func(context.Context, *Route)
 	reqCli       *requests.Client
-	// onEvents     map[string]func(ctx context.Context, rd RecvData)
-	onEvents sync.Map
+	onEvents     sync.Map
 }
 
 type DataEntrie struct {
@@ -66,12 +65,26 @@ func (obj *WebSock) routeMain(ctx context.Context, recvData RecvData) {
 		if route.IsResponse() {
 			if obj.ResponseFunc != nil {
 				obj.ResponseFunc(ctx, route)
+				if !route.isRoute {
+					if obj.option.IsReplaceRequest {
+						route.RequestContinue(ctx)
+					} else {
+						route.Continue(ctx)
+					}
+				}
 			} else {
 				route.Continue(ctx)
 			}
 		} else {
 			if obj.RequestFunc != nil {
 				obj.RequestFunc(ctx, route)
+				if !route.isRoute {
+					if obj.option.IsReplaceRequest {
+						route.RequestContinue(ctx)
+					} else {
+						route.Continue(ctx)
+					}
+				}
 			} else {
 				route.Continue(ctx)
 			}
@@ -125,10 +138,11 @@ func (obj *WebSock) recvMain() (err error) {
 }
 
 type WebSockOption struct {
-	Proxy     string
-	DataCache bool //开启数据缓存
-	Ja3Spec   ja3.ClientHelloSpec
-	Ja3       bool
+	Proxy            string
+	DataCache        bool //开启数据缓存
+	IsReplaceRequest bool
+	Ja3Spec          ja3.ClientHelloSpec
+	Ja3              bool
 }
 
 func NewWebSock(preCtx context.Context, globalReqCli *requests.Client, ws string, option WebSockOption, db *db.Client[FulData]) (*WebSock, error) {

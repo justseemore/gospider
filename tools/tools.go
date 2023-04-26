@@ -906,7 +906,7 @@ func Signal(preCtx context.Context, fun func()) {
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGILL, syscall.SIGTRAP,
 		syscall.SIGABRT, syscall.SIGBUS, syscall.SIGFPE, syscall.SIGKILL, syscall.SIGSEGV, syscall.SIGPIPE,
-		syscall.SIGALRM, syscall.SIGTERM, os.Interrupt, os.Kill)
+		syscall.SIGALRM, syscall.SIGTERM)
 	select {
 	case <-preCtx.Done():
 		if fun != nil {
@@ -919,7 +919,7 @@ func Signal(preCtx context.Context, fun func()) {
 		signal.Stop(ch)
 		signal.Reset(s)
 		if p, err := os.FindProcess(os.Getpid()); err == nil && p != nil {
-			p.Signal(s)
+			p.Signal(syscall.SIGKILL)
 		}
 	}
 }

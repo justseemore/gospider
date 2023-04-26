@@ -371,5 +371,8 @@ func (obj *Client[T]) ThreadSize() int64 { //创建的协程数量
 	return obj.threadNum.Load()
 }
 func (obj *Client[T]) Empty() bool { //任务是否为空
-	return obj.ThreadSize() <= 0
+	if obj.ThreadSize() <= 0 && len(obj.sones) == 0 && len(obj.tasks) == 0 {
+		return true
+	}
+	return false
 }

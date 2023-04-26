@@ -28,6 +28,7 @@ type ClientOption struct {
 	Args    []string //程序的执行参数
 	Dir     string   //程序执行的位置
 	TimeOut int      //程序超时时间
+	Leak    bool     //是否防止内存泄漏
 }
 type Client struct {
 	err           error
@@ -37,44 +38,52 @@ type Client struct {
 	CloseCallBack func() //关闭时执行的函数
 }
 
-// 没有内存泄漏的cmd 客户端
-func NewLeakClient(preCtx context.Context, option ClientOption) (*Client, error) {
-	if preCtx == nil {
-		preCtx = context.TODO()
-	}
+func serve(cnl context.CancelFunc, l *leakless.Launcher, uid string) (string, error) {
 	srv, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	uid := fmt.Sprintf("%x", utils.RandBytes(16))
-	option.Args = append([]string{uid, srv.Addr().String(), option.Name}, option.Args...)
-	option.Name = leakless.GetLeaklessBin()
-	client := NewClient(preCtx, option)
 	go func() {
-		defer client.Close()
 		defer srv.Close()
 		conn, err := srv.Accept()
 		if err != nil {
+			cnl()
 			return
 		}
 		enc := json.NewEncoder(conn)
-		if err = enc.Encode(shared.Message{UID: uid}); err != nil {
+		err = enc.Encode(shared.Message{UID: uid})
+		if err != nil {
+			cnl()
 			return
 		}
 		dec := json.NewDecoder(conn)
 		var msg shared.Message
-		if err = dec.Decode(&msg); err != nil {
+		err = dec.Decode(&msg)
+		if err != nil {
+			cnl()
 			return
 		}
-		dec.Decode(&msg)
+		_ = dec.Decode(&msg)
 	}()
-	return client, nil
+	return srv.Addr().String(), nil
+}
+func leakCommandContext(ctx context.Context, cnl context.CancelFunc, name string, arg ...string) (*exec.Cmd, error) {
+	l := leakless.New()
+	bin := ""
+	func() {
+		defer leakless.LockPort(l.Lock)()
+		bin = leakless.GetLeaklessBin()
+	}()
+	uid := fmt.Sprintf("%x", utils.RandBytes(16))
+	addr, err := serve(cnl, l, uid)
+	return exec.CommandContext(ctx, bin, append([]string{uid, addr, name}, arg...)...), err
 }
 
 // 普通的cmd 客户端
-func NewClient(pre_ctx context.Context, option ClientOption) *Client {
+func NewClient(pre_ctx context.Context, option ClientOption) (*Client, error) {
 	var ctx context.Context
 	var cnl context.CancelFunc
+	var err error
 	if pre_ctx == nil {
 		pre_ctx = context.TODO()
 	}
@@ -83,7 +92,12 @@ func NewClient(pre_ctx context.Context, option ClientOption) *Client {
 	} else {
 		ctx, cnl = context.WithCancel(pre_ctx)
 	}
-	cmd := exec.CommandContext(ctx, option.Name, option.Args...)
+	var cmd *exec.Cmd
+	if option.Leak {
+		cmd, err = leakCommandContext(ctx, cnl, option.Name, option.Args...)
+	} else {
+		cmd = exec.CommandContext(ctx, option.Name, option.Args...)
+	}
 	cmd.Dir = option.Dir
 	result := &Client{
 		cmd: cmd,
@@ -91,7 +105,7 @@ func NewClient(pre_ctx context.Context, option ClientOption) *Client {
 		cnl: cnl,
 	}
 	go tools.Signal(ctx, result.Close)
-	return result
+	return result, err
 }
 
 var ErrClosed = errors.New("client closed")
@@ -150,10 +164,13 @@ func NewPyClient(pre_ctx context.Context, option PyClientOption) (*JyClient, err
 			return nil, err
 		}
 	}
-	cli := NewClient(pre_ctx, ClientOption{
+	cli, err := NewClient(pre_ctx, ClientOption{
 		Name: option.PythonPath,
 		Args: []string{"-u", filePath},
 	})
+	if err != nil {
+		return nil, err
+	}
 	writeBody, err := cli.StdInPipe()
 	if err != nil {
 		return nil, err
@@ -219,10 +236,13 @@ func NewJsClient(pre_ctx context.Context, option JsClientOption) (*JyClient, err
 			return nil, err
 		}
 	}
-	cli := NewClient(pre_ctx, ClientOption{
+	cli, err := NewClient(pre_ctx, ClientOption{
 		Name: option.NodePath,
 		Args: []string{filePath},
 	})
+	if err != nil {
+		return nil, err
+	}
 	writeBody, err := cli.StdInPipe()
 	if err != nil {
 		return nil, err
