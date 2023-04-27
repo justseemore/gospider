@@ -144,7 +144,7 @@ func keyMd5(key RequestOption, resourceType string) [16]byte {
 	md5Str += fmt.Sprintf("%s,%s,%s", key.Method, key.Url, key.PostData)
 
 	switch resourceType {
-	case "Document", "XHR", "Script", "Fetch", "Other":
+	case "Document", "XHR", "Fetch", "Other":
 		kks := maps.Keys(key.Headers)
 		sort.Strings(kks)
 		for _, k := range kks {
@@ -189,7 +189,7 @@ func (obj *Route) Request(ctx context.Context, routeOption RequestOption, option
 	fulData.Body = rs.Text()
 	fulData.Headers = rs.Headers()
 	fulData.ResponsePhrase = rs.Status()
-	if obj.webSock.option.DataCache && fulData.StatusCode == 200 && fulData.Body != "" {
+	if obj.webSock.option.DataCache && fulData.StatusCode == 200 && fulData.Body != "" && routeOption.Method == "GET" {
 		obj.webSock.db.Put(routeKey, fulData)
 	}
 	return fulData, nil

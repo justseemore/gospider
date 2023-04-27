@@ -271,13 +271,21 @@ func (obj *Client[T]) Write(task *Task) (*Task, error) {
 	}
 	select {
 	case <-obj.ctx2.Done(): //接到线程关闭通知
-		task.Error = ErrPoolClosed
+		if obj.Err() != nil {
+			task.Error = obj.Err()
+		} else {
+			task.Error = ErrPoolClosed
+		}
 		task.cnl()
-		return task, ErrPoolClosed
+		return task, task.Error
 	case <-obj.ctx.Done(): //接到线程关闭通知
-		task.Error = ErrPoolClosed
+		if obj.Err() != nil {
+			task.Error = obj.Err()
+		} else {
+			task.Error = ErrPoolClosed
+		}
 		task.cnl()
-		return task, ErrPoolClosed
+		return task, task.Error
 	case obj.sones <- task: //将任务传递到sones
 		return task, nil
 	}
