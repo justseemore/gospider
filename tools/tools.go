@@ -919,7 +919,12 @@ func Signal(preCtx context.Context, fun func()) {
 		signal.Stop(ch)
 		signal.Reset(s)
 		if p, err := os.FindProcess(os.Getpid()); err == nil && p != nil {
-			p.Signal(syscall.SIGKILL)
+			sg, ok := s.(syscall.Signal)
+			if ok && sg == syscall.SIGINT {
+				p.Signal(syscall.SIGKILL)
+			} else {
+				p.Signal(s)
+			}
 		}
 	}
 }
