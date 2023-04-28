@@ -76,6 +76,7 @@ func (obj *ProxyConn) ConnectionState() tls.ConnectionState {
 	return tls.ConnectionState{}
 }
 func (obj *ProxyConn) Read(b []byte) (int, error) {
+	obj.conn.SetReadDeadline(time.Now().Add(time.Second * 300))
 	n, err := obj.reader.Read(b)
 	if err != nil {
 		obj.Close()
@@ -83,6 +84,7 @@ func (obj *ProxyConn) Read(b []byte) (int, error) {
 	return n, err
 }
 func (obj *ProxyConn) Write(b []byte) (int, error) {
+	obj.conn.SetWriteDeadline(time.Now().Add(time.Second * 300))
 	n, err := obj.conn.Write(b)
 	if err != nil {
 		obj.Close()

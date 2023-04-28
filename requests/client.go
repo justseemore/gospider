@@ -201,6 +201,9 @@ func (obj *Client) Close() {
 // 关闭客户端中的空闲连接
 func (obj *Client) CloseIdleConnections() {
 	obj.client.CloseIdleConnections()
+	obj.baseTransport.CloseIdleConnections()
+	obj.client2.CloseIdleConnections()
+	obj.baseTransport2.CloseIdleConnections()
 }
 
 // 返回url 的cookies,也可以设置url 的cookies
