@@ -59,8 +59,11 @@ type Client struct {
 
 // 新建一个请求客户端,发送请求必须创建哈
 func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client, error) {
+	var isG bool
 	if preCtx == nil {
 		preCtx = context.TODO()
+	} else {
+		isG = true
 	}
 	ctx, cnl := context.WithCancel(preCtx)
 	var session_option ClientOption
@@ -120,8 +123,7 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 
 	client.CheckRedirect = checkRedirect
 	client2.CheckRedirect = checkRedirect
-
-	return &Client{
+	result := &Client{
 		ctx:            ctx,
 		cnl:            cnl,
 		client:         &client,
@@ -133,7 +135,14 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		ja3:            session_option.Ja3,
 		ja3Spec:        session_option.Ja3Spec,
 		http2Keys:      kinds.NewSet[string](),
-	}, nil
+	}
+	if isG {
+		go func() {
+			<-result.ctx.Done()
+			result.Close()
+		}()
+	}
+	return result, nil
 }
 func checkRedirect(req *http.Request, via []*http.Request) error {
 	ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
@@ -196,6 +205,14 @@ func (obj *Client) Reset() error {
 func (obj *Client) Close() {
 	obj.CloseIdleConnections()
 	obj.cnl()
+}
+func (obj *Client) Closed() bool {
+	select {
+	case <-obj.ctx.Done():
+		return true
+	default:
+		return false
+	}
 }
 
 // 关闭客户端中的空闲连接

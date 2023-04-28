@@ -483,6 +483,9 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	var setHttp2Try bool
 	for tryNum = 0; tryNum <= optionBak.TryNum; tryNum++ {
 		select {
+		case <-obj.ctx.Done():
+			obj.Close()
+			return nil, errors.New("http client closed")
 		case <-preCtx.Done():
 			return nil, preCtx.Err()
 		default:
@@ -576,6 +579,9 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			if response != nil {
 				response.Close()
 			}
+		}
+		if obj.Closed() {
+			obj.Close()
 		}
 	}()
 	//创建request
