@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
-	"io"
 	"net"
 	"net/http"
 	"time"
@@ -78,7 +77,7 @@ func (obj *ProxyConn) ConnectionState() tls.ConnectionState {
 }
 func (obj *ProxyConn) Read(b []byte) (int, error) {
 	n, err := obj.reader.Read(b)
-	if err != nil && err != io.EOF {
+	if err != nil {
 		obj.Close()
 	}
 	return n, err

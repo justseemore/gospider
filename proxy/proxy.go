@@ -263,7 +263,7 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) (err error) 
 		return errors.New("auth verify false")
 	}
 	clientReader := bufio.NewReader(client)
-	firstCons, err := tools.PeekWithContext(ctx, clientReader, 1)
+	firstCons, err := clientReader.Peek(1)
 	if err != nil {
 		return err
 	}

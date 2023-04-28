@@ -43,7 +43,7 @@ func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
 		return err
 	}
 	//获取schema
-	httpsBytes, err := tools.PeekWithContext(ctx, client.reader, 1)
+	httpsBytes, err := client.reader.Peek(1)
 	if err != nil {
 		return err
 	}
