@@ -179,9 +179,8 @@ func (obj *Client[T]) taskMain2() {
 	}
 }
 func (obj *Client[T]) subThreadNum(runVal T, taskId int64) {
-	defer obj.threadNum.Add(-1) //线程池数量减1
-	defer obj.setTaskId(taskId) //回收线程id
-
+	defer obj.threadNum.Add(-1)       //线程池数量减1
+	defer obj.setTaskId(taskId)       //回收线程id
 	if obj.threadEndCallBack != nil { //处理回调
 		obj.threadEndCallBack(runVal)
 	}
@@ -190,11 +189,9 @@ func (obj *Client[T]) subThreadNum(runVal T, taskId int64) {
 		if obj.Empty() {
 			obj.cnl2()
 		}
-	// case obj.threadTokens <- struct{}{}: //线程令牌
 	default:
 	}
 	obj.threadTokens <- struct{}{} //线程令牌
-	// obj.threadTokens <- struct{}{}
 }
 func (obj *Client[T]) runMain() {
 	var runVal T

@@ -291,7 +291,7 @@ func NewServerConn(w http.ResponseWriter, r *http.Request, options ...Option) (_
 		return nil, err
 	}
 	// https://github.com/golang/go/issues/32314
-	b, _ := brw.Reader.Peek(brw.Reader.Buffered())
+	b, _ := tools.PeekWithContext(r.Context(), brw.Reader, brw.Reader.Buffered())
 	brw.Reader.Reset(io.MultiReader(bytes.NewReader(b), netConn))
 	return &Conn{
 		rwc:    netConn,

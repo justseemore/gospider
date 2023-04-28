@@ -194,7 +194,7 @@ func (obj *Client) Addr() string {
 
 func (obj *Client) Run() error {
 	defer obj.Close()
-	pool := thread.NewClient(obj.ctx, 65535)
+	pool := thread.NewClient(obj.ctx, 65535000)
 	pool.Debug = obj.Debug
 	for {
 		select {
@@ -247,7 +247,6 @@ func (obj *Client) verifyPwd(client net.Conn, clientReq *http.Request) error {
 func (obj *Client) getHttpProxyConn(ctx context.Context, ipUrl *url.URL) (net.Conn, error) {
 	return obj.dialer.DialContext(ctx, "tcp", net.JoinHostPort(ipUrl.Hostname(), ipUrl.Port()))
 }
-
 func (obj *Client) mainHandle(ctx context.Context, client net.Conn) (err error) {
 	if obj.Debug {
 		defer func() {
@@ -264,7 +263,7 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) (err error) 
 		return errors.New("auth verify false")
 	}
 	clientReader := bufio.NewReader(client)
-	firstCons, err := clientReader.Peek(1)
+	firstCons, err := tools.PeekWithContext(ctx, clientReader, 1)
 	if err != nil {
 		return err
 	}

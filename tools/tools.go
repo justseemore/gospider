@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bufio"
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
@@ -926,5 +927,24 @@ func Signal(preCtx context.Context, fun func()) {
 				p.Signal(s)
 			}
 		}
+	}
+}
+
+func PeekWithContext(ctx context.Context, clientReader *bufio.Reader, n int) ([]byte, error) {
+	done := make(chan struct{})
+	var cons []byte
+	var err error
+
+	go func() {
+		defer close(done)
+		cons, err = clientReader.Peek(n)
+	}()
+	select {
+	case <-ctx.Done():
+		return cons, ctx.Err()
+	case <-done:
+		return cons, err
+	case <-time.After(time.Second * 30):
+		return cons, errors.New("peek 超时")
 	}
 }

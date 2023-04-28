@@ -74,8 +74,11 @@ func NewDail(option DialOption) (*DialClient, error) {
 	}
 	var err error
 	dialCli := &DialClient{
-		dnsIpData:   make(map[string]msgClient),
-		dialer:      &net.Dialer{Timeout: time.Second * time.Duration(option.TLSHandshakeTimeout)},
+		dnsIpData: make(map[string]msgClient),
+		dialer: &net.Dialer{
+			Timeout:   time.Second * time.Duration(option.TLSHandshakeTimeout),
+			KeepAlive: time.Duration(option.KeepAlive),
+		},
 		dnsTimeout:  option.DnsCacheTime,
 		getProxy:    option.GetProxy,
 		addrType:    option.AddrType,
@@ -101,9 +104,6 @@ func NewDail(option DialOption) (*DialClient, error) {
 		if dialCli.dialer.LocalAddr, err = net.ResolveTCPAddr("tcp", option.LocalAddr); err != nil {
 			return dialCli, err
 		}
-	}
-	if option.KeepAlive != 0 {
-		dialCli.dialer.KeepAlive = time.Duration(option.KeepAlive) * time.Second //keepalive保活检测定时
 	}
 	return dialCli, err
 }
