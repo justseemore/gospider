@@ -17,7 +17,6 @@ import (
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/requests"
-	"gitee.com/baixudong/gospider/thread"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
 	"golang.org/x/net/http2"
@@ -194,8 +193,6 @@ func (obj *Client) Addr() string {
 
 func (obj *Client) Run() error {
 	defer obj.Close()
-	pool := thread.NewClient(obj.ctx, 65535000)
-	pool.Debug = obj.Debug
 	for {
 		select {
 		case <-obj.ctx.Done():
@@ -207,13 +204,7 @@ func (obj *Client) Run() error {
 				obj.Err = err
 				return err
 			}
-			if _, err = pool.Write(&thread.Task{
-				Func: obj.mainHandle,
-				Args: []any{client},
-			}); err != nil {
-				obj.Err = err
-				return obj.Err
-			}
+			go obj.mainHandle(obj.ctx, client)
 		}
 	}
 }

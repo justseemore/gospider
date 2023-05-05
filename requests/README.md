@@ -149,3 +149,56 @@ func main() {
 	log.Print(response.Json().Get("ja3").String())
 }
 ```
+
+## 采集全国公共资源网和中国政府采购网的列表页的标题
+```go
+package main
+import (
+	"log"
+	"gitee.com/baixudong/gospider/requests"
+)
+func main() {
+	reqCli, err := requests.NewClient(nil)
+	if err != nil {
+		log.Panic(err)
+	}
+	resp, err := reqCli.Request(nil, "get", "http://www.ccgp.gov.cn/cggg/zygg/")
+	if err != nil {
+		log.Panic(err)
+	}
+	html := resp.Html()
+	lis := html.Finds("ul.c_list_bid li")
+	for _, li := range lis {
+		title := li.Find("a").Get("title")
+		log.Print(title)
+	}
+	resp, err = reqCli.Request(nil, "post", "http://deal.ggzy.gov.cn/ds/deal/dealList_find.jsp", requests.RequestOption{
+		Data: map[string]string{
+			"TIMEBEGIN_SHOW": "2023-04-26",
+			"TIMEEND_SHOW":   "2023-05-05",
+			"TIMEBEGIN":      "2023-04-26",
+			"TIMEEND":        "2023-05-05",
+			"SOURCE_TYPE":    "1",
+			"DEAL_TIME":      "02",
+			"DEAL_CLASSIFY":  "01",
+			"DEAL_STAGE":     "0100",
+			"DEAL_PROVINCE":  "0",
+			"DEAL_CITY":      "0",
+			"DEAL_PLATFORM":  "0",
+			"BID_PLATFORM":   "0",
+			"DEAL_TRADE":     "0",
+			"isShowAll":      "1",
+			"PAGENUMBER":     "2",
+			"FINDTXT":        "",
+		},
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	jsonData := resp.Json()
+	lls := jsonData.Get("data").Array()
+	for _, ll := range lls {
+		log.Print(ll.Get("title"))
+	}
+}
+```

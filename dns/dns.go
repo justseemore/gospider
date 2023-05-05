@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/baixudong/gospider/thread"
 	"gitee.com/baixudong/gospider/tools"
 	"golang.org/x/net/dns/dnsmessage"
 )
@@ -82,20 +81,13 @@ func NewClient(options ...ClientOption) (*Client, error) {
 }
 func (obj *Client) Run(ctx context.Context) error {
 	defer obj.dnsConn.Close()
-	pool := thread.NewClient(ctx, obj.poolNum)
-	defer pool.Close()
 	for {
 		buf := make([]byte, 1248)
 		_, addr, err := obj.dnsConn.ReadFrom(buf)
 		if err != nil {
 			return err
 		}
-		if _, err = pool.Write(&thread.Task{
-			Func: obj.handle,
-			Args: []any{addr, buf},
-		}); err != nil {
-			return err
-		}
+		go obj.handle(ctx, addr, buf)
 	}
 }
 func (obj *Client) handle(ctx context.Context, addr net.Addr, buf []byte) error {

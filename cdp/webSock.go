@@ -10,7 +10,6 @@ import (
 	"gitee.com/baixudong/gospider/db"
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/requests"
-	"gitee.com/baixudong/gospider/thread"
 	"gitee.com/baixudong/gospider/websocket"
 
 	"go.uber.org/atomic"
@@ -113,8 +112,6 @@ func (obj *WebSock) recv(ctx context.Context, rd RecvData) error {
 }
 func (obj *WebSock) recvMain() (err error) {
 	defer obj.Close(err)
-	pool := thread.NewClient(obj.ctx, 65535)
-	defer pool.Close()
 	for {
 		select {
 		case <-obj.ctx.Done():
@@ -127,12 +124,7 @@ func (obj *WebSock) recvMain() (err error) {
 			if rd.Id == 0 {
 				rd.Id = obj.id.Add(1)
 			}
-			if _, err := pool.Write(&thread.Task{
-				Func: obj.recv,
-				Args: []any{rd},
-			}); err != nil {
-				return err
-			}
+			go obj.recv(obj.ctx, rd)
 		}
 	}
 }
