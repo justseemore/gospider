@@ -92,6 +92,7 @@ func (obj *WebSock) routeMain(ctx context.Context, recvData RecvData) {
 }
 
 func (obj *WebSock) recv(ctx context.Context, rd RecvData) error {
+	defer recover()
 	cmdDataAny, ok := obj.ids.LoadAndDelete(rd.Id)
 	if ok {
 		cmdData := cmdDataAny.(*event)

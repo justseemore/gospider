@@ -457,11 +457,6 @@ func ZipDecode(ctx context.Context, r *bytes.Buffer, encoding string) (*bytes.Bu
 		return rs, err
 	}
 	var reader io.ReadCloser
-	defer func() {
-		if reader != nil {
-			reader.Close()
-		}
-	}()
 	switch encoding {
 	case "deflate":
 		reader = flate.NewReader(r)
@@ -472,6 +467,11 @@ func ZipDecode(ctx context.Context, r *bytes.Buffer, encoding string) (*bytes.Bu
 	default:
 		return r, err
 	}
+	defer func() {
+		if reader != nil {
+			reader.Close()
+		}
+	}()
 	err = CopyWitchContext(ctx, rs, reader)
 	return rs, err
 }

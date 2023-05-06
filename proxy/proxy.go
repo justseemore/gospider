@@ -239,6 +239,7 @@ func (obj *Client) getHttpProxyConn(ctx context.Context, ipUrl *url.URL) (net.Co
 	return obj.dialer.DialContext(ctx, "tcp", net.JoinHostPort(ipUrl.Hostname(), ipUrl.Port()))
 }
 func (obj *Client) mainHandle(ctx context.Context, client net.Conn) (err error) {
+	defer recover()
 	if obj.Debug {
 		defer func() {
 			if err != nil {

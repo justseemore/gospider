@@ -91,6 +91,7 @@ func (obj *Client) Run(ctx context.Context) error {
 	}
 }
 func (obj *Client) handle(ctx context.Context, addr net.Addr, buf []byte) error {
+	defer recover()
 	var msg dnsmessage.Message
 	if err := msg.Unpack(buf); err != nil {
 		return err
