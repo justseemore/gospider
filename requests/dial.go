@@ -77,7 +77,7 @@ func NewDail(option DialOption) (*DialClient, error) {
 		dnsIpData: make(map[string]msgClient),
 		dialer: &net.Dialer{
 			Timeout:   time.Second * time.Duration(option.TLSHandshakeTimeout),
-			KeepAlive: time.Duration(option.KeepAlive),
+			KeepAlive: time.Second * time.Duration(option.KeepAlive),
 		},
 		dnsTimeout:  option.DnsCacheTime,
 		getProxy:    option.GetProxy,
