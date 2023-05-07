@@ -503,7 +503,7 @@ func (obj *Table) Upserts(pre_ctx context.Context, filter any, update any, value
 }
 
 type ClearOption struct {
-	Thread         int            //线程数量
+	Thread         int64          //线程数量
 	Init           bool           //是否初始化
 	Oid            ObjectID       //起始id
 	Show           any            //展示的字段
@@ -514,7 +514,7 @@ type ClearOption struct {
 	ClearBatchSize int64          //每次清洗的批次
 }
 type ClearOplogOption struct {
-	Thread    int            //线程数量
+	Thread    int64          //线程数量
 	Init      bool           //是否初始化
 	Oid       Timestamp      //起始id
 	Show      any            //展示的字段
