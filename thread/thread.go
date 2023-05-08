@@ -332,6 +332,10 @@ func (obj *Client[T]) Join() error { //等待所有任务完成，并关闭pool
 		obj.tasks2.Join()
 		<-obj.ctx3.Done()
 	}
+	if obj.ThreadSize() <= 0 {
+		obj.cnl2()
+		return obj.Err()
+	}
 	for {
 		select {
 		case <-obj.ctx2.Done(): //线程关闭推出
