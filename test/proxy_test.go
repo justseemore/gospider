@@ -45,6 +45,44 @@ func TestProxy(t *testing.T) {
 	}
 }
 
+func TestProxy2(t *testing.T) {
+	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
+		Proxy: "https://gospider:gospider123456789@gospider2.gospiderb.asia",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proCli.Close()
+	proCli.DisVerify = true //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
+	go proCli.Run()
+	proxyIp := proCli.Addr()
+	reqCli, err := requests.NewClient(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := reqCli.Request(nil, "get", "https://myip.top", requests.RequestOption{Proxy: "http://" + proxyIp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Json().Get("ip").String() == "" {
+		t.Fatal("代理bug")
+	}
+	resp, err = reqCli.Request(nil, "get", "https://myip.top", requests.RequestOption{Proxy: "https://" + proxyIp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Json().Get("ip").String() == "" {
+		t.Fatal("代理bug")
+	}
+	resp, err = reqCli.Request(nil, "get", "https://myip.top", requests.RequestOption{Proxy: "socks5://" + proxyIp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Json().Get("ip").String() == "" {
+		t.Fatal("代理bug")
+	}
+}
+
 func TestProxyJa3(t *testing.T) {
 	proCli, err := proxy.NewClient(nil, proxy.ClientOption{Ja3: true})
 	if err != nil {
