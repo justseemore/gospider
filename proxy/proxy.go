@@ -14,12 +14,12 @@ import (
 	"net/url"
 	"strconv"
 
+	"gitee.com/baixudong/gospider/http2"
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
-	"golang.org/x/net/http2"
 )
 
 //go:embed gospider.crt

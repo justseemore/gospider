@@ -3,11 +3,12 @@ package requests
 import (
 	"context"
 	"crypto/tls"
+
 	"net/http"
 	"net/url"
 	"time"
 
-	"golang.org/x/net/http2"
+	"gitee.com/baixudong/gospider/http2"
 )
 
 func newHttp2Transport(ctx context.Context, session_option ClientOption, dialCli *DialClient) *http2.Transport {

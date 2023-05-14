@@ -6,10 +6,9 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 
+	"gitee.com/baixudong/gospider/http2"
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/kinds"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/publicsuffix"
 )
 
 type ClientOption struct {
@@ -188,9 +187,7 @@ func (obj *Client) Clone() *Client {
 // 重置客户端至初始状态
 func (obj *Client) Reset() error {
 	if obj.client.Jar != nil {
-		jar, err := cookiejar.New(&cookiejar.Options{
-			PublicSuffixList: publicsuffix.List,
-		})
+		jar, err := cookiejar.New(nil)
 		if err != nil {
 			return err
 		}
@@ -240,9 +237,7 @@ func (obj *Client) Cookies(href string, cookies ...*http.Cookie) Cookies {
 func (obj *Client) ClearCookies() error {
 	var jar *cookiejar.Jar
 	var err error
-	jar, err = cookiejar.New(&cookiejar.Options{
-		PublicSuffixList: publicsuffix.List,
-	})
+	jar, err = cookiejar.New(nil)
 	if err != nil {
 		return err
 	}

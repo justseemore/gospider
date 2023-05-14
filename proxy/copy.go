@@ -12,10 +12,10 @@ import (
 	"sync/atomic"
 	_ "unsafe"
 
+	"gitee.com/baixudong/gospider/http2"
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
-	"golang.org/x/net/http2"
 )
 
 func (obj *Client) wsSend(ctx context.Context, wsClient *websocket.Conn, wsServer *websocket.Conn) (err error) {
@@ -68,27 +68,25 @@ func (obj *Client) http21Copy(preCtx context.Context, client *ProxyConn, server 
 	go obj.http2Server.ServeConn(client, &http2.ServeConnOpts{
 		Context: ctx,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			lock.Lock()
+			defer lock.Unlock()
 			startSize.Add(1)
 			r.URL.Scheme = "https"
 			r.URL.Host = net.JoinHostPort(tools.GetServerName(client.option.host), client.option.port)
 			r.Proto = "HTTP/1.1"
 			r.ProtoMajor = 1
 			r.ProtoMinor = 1
-			lock.Lock()
 			if err = r.Write(server); err != nil {
 				server.Close()
 				client.Close()
-				lock.Unlock()
 				return
 			}
 			resp, err := server.readResponse(r)
 			if err != nil {
 				server.Close()
 				client.Close()
-				lock.Unlock()
 				return
 			}
-			lock.Unlock()
 			if obj.ResponseCallBack != nil {
 				obj.ResponseCallBack(r, resp)
 			}
@@ -143,6 +141,7 @@ func (obj *Client) http21Copy(preCtx context.Context, client *ProxyConn, server 
 		return
 	}
 }
+
 func (obj *Client) http22Copy(preCtx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	defer client.Close()
 	defer server.Close()
