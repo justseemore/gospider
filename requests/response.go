@@ -259,7 +259,11 @@ func (obj *Response) ContentType() string {
 	if obj.filePath != "" {
 		return tools.GetContentTypeWithBytes(obj.content)
 	}
-	return obj.response.Header.Get("Content-Type")
+	contentType := obj.response.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = tools.GetContentTypeWithBytes(obj.content)
+	}
+	return contentType
 }
 
 // 获取headers 的Content-Encoding
@@ -302,8 +306,8 @@ func (obj *Response) barRead() (*bytes.Buffer, error) {
 	}
 	return barData.body, nil
 }
-func (obj *Response) verifyBytes() bool {
-	return strings.Contains(obj.Headers().Get("Accept-Ranges"), "bytes")
+func (obj *Response) defaultDecode() bool {
+	return strings.Contains(obj.ContentType(), "html")
 }
 
 func (obj *Response) Read(con []byte) (int, error) { //读取body
@@ -333,7 +337,7 @@ func (obj *Response) read() error { //读取body,对body 解压，解码操作
 			return errors.New("gzip NewReader error: " + err.Error())
 		}
 	}
-	if !obj.disDecode && !obj.verifyBytes() {
+	if !obj.disDecode && obj.defaultDecode() {
 		if content, encoding, err := tools.Charset(bBody.Bytes(), obj.ContentType()); err == nil {
 			obj.content, obj.encoding = content, encoding
 		} else {
