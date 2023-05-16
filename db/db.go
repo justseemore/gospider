@@ -40,6 +40,8 @@ func NewClient[T any](ctx context.Context, cnl context.CancelFunc) *Client[T] {
 
 func (obj *Client[T]) run() {
 	defer obj.Close()
+	afterTime := time.NewTimer(time.Second * time.Duration(obj.timeOut))
+	defer afterTime.Stop()
 	for {
 		select {
 		case <-obj.ctx.Done():
@@ -48,12 +50,13 @@ func (obj *Client[T]) run() {
 			return
 		case orderVal := <-obj.orderKey.Chan():
 			if awaitTime := obj.timeOut - (time.Now().Unix() - orderVal.ttl); awaitTime > 0 { //判断睡眠时间
+				afterTime.Reset(time.Second * time.Duration(awaitTime))
 				select {
 				case <-obj.ctx.Done():
 					return
 				case <-obj.orderKey.Done():
 					return
-				case <-time.After(time.Second * time.Duration(awaitTime)):
+				case <-afterTime.C:
 				}
 			}
 			obj.lock.RLock()

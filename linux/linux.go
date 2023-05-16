@@ -67,12 +67,14 @@ func (obj *ScreenPip) Read(con []byte) (int, error) {
 	}
 }
 func (obj *ScreenPip) Write(con []byte) (int, error) {
+	afterTime := time.NewTimer(time.Second * time.Duration(obj.waitTime))
+	defer afterTime.Stop()
 	select {
 	case obj.outData <- con:
 		return len(con), nil
 	case <-obj.ctx.Done():
 		return 0, io.EOF
-	case <-time.After(time.Second * time.Duration(obj.waitTime)):
+	case <-afterTime.C:
 		return 0, io.EOF
 	}
 }
@@ -202,7 +204,10 @@ func (obj *Screen) hasPrefix(txt string) bool { //是否匹配到命令行前缀
 func (obj *Screen) bytes() []byte {
 	var allCon []byte
 	lastTime := time.Now().Unix() + obj.waitTime
+	afterTime := time.NewTimer(time.Second * time.Duration(obj.waitTime))
+	defer afterTime.Stop()
 	for {
+		afterTime.Reset(time.Second * time.Duration(obj.waitTime))
 		select {
 		case con := <-obj.pip.outData:
 			allCon = append(allCon, con...)
@@ -210,7 +215,7 @@ func (obj *Screen) bytes() []byte {
 				obj.IsRun = true
 				return allCon
 			}
-		case <-time.After(time.Second * time.Duration(obj.waitTime)):
+		case <-afterTime.C:
 			lastLine := re.Search(`\n[^\n]*?$`, tools.BytesToString(allCon))
 			if lastLine != nil && !obj.hasPrefix(lastLine.Group()) {
 				obj.IsRun = true
@@ -222,10 +227,12 @@ func (obj *Screen) bytes() []byte {
 	}
 }
 func (obj *Screen) Run(cmd []byte) ([]byte, error) {
+	afterTime := time.NewTimer(time.Second * time.Duration(obj.waitTime))
+	defer afterTime.Stop()
 	select {
 	case obj.pip.inData <- cmd:
 		return obj.bytes(), nil
-	case <-time.After(time.Second * time.Duration(obj.waitTime)):
+	case <-afterTime.C:
 		return nil, errors.New("timeOut")
 	}
 }
