@@ -76,8 +76,10 @@ var NewObjectID = primitive.NewObjectID         //创建一个新的objectid
 
 func (obj *FindData) Data() map[string]any {
 	if obj.raw == nil {
-		obj.raw = map[string]any{}
-		obj.object.Decode(obj.raw)
+		raw := map[string]any{}
+		obj.object.Decode(&raw)
+		obj.raw = raw
+		return raw
 	}
 	return obj.raw
 }
@@ -146,9 +148,10 @@ func (obj *FindsData) Data() map[string]any {
 		return obj.raw
 	}
 	obj.rawOk = false
-	obj.raw = map[string]any{}
-	obj.cursor.Decode(&obj.raw)
-	return obj.raw
+	raw := map[string]any{}
+	obj.cursor.Decode(&raw)
+	obj.raw = raw
+	return raw
 }
 
 // 使用json.Unmarshal 解码
