@@ -14,6 +14,7 @@ import (
 	"gitee.com/baixudong/gospider/tools"
 
 	"github.com/tidwall/gjson"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -148,10 +149,10 @@ func (obj *FindsData) Data() map[string]any {
 		return obj.raw
 	}
 	obj.rawOk = false
-	raw := map[string]any{}
+	var raw bson.D
 	obj.cursor.Decode(&raw)
-	obj.raw = raw
-	return raw
+	obj.raw = raw.Map()
+	return obj.raw
 }
 
 // 使用json.Unmarshal 解码
