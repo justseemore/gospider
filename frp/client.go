@@ -58,6 +58,10 @@ func NewClient(option ClientOption) (*Client, error) {
 				},
 				TokenConfig: auth.TokenConfig{Token: option.Token},
 			},
+			LogFile:  "console",
+			LogWay:   "console",
+			LogLevel: "error",
+
 			Protocol:   "tcp",
 			ServerAddr: option.ServerHost,
 			ServerPort: option.ServerPort,

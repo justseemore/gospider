@@ -34,6 +34,10 @@ func NewServer(option ServerOption) (*Server, error) {
 	}
 	svr, err := frps.NewService(
 		config.ServerCommonConf{
+			LogFile:  "console",
+			LogWay:   "console",
+			LogLevel: "error",
+
 			BindAddr:                option.Host,
 			BindPort:                option.Port,
 			QUICKeepalivePeriod:     10,
