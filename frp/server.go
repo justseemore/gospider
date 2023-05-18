@@ -5,6 +5,7 @@ import (
 
 	"github.com/fatedier/frp/pkg/auth"
 	"github.com/fatedier/frp/pkg/config"
+	"github.com/fatedier/frp/pkg/util/log"
 	frps "github.com/fatedier/frp/server"
 )
 
@@ -17,13 +18,13 @@ func (obj *Server) Run() {
 }
 
 type ServerOption struct {
-	Host    string //服务端host,默认0.0.0.0
-	Port    int    //服务端port
-	Token   string //密钥，客户端与服务端连接验证
-	LogFile string //日志文件
+	Host  string //服务端host,默认0.0.0.0
+	Port  int    //服务端port
+	Token string //密钥，客户端与服务端连接验证
 }
 
 func NewServer(option ServerOption) (*Server, error) {
+	log.InitLog("console", "console", "error", 3, false)
 	if option.Token == "" {
 		return nil, errors.New("没有token,你想被攻击吗？")
 	}
@@ -33,16 +34,8 @@ func NewServer(option ServerOption) (*Server, error) {
 	if option.Port == 0 {
 		return nil, errors.New("服务端没有设置监听端口,你确定要这样？")
 	}
-	var logWay string
-	if option.LogFile != "" {
-		logWay = "file"
-	}
 	svr, err := frps.NewService(
 		config.ServerCommonConf{
-			LogFile:  option.LogFile,
-			LogWay:   logWay,
-			LogLevel: "error",
-
 			BindAddr:                option.Host,
 			BindPort:                option.Port,
 			QUICKeepalivePeriod:     10,

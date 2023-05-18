@@ -7,6 +7,7 @@ import (
 	frpc "github.com/fatedier/frp/client"
 	"github.com/fatedier/frp/pkg/auth"
 	"github.com/fatedier/frp/pkg/config"
+	"github.com/fatedier/frp/pkg/util/log"
 )
 
 type Client struct {
@@ -28,10 +29,10 @@ type ClientOption struct {
 	Port       int    //本地服务port
 	Token      string //密钥，客户端与服务端连接验证
 	Group      string // 负载均衡,分组
-	LogFile    string //日志文件
 }
 
 func NewClient(option ClientOption) (*Client, error) {
+	log.InitLog("console", "console", "error", 3, false)
 	if option.Token == "" {
 		return nil, errors.New("没有token,我认为你铁定连接不上服务")
 	}
@@ -51,11 +52,6 @@ func NewClient(option ClientOption) (*Client, error) {
 		return nil, errors.New("没有设置开放端口,你要从哪接收外部流量？")
 	}
 	Name := tools.Uuid().String()
-	var logWay string
-	if option.LogFile != "" {
-		logWay = "file"
-	}
-
 	svr, err := frpc.NewService(
 		config.ClientCommonConf{
 			ClientConfig: auth.ClientConfig{
@@ -64,10 +60,6 @@ func NewClient(option ClientOption) (*Client, error) {
 				},
 				TokenConfig: auth.TokenConfig{Token: option.Token},
 			},
-			LogFile:  option.LogFile,
-			LogWay:   logWay,
-			LogLevel: "error",
-
 			Protocol:   "tcp",
 			ServerAddr: option.ServerHost,
 			ServerPort: option.ServerPort,
