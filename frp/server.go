@@ -17,9 +17,10 @@ func (obj *Server) Run() {
 }
 
 type ServerOption struct {
-	Host  string //服务端host,默认0.0.0.0
-	Port  int    //服务端port
-	Token string //密钥，客户端与服务端连接验证
+	Host    string //服务端host,默认0.0.0.0
+	Port    int    //服务端port
+	Token   string //密钥，客户端与服务端连接验证
+	LogFile string //日志文件
 }
 
 func NewServer(option ServerOption) (*Server, error) {
@@ -32,10 +33,14 @@ func NewServer(option ServerOption) (*Server, error) {
 	if option.Port == 0 {
 		return nil, errors.New("服务端没有设置监听端口,你确定要这样？")
 	}
+	var logWay string
+	if option.LogFile != "" {
+		logWay = "file"
+	}
 	svr, err := frps.NewService(
 		config.ServerCommonConf{
-			LogFile:  "console",
-			LogWay:   "console",
+			LogFile:  option.LogFile,
+			LogWay:   logWay,
 			LogLevel: "error",
 
 			BindAddr:                option.Host,
