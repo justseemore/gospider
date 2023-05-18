@@ -34,9 +34,21 @@ func NewServer(option ServerOption) (*Server, error) {
 	}
 	svr, err := frps.NewService(
 		config.ServerCommonConf{
-			MaxPoolCount: 5,
-			BindAddr:     option.Host,
-			BindPort:     option.Port,
+			BindAddr:                option.Host,
+			BindPort:                option.Port,
+			QUICKeepalivePeriod:     10,
+			QUICMaxIdleTimeout:      30,
+			QUICMaxIncomingStreams:  100000,
+			VhostHTTPTimeout:        60,
+			TCPMux:                  true,
+			TCPMuxKeepaliveInterval: 60,
+			TCPKeepAlive:            60,
+			MaxPoolCount:            5,
+			MaxPortsPerClient:       0,
+			HeartbeatTimeout:        90,
+			UserConnTimeout:         10,
+			UDPPacketSize:           1500,
+
 			ServerConfig: auth.ServerConfig{
 				BaseConfig: auth.BaseConfig{
 					AuthenticationMethod: "token",
@@ -48,5 +60,4 @@ func NewServer(option ServerOption) (*Server, error) {
 		},
 	)
 	return &Server{svr: svr}, err
-
 }

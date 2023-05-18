@@ -27,7 +27,7 @@ type ClientOption struct {
 	Host       string //本地服务host,默认0.0.0.0
 	Port       int    //本地服务port
 	Token      string //密钥，客户端与服务端连接验证
-	Name       string //名称，默认随机
+	Group      string // 负载均衡,分组
 }
 
 func NewClient(option ClientOption) (*Client, error) {
@@ -49,9 +49,7 @@ func NewClient(option ClientOption) (*Client, error) {
 	if option.RemotePort == 0 {
 		return nil, errors.New("没有设置开放端口,你要从哪接收外部流量？")
 	}
-	if option.Name == "" {
-		option.Name = tools.Uuid().String()
-	}
+	Name := tools.Uuid().String()
 	svr, err := frpc.NewService(
 		config.ClientCommonConf{
 			ClientConfig: auth.ClientConfig{
@@ -63,24 +61,34 @@ func NewClient(option ClientOption) (*Client, error) {
 			Protocol:   "tcp",
 			ServerAddr: option.ServerHost,
 			ServerPort: option.ServerPort,
-			PoolCount:  5,
+
+			DialServerTimeout:       10,
+			DialServerKeepAlive:     7200,
+			PoolCount:               1,
+			TCPMux:                  true,
+			TCPMuxKeepaliveInterval: 60,
+			LoginFailExit:           true,
+			QUICKeepalivePeriod:     10,
+			QUICMaxIdleTimeout:      30,
+			QUICMaxIncomingStreams:  100000,
+			HeartbeatInterval:       30,
+			HeartbeatTimeout:        90,
+			UDPPacketSize:           1500,
 		},
 		map[string]config.ProxyConf{
-			option.Name: &config.TCPProxyConf{
+			Name: &config.TCPProxyConf{
 				RemotePort: option.RemotePort,
 				BaseProxyConf: config.BaseProxyConf{
-					ProxyName:      option.Name,
-					ProxyType:      "tcp",
+					Group:          option.Group,
+					ProxyName:      Name,
 					UseCompression: true,
 					LocalSvrConf: config.LocalSvrConf{
 						LocalIP:   option.Host,
 						LocalPort: option.Port,
 					},
-					BandwidthLimitMode: config.BandwidthLimitModeClient,
 				},
 			},
 		}, nil, "",
 	)
 	return &Client{svr: svr}, err
-
 }
