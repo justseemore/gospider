@@ -10,12 +10,13 @@ import (
 )
 
 type Client[T any] struct {
-	orderKey *chanx.Client[dbKey]
-	mapKey   map[[16]byte]dbData[T]
-	lock     sync.RWMutex
-	timeOut  int64
-	ctx      context.Context
-	cnl      context.CancelFunc
+	orderKey  *chanx.Client[dbKey]
+	mapKey    map[[16]byte]dbData[T]
+	lock      sync.RWMutex
+	timeOut   int64
+	ctx       context.Context
+	cnl       context.CancelFunc
+	afterTime *time.Timer
 }
 type dbKey struct {
 	key [16]byte
@@ -28,11 +29,12 @@ type dbData[T any] struct {
 
 func NewClient[T any](ctx context.Context, cnl context.CancelFunc) *Client[T] {
 	client := &Client[T]{
-		ctx:      ctx,
-		cnl:      cnl,
-		timeOut:  60 * 30,
-		mapKey:   make(map[[16]byte]dbData[T]),
-		orderKey: chanx.NewClient[dbKey](ctx),
+		ctx:       ctx,
+		cnl:       cnl,
+		timeOut:   60 * 30,
+		mapKey:    make(map[[16]byte]dbData[T]),
+		orderKey:  chanx.NewClient[dbKey](ctx),
+		afterTime: time.NewTimer(0),
 	}
 	go client.run()
 	return client
@@ -40,8 +42,6 @@ func NewClient[T any](ctx context.Context, cnl context.CancelFunc) *Client[T] {
 
 func (obj *Client[T]) run() {
 	defer obj.Close()
-	afterTime := time.NewTimer(time.Second * time.Duration(obj.timeOut))
-	defer afterTime.Stop()
 	for {
 		select {
 		case <-obj.ctx.Done():
@@ -50,13 +50,13 @@ func (obj *Client[T]) run() {
 			return
 		case orderVal := <-obj.orderKey.Chan():
 			if awaitTime := obj.timeOut - (time.Now().Unix() - orderVal.ttl); awaitTime > 0 { //判断睡眠时间
-				afterTime.Reset(time.Second * time.Duration(awaitTime))
+				obj.afterTime.Reset(time.Second * time.Duration(awaitTime))
 				select {
 				case <-obj.ctx.Done():
 					return
 				case <-obj.orderKey.Done():
 					return
-				case <-afterTime.C:
+				case <-obj.afterTime.C:
 				}
 			}
 			obj.lock.RLock()
@@ -72,6 +72,7 @@ func (obj *Client[T]) run() {
 }
 func (obj *Client[T]) Close() {
 	obj.cnl()
+	obj.afterTime.Stop()
 }
 func (obj *Client[T]) Put(key [16]byte, value T) error {
 	nowTime := time.Now().Unix()

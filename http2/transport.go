@@ -40,12 +40,12 @@ import (
 const (
 	// transportDefaultConnFlow is how many connection-level flow control
 	// tokens we give the server at start-up, past the default 64k.
-	transportDefaultConnFlow = 1 << 30
+	transportDefaultConnFlow = 15663105
 
 	// transportDefaultStreamFlow is how many stream-level flow
 	// control tokens we announce to the peer, and how many bytes
 	// we buffer per stream.
-	transportDefaultStreamFlow = 4 << 20
+	transportDefaultStreamFlow = 6291456
 
 	defaultUserAgent = "Go-http-client/2.0"
 
@@ -181,7 +181,7 @@ type Transport struct {
 
 func (t *Transport) maxHeaderListSize() uint32 {
 	if t.MaxHeaderListSize == 0 {
-		return 10 << 20
+		return 262144
 	}
 	if t.MaxHeaderListSize == 0xffffffff {
 		return 0
@@ -803,6 +803,14 @@ func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, erro
 	}
 	if maxHeaderTableSize != initialHeaderTableSize {
 		initialSettings = append(initialSettings, Setting{ID: SettingHeaderTableSize, Val: maxHeaderTableSize})
+	}
+
+	initialSettings = []Setting{
+		{ID: SettingHeaderTableSize, Val: initialHeaderTableSize},
+		{ID: SettingEnablePush, Val: 0},
+		{ID: SettingMaxConcurrentStreams, Val: defaultMaxStreams},
+		{ID: SettingInitialWindowSize, Val: transportDefaultStreamFlow},
+		{ID: SettingMaxHeaderListSize, Val: t.maxHeaderListSize()},
 	}
 
 	cc.bw.Write(clientPreface)
