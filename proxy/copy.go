@@ -76,6 +76,9 @@ func (obj *Client) http22Copy(preCtx context.Context, client *ProxyConn, server 
 				startSize.Add(1)
 				r.URL.Scheme = "https"
 				r.URL.Host = net.JoinHostPort(tools.GetServerName(client.option.host), client.option.port)
+				if obj.RequestCallBack != nil {
+					obj.RequestCallBack(r)
+				}
 				resp, err := serverConn.RoundTrip(r)
 				if err != nil {
 					server.Close()
@@ -155,7 +158,7 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 		defer client.Close()
 		defer server.Close()
 		for {
-			if req, err = client.readRequest(obj.ReadRequestCallBack); err != nil {
+			if req, err = client.readRequest(obj.RequestCallBack); err != nil {
 				return
 			}
 			startSize.Add(1)
@@ -202,7 +205,7 @@ func (obj *Client) http11Copy(ctx context.Context, client *ProxyConn, server *Pr
 	go func() {
 		defer close(donCha)
 		for !server.option.isWs {
-			if req, err = client.readRequest(obj.ReadRequestCallBack); err != nil {
+			if req, err = client.readRequest(obj.RequestCallBack); err != nil {
 				server.Close()
 				client.Close()
 				return
@@ -266,7 +269,7 @@ func (obj *Client) copyMain(ctx context.Context, client *ProxyConn, server *Prox
 	if client.option.schema == "http" {
 		return obj.copyHttpMain(ctx, client, server)
 	} else if client.option.schema == "https" {
-		if obj.ReadRequestCallBack != nil ||
+		if obj.RequestCallBack != nil ||
 			obj.ResponseCallBack != nil || obj.WsCallBack != nil ||
 			obj.ja3 || obj.capture ||
 			http.MethodConnect != client.option.method {
@@ -287,7 +290,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		return obj.http12Copy(ctx, client, server)
 	}
 	if client.option.http2 && server.option.http2 {
-		if obj.ResponseCallBack == nil {
+		if obj.ResponseCallBack == nil && obj.RequestCallBack == nil && !obj.ja3 {
 			go func() {
 				defer client.Close()
 				defer server.Close()
@@ -298,7 +301,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 			return obj.http22Copy(ctx, client, server)
 		}
 	}
-	if obj.ResponseCallBack == nil && obj.WsCallBack == nil && obj.ReadRequestCallBack == nil { //没有回调直接返回
+	if obj.ResponseCallBack == nil && obj.WsCallBack == nil && obj.RequestCallBack == nil { //没有回调直接返回
 		go func() {
 			defer client.Close()
 			defer server.Close()

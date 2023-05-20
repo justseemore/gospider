@@ -87,12 +87,12 @@ type ClientOption struct {
 }
 
 type Client struct {
-	Debug               bool  //是否打印debug
-	Err                 error //错误
-	DisVerify           bool  //关闭验证
-	ResponseCallBack    func(*http.Request, *http.Response)
-	WsCallBack          func(websocket.MessageType, []byte, string)
-	ReadRequestCallBack func(*http.Request)
+	Debug            bool  //是否打印debug
+	Err              error //错误
+	DisVerify        bool  //关闭验证
+	ResponseCallBack func(*http.Request, *http.Response)
+	WsCallBack       func(websocket.MessageType, []byte, string)
+	RequestCallBack  func(*http.Request)
 
 	capture bool
 
