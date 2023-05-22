@@ -912,6 +912,7 @@ func Signal(preCtx context.Context, fun func()) {
 		if fun != nil {
 			fun()
 		}
+		signal.Stop(ch)
 	case s := <-ch:
 		if fun != nil {
 			fun()
