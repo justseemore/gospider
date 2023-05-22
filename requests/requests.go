@@ -255,9 +255,7 @@ func (obj *RequestOption) newCookies() error {
 	}
 	switch cookies := obj.Cookies.(type) {
 	case []*http.Cookie:
-		return nil
-	case Cookies:
-		obj.Cookies = []*http.Cookie(cookies)
+		obj.Cookies = Cookies(cookies)
 		return nil
 	case string:
 		obj.Cookies = ReadCookies(cookies)
@@ -651,7 +649,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	//添加cookies
 
 	if request_option.Cookies != nil {
-		cooks, cookOk := request_option.Cookies.([]*http.Cookie)
+		cooks, cookOk := request_option.Cookies.(Cookies)
 		if !cookOk {
 			return response, tools.WrapError(ErrFatal, "cookies 转换错误")
 		}
