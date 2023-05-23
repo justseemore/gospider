@@ -1,7 +1,7 @@
 # 简介
 ### gospider 是一个golang 爬虫神器，拥有python到golang爬虫过渡的所有必需库。用于python爬虫从业者快速且无坑的过渡到golang
 1. [请求库](../../tree/master/requests)：ja3指纹,http2 指纹,主流代理协议,类型自动转换,覆盖python requests 所有的功能
-2. 代理库：ja3指纹代理,数据抓包,链式代理,客户端协议自动转换
+2. [代理库](../../tree/master/proxy)：ja3指纹代理,数据抓包,链式代理,客户端协议自动转换
 3. [并发库](../../tree/master/thread)：自实现高性能并发库
 4. [执行js,py](../../tree/master/cmd): 通过管道调用js,python 中的方法
 5. [操控浏览器的库](https://github.com/chromedp/chromedp)：建议直接用这个库，基于cdp 协议操控浏览器，干净，快速
@@ -17,7 +17,7 @@ go get -u gitee.com/baixudong/gospider
 
 # 使用本项目已完成的爬虫
 * 五秒盾,瑞数，akamai,PerimeterX 爬虫
-* 快手滑块,淘宝滑块,抖音滑块,抖音视频,评论抓取爬虫
+* 快手滑块,淘宝滑块,抖音滑块,抖音视频,评论抓取爬虫,tiktok爬虫，youtube爬虫
 * 百度地图爬虫,高德地图爬虫,腾讯地图爬虫,大众点评爬虫,小红书,百度翻译爬虫,百度ai 爬虫
 * 企查查爬虫爬虫,天眼查爬虫爬虫,钉钉爬虫
 * 德州仪器下单,监控,欧时rs自动下单，贸泽自动下单爬虫
