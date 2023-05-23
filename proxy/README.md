@@ -53,8 +53,42 @@ func main() {
 	log.Panic(proCli.Run())
 }
 ```
-
-
+## ja3指纹开关
+```go
+func main() {
+	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
+		Port: 7006,
+		Usr:  "admin",
+		Pwd:  "password",
+		Ja3:  true,//开启ja3指纹
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Print(proCli.Addr())
+	log.Panic(proCli.Run())
+}
+```
+## 指定ja3指纹
+```go
+func main() {
+	spec, err := ja3.CreateSpecWithStr("771,4865-4866-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,35-45-43-5-17513-16-23-27-11-0-18-65281-13-51-10-21,29-23-24,0")
+	if err != nil {
+		log.Panic(err)
+	}
+	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
+		Port:    7006,
+		Usr:     "admin",
+		Pwd:     "password",
+		Ja3Spec: spec,
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Print(proCli.Addr())
+	log.Panic(proCli.Run())
+}
+```
 
 
 
