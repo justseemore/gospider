@@ -9,6 +9,11 @@ func (obj *WebSock) PageEnable(ctx context.Context) (RecvData, error) {
 		Method: "Page.enable",
 	})
 }
+func (obj *WebSock) PageGetFrameTree(ctx context.Context) (RecvData, error) {
+	return obj.send(ctx, commend{
+		Method: "Page.getFrameTree",
+	})
+}
 func (obj *WebSock) PageAddScriptToEvaluateOnNewDocument(ctx context.Context, source string) (RecvData, error) {
 	return obj.send(ctx, commend{
 		Method: "Page.addScriptToEvaluateOnNewDocument",

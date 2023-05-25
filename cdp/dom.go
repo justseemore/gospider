@@ -4,13 +4,23 @@ import (
 	"context"
 )
 
-func (obj *WebSock) DOMDescribeNode(ctx context.Context, nodeId int64) (RecvData, error) {
+func (obj *WebSock) DOMEnable(ctx context.Context) (RecvData, error) {
+	return obj.send(ctx, commend{
+		Method: "DOM.enable",
+	})
+}
+func (obj *WebSock) DOMDescribeNode(ctx context.Context, nodeId, backendNodeId int64) (RecvData, error) {
+	params := map[string]any{
+		"depth": 0,
+	}
+	if backendNodeId != 0 {
+		params["backendNodeId"] = backendNodeId
+	} else {
+		params["nodeId"] = nodeId
+	}
 	return obj.send(ctx, commend{
 		Method: "DOM.describeNode",
-		Params: map[string]any{
-			"nodeId": nodeId,
-			"depth":  0,
-		},
+		Params: params,
 	})
 }
 func (obj *WebSock) DOMResolveNode(ctx context.Context, backendNodeId int64) (RecvData, error) {
@@ -18,6 +28,14 @@ func (obj *WebSock) DOMResolveNode(ctx context.Context, backendNodeId int64) (Re
 		Method: "DOM.resolveNode",
 		Params: map[string]any{
 			"backendNodeId": backendNodeId,
+		},
+	})
+}
+func (obj *WebSock) DOMGetFrameOwner(ctx context.Context, frameId string) (RecvData, error) {
+	return obj.send(ctx, commend{
+		Method: "DOM.getFrameOwner",
+		Params: map[string]any{
+			"frameId": frameId,
 		},
 	})
 }
@@ -40,12 +58,16 @@ func (obj *WebSock) DOMSetOuterHTML(ctx context.Context, nodeId int64, outerHTML
 		},
 	})
 }
-func (obj *WebSock) DOMGetOuterHTML(ctx context.Context, nodeId int64) (RecvData, error) {
+func (obj *WebSock) DOMGetOuterHTML(ctx context.Context, nodeId int64, backendNodeId int64) (RecvData, error) {
+	params := map[string]any{}
+	if backendNodeId != 0 {
+		params["backendNodeId"] = backendNodeId
+	} else {
+		params["nodeId"] = nodeId
+	}
 	return obj.send(ctx, commend{
 		Method: "DOM.getOuterHTML",
-		Params: map[string]any{
-			"nodeId": nodeId,
-		},
+		Params: params,
 	})
 }
 func (obj *WebSock) DOMFocus(ctx context.Context, nodeId int64) (RecvData, error) {

@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	_ "unsafe"
 
-	"gitee.com/baixudong/gospider/http2"
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
@@ -49,97 +48,6 @@ func (obj *Client) wsRecv(ctx context.Context, wsClient *websocket.Conn, wsServe
 		if err = wsClient.Send(ctx, msgType, msgData); err != nil {
 			return
 		}
-	}
-}
-
-type Flusher interface {
-	FlushError() error
-}
-
-func (obj *Client) http22Copy(preCtx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
-	defer client.Close()
-	defer server.Close()
-	serverConn, err := obj.http2Transport.NewClientConn(server)
-	if err != nil {
-		return err
-	}
-	defer serverConn.Close()
-	ctx, cnl := context.WithCancel(preCtx)
-	defer cnl()
-	var startSize atomic.Int64
-	var endSize atomic.Int64
-
-	go obj.http2Server.ServeConn(client, &http2.ServeConnOpts{
-		Context: ctx,
-		Handler: http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
-				startSize.Add(1)
-				r.URL.Scheme = "https"
-				r.URL.Host = net.JoinHostPort(tools.GetServerName(client.option.host), client.option.port)
-				if obj.RequestCallBack != nil {
-					obj.RequestCallBack(r)
-				}
-				resp, err := serverConn.RoundTrip(r)
-				if err != nil {
-					server.Close()
-					client.Close()
-					return
-				}
-				if obj.ResponseCallBack != nil {
-					obj.ResponseCallBack(r, resp)
-				}
-				for kk, vvs := range resp.Header {
-					for _, vv := range vvs {
-						w.Header().Add(kk, vv)
-					}
-				}
-				w.WriteHeader(resp.StatusCode)
-				err = tools.CopyWitchContext(r.Context(), w, resp.Body)
-				if err != nil {
-					server.Close()
-					client.Close()
-					return
-				}
-				if flush, ok := w.(Flusher); ok {
-					flush.FlushError()
-				}
-				select {
-				case <-server.option.ctx.Done():
-					select {
-					case <-client.option.ctx.Done():
-					case <-ctx.Done():
-					default:
-						go func() {
-							select {
-							case <-client.option.ctx.Done():
-							case <-ctx.Done():
-							case <-r.Context().Done():
-								client.Close()
-							}
-						}()
-					}
-				default:
-					endSize.Add(1)
-				}
-			},
-		),
-	},
-	)
-	select {
-	case <-client.option.ctx.Done():
-		return
-	case <-server.option.ctx.Done():
-		if startSize.Load() == endSize.Load() {
-			return
-		}
-		select {
-		case <-client.option.ctx.Done():
-			return
-		case <-ctx.Done():
-			return
-		}
-	case <-ctx.Done():
-		return
 	}
 }
 func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
@@ -290,16 +198,12 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		return obj.http12Copy(ctx, client, server)
 	}
 	if client.option.http2 && server.option.http2 {
-		if obj.ResponseCallBack == nil && obj.RequestCallBack == nil && !obj.ja3 {
-			go func() {
-				defer client.Close()
-				defer server.Close()
-				tools.CopyWitchContext(ctx, client, server)
-			}()
-			return tools.CopyWitchContext(ctx, server, client)
-		} else {
-			return obj.http22Copy(ctx, client, server)
-		}
+		go func() {
+			defer client.Close()
+			defer server.Close()
+			tools.CopyWitchContext(ctx, client, server)
+		}()
+		return tools.CopyWitchContext(ctx, server, client)
 	}
 	if obj.ResponseCallBack == nil && obj.WsCallBack == nil && obj.RequestCallBack == nil { //没有回调直接返回
 		go func() {
@@ -346,7 +250,12 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 	if err != nil {
 		return err
 	}
-	tlsClient, http2, err := obj.tlsClient(ctx, client, !server.option.http2, cert) //服务端为h2时，客户端随意，服务端为h1时，客户端必须为h1
+	clientH2 := server.option.http2
+	//如果服务端是h2,需要拦截请求 或需要设置h2指纹，就走12
+	if clientH2 && (obj.ResponseCallBack != nil || obj.RequestCallBack != nil || obj.h2Ja3) {
+		clientH2 = false
+	}
+	tlsClient, http2, err := obj.tlsClient(ctx, client, !clientH2, cert) //服务端为h2时，客户端随意，服务端为h1时，客户端必须为h1
 	if err != nil {
 		return err
 	}

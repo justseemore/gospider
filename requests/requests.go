@@ -139,26 +139,26 @@ type RequestOption struct {
 	Data          any      //发送application/x-www-form-urlencoded,适用于key,val,支持string,[]bytes,json,map
 	body          io.Reader
 	Body          io.Reader
-	Json          any                        //发送application/json,支持：string,[]bytes,json,map
-	Text          any                        //发送text/xml,支持string,[]bytes,json,map
-	Raw           any                        //不设置context-type,支持string,[]bytes,json,map
-	TempData      any                        //临时变量，用于回调存储或自由度更高的用法
-	DisCookie     bool                       //关闭cookies管理,这个请求不用cookies池
-	DisDecode     bool                       //关闭自动解码
-	Bar           bool                       //是否开启bar
-	DisProxy      bool                       //是否关闭代理,强制关闭代理
-	Ja3           bool                       //是否开启ja3
-	Ja3Spec       ja3.ClientHelloSpec        //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
-	TryNum        int64                      //重试次数
-	BeforCallBack func(*RequestOption) error //请求之前回调
-	AfterCallBack func(*Response) error      //请求之后回调
-	ErrCallBack   func(error) bool           //返回true 中断重试请求
-	RedirectNum   int                        //重定向次数,小于零 关闭重定向
-	DisAlive      bool                       //关闭长连接,这次请求不会复用之前的连接
-	DisRead       bool                       //关闭默认读取请求体,不会主动读取body里面的内容，需用你自己读取
-	DisUnZip      bool                       //关闭自动解压
-	Http2         bool                       //开启http2 transport,强制使用http2
-	WsOption      websocket.Option           //websocket option,使用websocket 请求的option
+	Json          any                                         //发送application/json,支持：string,[]bytes,json,map
+	Text          any                                         //发送text/xml,支持string,[]bytes,json,map
+	Raw           any                                         //不设置context-type,支持string,[]bytes,json,map
+	TempData      any                                         //临时变量，用于回调存储或自由度更高的用法
+	DisCookie     bool                                        //关闭cookies管理,这个请求不用cookies池
+	DisDecode     bool                                        //关闭自动解码
+	Bar           bool                                        //是否开启bar
+	DisProxy      bool                                        //是否关闭代理,强制关闭代理
+	Ja3           bool                                        //是否开启ja3
+	Ja3Spec       ja3.ClientHelloSpec                         //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	TryNum        int64                                       //重试次数
+	BeforCallBack func(context.Context, *RequestOption) error //请求之前回调
+	AfterCallBack func(context.Context, *Response) error      //请求之后回调
+	ErrCallBack   func(context.Context, error) bool           //返回true 中断重试请求
+	RedirectNum   int                                         //重定向次数,小于零 关闭重定向
+	DisAlive      bool                                        //关闭长连接,这次请求不会复用之前的连接
+	DisRead       bool                                        //关闭默认读取请求体,不会主动读取body里面的内容，需用你自己读取
+	DisUnZip      bool                                        //关闭自动解压
+	Http2         bool                                        //开启http2 transport,强制使用http2
+	WsOption      websocket.Option                            //websocket option,使用websocket 请求的option
 
 	converUrl   string
 	contentType string
@@ -490,7 +490,7 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 		default:
 			option := optionBak
 			if option.BeforCallBack != nil {
-				if err = option.BeforCallBack(&option); err != nil {
+				if err = option.BeforCallBack(preCtx, &option); err != nil {
 					if errors.Is(err, ErrFatal) {
 						return
 					} else {
@@ -511,12 +511,12 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 					} else {
 						return
 					}
-				} else if option.ErrCallBack != nil && option.ErrCallBack(err) { //不是致命错误，有错误回调,错误回调true,直接返回
+				} else if option.ErrCallBack != nil && option.ErrCallBack(preCtx, err) { //不是致命错误，有错误回调,错误回调true,直接返回
 					return
 				}
 			} else if option.AfterCallBack == nil { //没有错误，且没有回调，直接返回
 				return
-			} else if err = option.AfterCallBack(resp); err != nil { //没有错误，有回调，回调错误
+			} else if err = option.AfterCallBack(preCtx, resp); err != nil { //没有错误，有回调，回调错误
 				if errors.Is(err, ErrFatal) { //没有错误，有回调，回调错误,致命错误直接返回
 					return
 				}

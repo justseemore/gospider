@@ -2951,6 +2951,9 @@ func (w *responseWriter) handlerDone() {
 		responseWriterStatePool.Put(rws)
 	}
 }
+func (w *responseWriter) HandlerDone() {
+	w.rws.handlerDone = true
+}
 
 // Push errors.
 var (

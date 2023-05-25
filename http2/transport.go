@@ -64,6 +64,7 @@ const (
 // A Transport internally caches connections to servers. It is safe
 // for concurrent use by multiple goroutines.
 type Transport struct {
+
 	// DialTLSContext specifies an optional dial function with context for
 	// creating TLS connections for requests.
 	//
@@ -791,27 +792,12 @@ func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, erro
 		cc.tlsState = &state
 	}
 
-	initialSettings := []Setting{
-		{ID: SettingEnablePush, Val: 0},
-		{ID: SettingInitialWindowSize, Val: transportDefaultStreamFlow},
-	}
-	if max := t.maxFrameReadSize(); max != 0 {
-		initialSettings = append(initialSettings, Setting{ID: SettingMaxFrameSize, Val: max})
-	}
-	if max := t.maxHeaderListSize(); max != 0 {
-		initialSettings = append(initialSettings, Setting{ID: SettingMaxHeaderListSize, Val: max})
-	}
-	if maxHeaderTableSize != initialHeaderTableSize {
-		initialSettings = append(initialSettings, Setting{ID: SettingHeaderTableSize, Val: maxHeaderTableSize})
-	}
-
-	initialSettings = []Setting{
-		{ID: SettingHeaderTableSize, Val: initialHeaderTableSize},
-		{ID: SettingEnablePush, Val: 0},
-		{ID: SettingMaxConcurrentStreams, Val: defaultMaxStreams},
-		{ID: SettingInitialWindowSize, Val: transportDefaultStreamFlow},
-		{ID: SettingMaxHeaderListSize, Val: t.maxHeaderListSize()},
-	}
+	initialSettings := []Setting{}
+	initialSettings = append(initialSettings, Setting{ID: SettingHeaderTableSize, Val: maxHeaderTableSize})
+	initialSettings = append(initialSettings, Setting{ID: SettingEnablePush, Val: 0})
+	initialSettings = append(initialSettings, Setting{ID: SettingMaxConcurrentStreams, Val: defaultMaxStreams})
+	initialSettings = append(initialSettings, Setting{ID: SettingInitialWindowSize, Val: transportDefaultStreamFlow})
+	initialSettings = append(initialSettings, Setting{ID: SettingMaxHeaderListSize, Val: t.maxHeaderListSize()})
 
 	cc.bw.Write(clientPreface)
 	cc.fr.WriteSettings(initialSettings...)

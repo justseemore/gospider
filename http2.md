@@ -1,6 +1,13 @@
-# 伪表头
+# 版本
 ```
-m,a,s,p
+v0.10.0
+```
+# 伪表头顺序
+```
+":method"
+":authority"
+":scheme"
+":path"
 ```
 # initialSettings
 ```
@@ -21,7 +28,7 @@ m,a,s,p
     ]
 }
 ```
-## raw
+## 原始
 ```
 	initialSettings := []Setting{
 		{ID: SettingEnablePush, Val: 0},
@@ -37,21 +44,18 @@ m,a,s,p
 		initialSettings = append(initialSettings, Setting{ID: SettingHeaderTableSize, Val: maxHeaderTableSize})
 	}
 ```
-## after
+## 修改后
 ```
-	initialSettings = []Setting{
-		{ID: SettingHeaderTableSize, Val: initialHeaderTableSize},
-		{ID: SettingEnablePush, Val: 0},
-		{ID: SettingMaxConcurrentStreams, Val: defaultMaxStreams},
-		{ID: SettingInitialWindowSize, Val: transportDefaultStreamFlow},
-		{ID: SettingMaxHeaderListSize, Val: t.maxHeaderListSize()},
-	}
+	initialSettings := []Setting{}
+	initialSettings = append(initialSettings, Setting{ID: SettingHeaderTableSize, Val: maxHeaderTableSize})//1
+	initialSettings = append(initialSettings, Setting{ID: SettingEnablePush, Val: 0})//2
+	initialSettings = append(initialSettings, Setting{ID: SettingMaxConcurrentStreams, Val: defaultMaxStreams})//3
+	initialSettings = append(initialSettings, Setting{ID: SettingInitialWindowSize, Val: transportDefaultStreamFlow})//4
+	initialSettings = append(initialSettings, Setting{ID: SettingMaxHeaderListSize, Val: t.maxHeaderListSize()})//6
 ```
-## edit
+## 修改变量
 ```
-initialHeaderTableSize //65536
-defaultMaxStreams  //1000
-transportDefaultStreamFlow //6291456
-(t *Transport) maxHeaderListSize()   //262144
-transportDefaultConnFlow //15663105
+defaultMaxStreams  //3:1000
+transportDefaultStreamFlow //4:6291456
+transportDefaultConnFlow //WINDOW_UPDATE:15663105
 ```

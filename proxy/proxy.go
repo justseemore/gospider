@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"gitee.com/baixudong/gospider/http2"
 	"gitee.com/baixudong/gospider/ja3"
@@ -60,8 +61,11 @@ func getCert2(preCert *x509.Certificate) (tlsCert tls.Certificate, err error) {
 }
 
 type ClientOption struct {
-	Ja3                 bool                                                    //是否开启ja3
-	Ja3Spec             ja3.ClientHelloSpec                                     //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	Ja3     bool                //是否开启ja3
+	Ja3Spec ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+
+	H2Ja3 bool //是否开启h2 指纹
+
 	ProxyJa3            bool                                                    //连接代理时是否开启ja3
 	ProxyJa3Spec        ja3.ClientHelloSpec                                     //连接代理时指定ja3Spec,//指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	DisDnsCache         bool                                                    //是否关闭dns 缓存
@@ -108,10 +112,12 @@ type Client struct {
 	ipWhite        *kinds.Set[string]
 	ja3            bool
 	ja3Spec        ja3.ClientHelloSpec
-	ctx            context.Context
-	cnl            context.CancelFunc
-	host           string
-	port           string
+	h2Ja3          bool
+
+	ctx  context.Context
+	cnl  context.CancelFunc
+	host string
+	port string
 }
 
 func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error) {
@@ -140,6 +146,7 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		server.ja3 = true
 	}
 	server.ja3Spec = option.Ja3Spec
+	server.h2Ja3 = option.H2Ja3
 	//白名单
 	server.ipWhite = kinds.NewSet[string]()
 	for _, ip_white := range option.IpWhite {
@@ -156,10 +163,11 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		LocalAddr:           option.LocalAddr,
 		Ja3:                 option.ProxyJa3,
 		Ja3Spec:             option.ProxyJa3Spec,
-		DisDnsCache:         option.DisDnsCache,
-		Dns:                 option.Dns,
-		GetAddrType:         option.GetAddrType,
-		AddrType:            option.AddrType,
+
+		DisDnsCache: option.DisDnsCache,
+		Dns:         option.Dns,
+		GetAddrType: option.GetAddrType,
+		AddrType:    option.AddrType,
 	}); err != nil {
 		return nil, err
 	}
@@ -182,7 +190,14 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 	}
 	server.capture = option.Capture
 	server.http2Server = new(http2.Server)
-	server.http2Transport = new(http2.Transport)
+	server.http2Transport = &http2.Transport{
+		MaxDecoderHeaderTableSize: 65536,  //1:initialHeaderTableSize,65536
+		MaxEncoderHeaderTableSize: 65536,  //1:initialHeaderTableSize,65536
+		MaxHeaderListSize:         262144, //6:MaxHeaderListSize,262144
+
+		AllowHTTP:   true,
+		PingTimeout: time.Second * time.Duration(option.TLSHandshakeTimeout),
+	}
 	return &server, nil
 }
 

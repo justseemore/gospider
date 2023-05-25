@@ -13,6 +13,10 @@ import (
 
 func newHttp2Transport(ctx context.Context, session_option ClientOption, dialCli *DialClient) *http2.Transport {
 	return &http2.Transport{
+		MaxDecoderHeaderTableSize: 65536,  //1:initialHeaderTableSize,65536
+		MaxEncoderHeaderTableSize: 65536,  //1:initialHeaderTableSize,65536
+		MaxHeaderListSize:         262144, //6:MaxHeaderListSize,262144
+
 		DisableCompression: session_option.DisCompression,
 		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
 		DialTLSContext:     dialCli.requestHttp2DialTlsContext,
@@ -59,13 +63,6 @@ func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli 
 }
 
 func cloneTransport(t *http2.Transport) *http2.Transport {
-	return &http2.Transport{
-		DisableCompression: t.DisableCompression,
-		TLSClientConfig:    t.TLSClientConfig,
-		DialTLSContext:     t.DialTLSContext,
-		AllowHTTP:          t.AllowHTTP,
-		ReadIdleTimeout:    t.ReadIdleTimeout, //空闲连接在连接池中的超时时间
-		PingTimeout:        t.PingTimeout,
-		WriteByteTimeout:   t.WriteByteTimeout,
-	}
+	t2 := *t
+	return &t2
 }
