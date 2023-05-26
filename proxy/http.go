@@ -16,7 +16,7 @@ import (
 func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	defer client.Close()
 	var err error
-	clientReq, err := client.readRequest(obj.RequestCallBack)
+	clientReq, err := client.readRequest(ctx, obj.RequestCallBack)
 	if err != nil {
 		return err
 	}

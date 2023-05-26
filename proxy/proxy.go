@@ -100,7 +100,6 @@ type Client struct {
 
 	capture bool
 
-	http2Server    *http2.Server
 	http2Transport *http2.Transport
 	cert           tls.Certificate
 	dialer         *requests.DialClient //连接的Dialer
@@ -189,14 +188,12 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		return nil, err
 	}
 	server.capture = option.Capture
-	server.http2Server = new(http2.Server)
 	server.http2Transport = &http2.Transport{
 		MaxDecoderHeaderTableSize: 65536,  //1:initialHeaderTableSize,65536
 		MaxEncoderHeaderTableSize: 65536,  //1:initialHeaderTableSize,65536
 		MaxHeaderListSize:         262144, //6:MaxHeaderListSize,262144
-
-		AllowHTTP:   true,
-		PingTimeout: time.Second * time.Duration(option.TLSHandshakeTimeout),
+		AllowHTTP:                 true,
+		PingTimeout:               time.Second * time.Duration(option.TLSHandshakeTimeout),
 	}
 	return &server, nil
 }

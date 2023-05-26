@@ -121,8 +121,19 @@ func (obj *ProxyConn) readResponse(req *http.Request) (*http.Response, error) {
 	}
 	return response, err
 }
-func (obj *ProxyConn) readRequest(readRequestCallBack func(*http.Request)) (*http.Request, error) {
-	clientReq, err := readRequest(obj.reader)
+func (obj *ProxyConn) readRequest(ctx context.Context, readRequestCallBack func(*http.Request)) (*http.Request, error) {
+	var clientReq *http.Request
+	var err error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		clientReq, err = readRequest(obj.reader)
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-done:
+	}
 	if err != nil {
 		return clientReq, err
 	}

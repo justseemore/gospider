@@ -8,7 +8,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"sync/atomic"
 	_ "unsafe"
 
 	"gitee.com/baixudong/gospider/ja3"
@@ -60,117 +59,57 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 	defer serverConn.Close()
 	var req *http.Request
 	var resp *http.Response
-	var startSize atomic.Int64
-	var endSize atomic.Int64
-	go func() {
-		defer client.Close()
-		defer server.Close()
-		for {
-			if req, err = client.readRequest(obj.RequestCallBack); err != nil {
-				return
-			}
-			startSize.Add(1)
-			req.Proto = "HTTP/2.0"
-			req.ProtoMajor = 2
-			req.ProtoMinor = 0
-			if resp, err = serverConn.RoundTrip(req); err != nil {
-				return
-			}
-			if obj.ResponseCallBack != nil {
-				obj.ResponseCallBack(req, resp)
-			}
-			resp.Proto = "HTTP/1.1"
-			resp.ProtoMajor = 1
-			resp.ProtoMinor = 1
-			if err = resp.Write(client); err != nil {
-				return
-			}
-			select {
-			case <-server.option.ctx.Done():
-				return
-			default:
-				endSize.Add(1)
-			}
-		}
-	}()
-	select {
-	case <-client.option.ctx.Done():
-		return
-	case <-server.option.ctx.Done():
-		if startSize.Load() == endSize.Load() {
+	for {
+		if req, err = client.readRequest(server.option.ctx, obj.RequestCallBack); err != nil {
 			return
 		}
-		<-client.option.ctx.Done()
-		return
+		req = req.WithContext(client.option.ctx)
+		req.Proto = "HTTP/2.0"
+		req.ProtoMajor = 2
+		req.ProtoMinor = 0
+		if resp, err = serverConn.RoundTrip(req); err != nil {
+			return
+		}
+		resp.Proto = "HTTP/1.1"
+		if resp.ContentLength <= 0 {
+			resp.TransferEncoding = []string{"chunked"}
+		}
+		resp.ProtoMajor = 1
+		resp.ProtoMinor = 1
+		resp.Request = req.WithContext(server.option.ctx)
+		if obj.ResponseCallBack != nil {
+			obj.ResponseCallBack(req, resp)
+		}
+		if err = resp.Write(client); err != nil {
+			return
+		}
 	}
 }
 func (obj *Client) http11Copy(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
+	defer client.Close()
+	defer server.Close()
 	var req *http.Request
 	var rsp *http.Response
-	var startSize atomic.Int64
-	var endSize atomic.Int64
-	donCha := make(chan struct{})
-	go func() {
-		defer close(donCha)
-		for !server.option.isWs {
-			if req, err = client.readRequest(obj.RequestCallBack); err != nil {
-				server.Close()
-				client.Close()
-				return
-			}
-			startSize.Add(1)
-			if err = req.Write(server); err != nil {
-				server.Close()
-				client.Close()
-				return
-			}
-			if rsp, err = server.readResponse(req); err != nil {
-				server.Close()
-				client.Close()
-				return
-			}
-			if obj.ResponseCallBack != nil {
-				obj.ResponseCallBack(req, rsp)
-			}
-			if err = rsp.Write(client); err != nil {
-				server.Close()
-				client.Close()
-				return
-			}
-			select {
-			case <-server.option.ctx.Done():
-				err = errors.New("server closed")
-				client.Close()
-				return
-			default:
-				endSize.Add(1)
-			}
-		}
-	}()
-
-	select {
-	case <-donCha:
-		return
-	case <-client.option.ctx.Done():
-		server.Close()
-		if err == nil {
-			err = errors.New("client closed")
-		}
-		return
-	case <-server.option.ctx.Done():
-		if startSize.Load() == endSize.Load() {
-			client.Close()
-			if err == nil {
-				err = errors.New("server closed")
-			}
+	for !server.option.isWs {
+		if req, err = client.readRequest(server.option.ctx, obj.RequestCallBack); err != nil {
 			return
 		}
-		<-client.option.ctx.Done()
-		if err == nil {
-			err = errors.New("server closed")
+		req = req.WithContext(client.option.ctx)
+		if err = req.Write(server); err != nil {
+			return
 		}
-		return
+		if rsp, err = server.readResponse(req); err != nil {
+			return
+		}
+		rsp.Request = req.WithContext(server.option.ctx)
+		if obj.ResponseCallBack != nil {
+			obj.ResponseCallBack(req, rsp)
+		}
+		if err = rsp.Write(client); err != nil {
+			return
+		}
 	}
+	return
 }
 
 func (obj *Client) copyMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
