@@ -140,7 +140,12 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 		}
 	}
 	if disHttp2 {
-		utlsConn = utls.UClient(conn, &utls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"http/1.1"}}, utls.HelloCustom)
+		utlsConn = utls.UClient(conn, &utls.Config{
+			InsecureSkipVerify: true,
+			ServerName:         tools.GetServerName(addr),
+			NextProtos:         []string{"http/1.1"},
+		},
+			utls.HelloCustom)
 		for _, Extension := range utlsSpec.Extensions {
 			alpns, ok := Extension.(*utls.ALPNExtension)
 			if ok {
@@ -214,7 +219,19 @@ func getExtensionWithId(extensionId uint16) utls.TLSExtension {
 	case 35:
 		return &utls.SessionTicketExtension{}
 	case 41:
-		return &utls.FakePreSharedKeyExtension{}
+		return &utls.FakePreSharedKeyExtension{
+			PskIdentities: []utls.PskIdentity{ // must set identity
+				{
+					Label:               []byte("blahblahblah"), // change this
+					ObfuscatedTicketAge: 0,                      // change this
+				},
+			},
+			PskBinders: [][]byte{ // must set psk binders
+				{
+					0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // change this
+				},
+			},
+		}
 	case 44:
 		return &utls.CookieExtension{}
 	case 45:

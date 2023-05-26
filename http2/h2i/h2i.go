@@ -408,7 +408,7 @@ func (app *h2i) cmdHeaders(args []string) error {
 			break
 		}
 	}
-	req, err := httpbufio.NewReader(&h1req))
+	req, err := http.ReadRequest(bufio.NewReader(&h1req))
 	if err != nil {
 		app.logf("Invalid HTTP/1.1 request: %v", err)
 		return nil

@@ -254,6 +254,8 @@ func (obj *RequestOption) newCookies() error {
 		return nil
 	}
 	switch cookies := obj.Cookies.(type) {
+	case Cookies:
+		return nil
 	case []*http.Cookie:
 		obj.Cookies = Cookies(cookies)
 		return nil
@@ -517,7 +519,15 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 			} else if option.AfterCallBack == nil { //没有错误，且没有回调，直接返回
 				return
 			} else if err = option.AfterCallBack(preCtx, resp); err != nil { //没有错误，有回调，回调错误
-				if errors.Is(err, ErrFatal) { //没有错误，有回调，回调错误,致命错误直接返回
+				if errors.Is(err, ErrFatal) { //致命错误直接返回
+					if option.Ja3 && !setHttp2Try && strings.Contains(err.Error(), "http2=true") {
+						obj.http2Keys.Add(option.Url.Host)
+						setHttp2Try = true
+						tryNum--
+					} else {
+						return
+					}
+				} else if option.ErrCallBack != nil && option.ErrCallBack(preCtx, err) { //不是致命错误，有错误回调,错误回调true,直接返回
 					return
 				}
 			} else { //没有错误，有回调，没有回调错误，直接返回

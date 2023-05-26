@@ -586,9 +586,17 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		}
 	} else {
 		if reqData.ws {
-			tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: reqData.host, NextProtos: []string{"http/1.1"}})
+			tlsConn = tls.Client(conn, &tls.Config{
+				InsecureSkipVerify: true,
+				ServerName:         reqData.host,
+				NextProtos:         []string{"http/1.1"},
+			})
 		} else {
-			tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: reqData.host, NextProtos: []string{"h2", "http/1.1"}})
+			tlsConn = tls.Client(conn, &tls.Config{
+				InsecureSkipVerify: true,
+				ServerName:         reqData.host,
+				NextProtos:         []string{"h2", "http/1.1"},
+			})
 		}
 	}
 	if reqData.isCallback && reqData.proxyUser != nil && reqData.proxy.Scheme == "https" && reqData.url.Scheme == "http" { //官方代理,有账号密码，代理为https,url 为http ，添加账号
