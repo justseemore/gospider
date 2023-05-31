@@ -534,26 +534,16 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 		reqData.host = tools.GetServerName(addr)
 	}
 	var nowProxy *url.URL
+	var err error
 	if reqData.disProxy { //关闭代理直接返回
 		return obj.DialContext(ctx, network, addr)
 	} else if reqData.proxy != nil { //单独代理设置优先级最高
-		nowProxy = cloneUrl(reqData.proxy)
 		if reqData.isCallback { //走官方代理
-			if nowProxy.Scheme == "https" {
-				reqData.host = tools.GetServerName(nowProxy.Hostname())
-			}
-			if reqData.proxyUser != nil { //需要隐藏用户密码
-				nowProxy.User = reqData.proxyUser
-				if nowProxy.Scheme == "http" && reqData.url.Scheme == "http" { //这种情况添加用户密码
-					return obj.Http2HttpProxy(ctx, network, nowProxy)
-				}
-			}
 			return obj.DialContext(ctx, network, addr)
 		}
-	} else if tempProxy, err := obj.GetProxy(ctx, reqData.url); err != nil {
+		nowProxy = reqData.proxy
+	} else if nowProxy, err = obj.GetProxy(ctx, reqData.url); err != nil {
 		return nil, err
-	} else if tempProxy != nil {
-		nowProxy = cloneUrl(tempProxy)
 	}
 	if nowProxy != nil { //走自实现代理
 		return obj.DialContextForProxy(ctx, network, reqData.url.Scheme, addr, reqData.host, nowProxy)
@@ -571,19 +561,8 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		return nil, err
 	}
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
-
-	if reqData.ja3 {
-		if utlsConn, err := ja3.NewClient(ctx, conn, reqData.ja3Spec, reqData.ws, reqData.host); err != nil {
-			return utlsConn, err
-		} else if reqData.h2 != (utlsConn.ConnectionState().NegotiatedProtocol == "h2") {
-			if utlsConn.ConnectionState().NegotiatedProtocol == "h2" {
-				return utlsConn, tools.WrapError(ErrFatal, "请强制设置http2=true")
-			} else {
-				return utlsConn, tools.WrapError(ErrFatal, "请强制设置http2=false")
-			}
-		} else {
-			tlsConn = utlsConn
-		}
+	if reqData.ja3 { //使用ja3 指纹
+		tlsConn, err = ja3.NewClient(ctx, conn, reqData.ja3Spec, reqData.ws, reqData.host)
 	} else {
 		if reqData.ws {
 			tlsConn = tls.Client(conn, &tls.Config{
@@ -598,11 +577,6 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 				NextProtos:         []string{"h2", "http/1.1"},
 			})
 		}
-	}
-	if reqData.isCallback && reqData.proxyUser != nil && reqData.proxy.Scheme == "https" && reqData.url.Scheme == "http" { //官方代理,有账号密码，代理为https,url 为http ，添加账号
-		nowProxy := cloneUrl(reqData.proxy)
-		nowProxy.User = reqData.proxyUser
-		return obj.newPwdConn(tlsConn, nowProxy), err
 	}
 	return tlsConn, err
 }

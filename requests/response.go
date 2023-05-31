@@ -238,6 +238,9 @@ func (obj *Response) Content(val ...[]byte) []byte {
 		obj.content = val[0]
 		return obj.content
 	}
+	if obj.webSocket != nil {
+		return obj.content
+	}
 	select {
 	case <-obj.ctx.Done():
 	default:

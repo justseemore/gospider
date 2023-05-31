@@ -63,7 +63,7 @@ const (
 	NextProtoTLS = "h2"
 
 	// https://httpwg.org/specs/rfc7540.html#SettingValues
-	initialHeaderTableSize = 65536
+	initialHeaderTableSize = 4096
 
 	initialWindowSize = 65535 // 6.9.2 Initial Flow Control Window Size
 

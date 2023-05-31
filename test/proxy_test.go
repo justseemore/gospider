@@ -46,8 +46,19 @@ func TestProxy(t *testing.T) {
 }
 
 func TestProxy2(t *testing.T) {
+	proCliPre, err := proxy.NewClient(nil, proxy.ClientOption{
+		Usr: "gospider",
+		Pwd: "gospider123456789",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proCliPre.Close()
+	go proCliPre.Run()
+	proIp := proCliPre.Addr()
+
 	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
-		Proxy: "https://gospider:gospider123456789@gospider2.gospiderb.asia",
+		Proxy: "https://gospider:gospider123456789@" + proIp,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -84,11 +95,12 @@ func TestProxy2(t *testing.T) {
 }
 
 func TestProxyJa3(t *testing.T) {
-	proCli, err := proxy.NewClient(nil, proxy.ClientOption{Ja3: true})
+	proCli, err := proxy.NewClient(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proCli.Close()
+	proCli.Ja3 = true
 	proCli.DisVerify = true //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
 	go proCli.Run()
 	proxyIp := proCli.Addr()
@@ -127,11 +139,13 @@ func TestProxyJa3(t *testing.T) {
 	}
 }
 func TestProxyH2Ja3(t *testing.T) {
-	proCli, err := proxy.NewClient(nil, proxy.ClientOption{Ja3: true, H2Ja3: true})
+	proCli, err := proxy.NewClient(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proCli.Close()
+	proCli.Ja3 = true
+	proCli.H2Ja3 = true
 	proCli.DisVerify = true //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
 	go proCli.Run()
 	proxyIp := proCli.Addr()
@@ -173,12 +187,12 @@ func TestProxyAuth(t *testing.T) {
 	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
 		Usr: "admin",
 		Pwd: "password",
-		Ja3: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proCli.Close()
+	proCli.Ja3 = true
 	go proCli.Run()
 	proxyIp := proCli.Addr()
 	reqCli, err := requests.NewClient(nil, requests.ClientOption{})
@@ -213,11 +227,12 @@ func TestProxyAuth(t *testing.T) {
 }
 
 func TestProxyJa32(t *testing.T) {
-	proCli, err := proxy.NewClient(nil, proxy.ClientOption{Ja3: true})
+	proCli, err := proxy.NewClient(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proCli.Close()
+	proCli.Ja3 = true
 	proCli.DisVerify = true //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
 	go proCli.Run()
 	proxyIp := proCli.Addr()

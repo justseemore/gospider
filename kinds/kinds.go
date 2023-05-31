@@ -26,7 +26,7 @@ func (obj *Set[T]) Add(value T) {
 }
 
 // 删除元素
-func (obj *Set[T]) Rem(value T) bool {
+func (obj *Set[T]) Del(value T) bool {
 	obj.lock.Lock()
 	delete(obj.Data, value)
 	obj.lock.Unlock()

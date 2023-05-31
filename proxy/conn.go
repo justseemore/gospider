@@ -9,6 +9,7 @@ import (
 	"time"
 	_ "unsafe"
 
+	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/websocket"
 	utls "github.com/refraction-networking/utls"
 )
@@ -17,6 +18,11 @@ import (
 func readRequest(b *bufio.Reader) (*http.Request, error)
 
 type ProxyOption struct {
+	ja3       bool                //是否启动ja3
+	ja3Spec   ja3.ClientHelloSpec //ja3指纹
+	h2Ja3     bool                //是否启动h2Ja3
+	h2Ja3Spec ja3.H2Ja3Spec       //h2Ja3指纹
+
 	init     bool
 	http2    bool
 	host     string
@@ -121,7 +127,7 @@ func (obj *ProxyConn) readResponse(req *http.Request) (*http.Response, error) {
 	}
 	return response, err
 }
-func (obj *ProxyConn) readRequest(ctx context.Context, readRequestCallBack func(*http.Request)) (*http.Request, error) {
+func (obj *ProxyConn) readRequest(ctx context.Context, requestCallBack func(*http.Request) error) (*http.Request, error) {
 	var clientReq *http.Request
 	var err error
 	done := make(chan struct{})
@@ -137,8 +143,10 @@ func (obj *ProxyConn) readRequest(ctx context.Context, readRequestCallBack func(
 	if err != nil {
 		return clientReq, err
 	}
-	if readRequestCallBack != nil {
-		readRequestCallBack(clientReq)
+	if requestCallBack != nil {
+		if err = requestCallBack(clientReq); err != nil {
+			return clientReq, err
+		}
 	}
 	obj.option.init = true
 	if clientReq.Header.Get("Upgrade") == "websocket" {

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -106,7 +107,9 @@ var ClientHelloIDs = []ClientHelloId{
 	HelloQQ_11_1,
 }
 
-func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disHttp2 bool, addr string) (utlsConn *utls.UConn, err error) {
+func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disHttp2 bool, addr string) (*tls.Conn, error) {
+	var utlsConn *utls.UConn
+	var err error
 	defer func() {
 		if err != nil {
 			conn.Close()
@@ -118,7 +121,7 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 	var utlsSpec utls.ClientHelloSpec
 	if !ja3Spec.IsSet() {
 		if ja3Spec, err = CreateSpecWithId(HelloChrome_Auto); err != nil {
-			return
+			return nil, err
 		}
 		utlsSpec = utls.ClientHelloSpec(ja3Spec)
 	} else {
@@ -142,8 +145,15 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 	if disHttp2 {
 		utlsConn = utls.UClient(conn, &utls.Config{
 			InsecureSkipVerify: true,
-			ServerName:         tools.GetServerName(addr),
+			ServerName:         addr,
 			NextProtos:         []string{"http/1.1"},
+			SessionTicketKey: [32]byte{
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+			},
+			ClientSessionCache: utls.NewLRUClientSessionCache(0),
 		},
 			utls.HelloCustom)
 		for _, Extension := range utlsSpec.Extensions {
@@ -164,15 +174,70 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 			InsecureSkipTimeVerify: true,
 			ServerName:             tools.GetServerName(addr),
 			NextProtos:             []string{"h2", "http/1.1"},
+			SessionTicketKey: [32]byte{
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+			},
+			ClientSessionCache: utls.NewLRUClientSessionCache(0),
 		},
 			utls.HelloCustom,
 		)
 	}
 	if err = utlsConn.ApplyPreset(&utlsSpec); err != nil {
-		return
+		return nil, err
 	}
 	err = utlsConn.HandshakeContext(ctx)
-	return
+	if err != nil {
+		return nil, err
+	}
+	//获取cert
+	certs := utlsConn.ConnectionState().PeerCertificates
+	var cert tls.Certificate
+	if len(certs) > 0 {
+		cert, err = tools.GetProxyCertWithCert(certs[0])
+	} else {
+		cert, err = tools.GetProxyCertWithName(tools.GetServerName(addr))
+	}
+	if err != nil {
+		return nil, err
+	}
+	localConn, remoteConn := net.Pipe()
+	//正常路径发送方
+	tlsConn := tls.Client(localConn, &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         addr,
+		NextProtos:         []string{"h2", "http/1.1"},
+	})
+	//代理接收方
+	tlsClientConn := tls.Server(remoteConn, &tls.Config{
+		InsecureSkipVerify: true,
+		Certificates:       []tls.Certificate{cert},
+		NextProtos:         []string{utlsConn.ConnectionState().NegotiatedProtocol},
+	})
+	go func() {
+		defer tlsConn.Close()
+		defer tlsClientConn.Close()
+		defer utlsConn.Close()
+		err = tlsClientConn.HandshakeContext(ctx)
+		if err != nil {
+			return
+		}
+		go func() {
+			defer tlsClientConn.Close()
+			defer utlsConn.Close()
+			_, err = io.Copy(utlsConn, tlsClientConn)
+		}()
+		_, err = io.Copy(tlsClientConn, utlsConn)
+	}()
+	err = tlsConn.HandshakeContext(ctx)
+	if err != nil {
+		defer tlsConn.Close()
+		defer tlsClientConn.Close()
+		defer utlsConn.Close()
+	}
+	return tlsConn, err
 }
 
 // https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
@@ -222,13 +287,16 @@ func getExtensionWithId(extensionId uint16) utls.TLSExtension {
 		return &utls.FakePreSharedKeyExtension{
 			PskIdentities: []utls.PskIdentity{ // must set identity
 				{
-					Label:               []byte("blahblahblah"), // change this
-					ObfuscatedTicketAge: 0,                      // change this
+					Label:               []byte("gospider"), // change this
+					ObfuscatedTicketAge: 1,                  // change this
 				},
 			},
 			PskBinders: [][]byte{ // must set psk binders
 				{
-					0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // change this
+					0, 0, 0, 0, 0, 0, 0, 0,
+					0, 0, 0, 0, 0, 0, 0, 0,
+					0, 0, 0, 0, 0, 0, 0, 0,
+					0, 0, 0, 0, 0, 0, 0, 0,
 				},
 			},
 		}
@@ -378,9 +446,29 @@ func isGREASEUint16(v uint16) bool {
 
 type ClientHelloSpec utls.ClientHelloSpec
 
-func (obj ClientHelloSpec) IsSet() bool {
+func (obj ClientHelloSpec) IsSet() bool { //是否设置了
 	if obj.CipherSuites != nil || obj.Extensions != nil || obj.CompressionMethods != nil ||
 		obj.TLSVersMax != 0 || obj.TLSVersMin != 0 {
+		return true
+	}
+	return false
+}
+
+type Setting struct {
+	// ID is which setting is being set.
+	// See https://httpwg.org/specs/rfc7540.html#SettingFormat
+	Id uint16
+	// Val is the value.
+	Val uint32
+}
+type H2Ja3Spec struct {
+	InitialSetting []Setting
+	ConnFlow       uint32   //WINDOW_UPDATE:15663105
+	OrderHeaders   []string //伪标头顺序,例如：[]string{":method",":authority",":scheme",":path"}
+}
+
+func (obj H2Ja3Spec) IsSet() bool { //是否设置了
+	if obj.InitialSetting != nil || obj.ConnFlow != 0 {
 		return true
 	}
 	return false

@@ -6,9 +6,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 
-	"gitee.com/baixudong/gospider/http2"
 	"gitee.com/baixudong/gospider/ja3"
-	"gitee.com/baixudong/gospider/kinds"
 )
 
 type ClientOption struct {
@@ -29,31 +27,28 @@ type ClientOption struct {
 	Dns                   string              //dns
 	Ja3                   bool                //开启ja3
 	Ja3Spec               ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	H2Ja3Spec             ja3.H2Ja3Spec       //h2指纹
 }
 type Client struct {
-	RedirectNum    int                                         //重定向次数
-	DisDecode      bool                                        //关闭自动编码
-	DisRead        bool                                        //关闭默认读取请求体
-	DisUnZip       bool                                        //变比自动解压
-	TryNum         int64                                       //重试次数
-	BeforCallBack  func(context.Context, *RequestOption) error //请求前回调的方法
-	AfterCallBack  func(context.Context, *Response) error      //请求后回调的方法
-	ErrCallBack    func(context.Context, error) bool           //请求error回调
-	Timeout        int64                                       //请求超时时间
-	Http2          bool                                        //开启http2 transport
-	Headers        any                                         //请求头
-	Bar            bool                                        //是否开启bar
-	http2Keys      *kinds.Set[string]
-	ja3            bool                //开启ja3
-	ja3Spec        ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
-	disCookie      bool
-	disAlive       bool
-	client         *http.Client
-	baseTransport  *http.Transport
-	client2        *http.Client
-	baseTransport2 *http2.Transport
-	ctx            context.Context
-	cnl            context.CancelFunc
+	RedirectNum   int                                         //重定向次数
+	DisDecode     bool                                        //关闭自动编码
+	DisRead       bool                                        //关闭默认读取请求体
+	DisUnZip      bool                                        //变比自动解压
+	TryNum        int64                                       //重试次数
+	BeforCallBack func(context.Context, *RequestOption) error //请求前回调的方法
+	AfterCallBack func(context.Context, *Response) error      //请求后回调的方法
+	ErrCallBack   func(context.Context, error) bool           //请求error回调
+	Timeout       int64                                       //请求超时时间
+	Headers       any                                         //请求头
+	Bar           bool                                        //是否开启bar
+	ja3           bool                                        //开启ja3
+	ja3Spec       ja3.ClientHelloSpec                         //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	disCookie     bool
+	disAlive      bool
+	client        *http.Client
+	baseTransport *http.Transport
+	ctx           context.Context
+	cnl           context.CancelFunc
 }
 
 // 新建一个请求客户端,发送请求必须创建哈
@@ -102,7 +97,6 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		return nil, err
 	}
 	var client http.Client
-	var client2 http.Client
 	//创建cookiesjar
 	var jar *cookiejar.Jar
 	if !session_option.DisCookie {
@@ -112,28 +106,18 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		}
 	}
 	baseTransport := newHttpTransport(ctx, session_option, dialClient)
-	baseTransport2 := newHttp2Transport(ctx, session_option, dialClient)
-
 	client.Transport = baseTransport.Clone()
-	client2.Transport = cloneTransport(baseTransport2)
-
 	client.Jar = jar
-	client2.Jar = jar
-
 	client.CheckRedirect = checkRedirect
-	client2.CheckRedirect = checkRedirect
 	result := &Client{
-		ctx:            ctx,
-		cnl:            cnl,
-		client:         &client,
-		baseTransport:  &baseTransport,
-		client2:        &client2,
-		baseTransport2: baseTransport2,
-		disAlive:       session_option.DisAlive,
-		disCookie:      session_option.DisCookie,
-		ja3:            session_option.Ja3,
-		ja3Spec:        session_option.Ja3Spec,
-		http2Keys:      kinds.NewSet[string](),
+		ctx:           ctx,
+		cnl:           cnl,
+		client:        &client,
+		baseTransport: &baseTransport,
+		disAlive:      session_option.DisAlive,
+		disCookie:     session_option.DisCookie,
+		ja3:           session_option.Ja3,
+		ja3Spec:       session_option.Ja3Spec,
 	}
 	if isG {
 		go func() {
@@ -160,18 +144,10 @@ func (obj *Client) clone(request_option RequestOption) *http.Client {
 	if !request_option.DisCookie && obj.client.Jar != nil {
 		cli.Jar = obj.client.Jar
 	}
-	if request_option.Http2 {
-		if !request_option.DisAlive {
-			cli.Transport = obj.client2.Transport
-		} else {
-			cli.Transport = cloneTransport(obj.baseTransport2)
-		}
+	if !request_option.DisAlive {
+		cli.Transport = obj.client.Transport
 	} else {
-		if !request_option.DisAlive {
-			cli.Transport = obj.client.Transport
-		} else {
-			cli.Transport = obj.baseTransport.Clone()
-		}
+		cli.Transport = obj.baseTransport.Clone()
 	}
 	return cli
 }
@@ -180,7 +156,6 @@ func (obj *Client) clone(request_option RequestOption) *http.Client {
 func (obj *Client) Clone() *Client {
 	result := *obj
 	result.client.Transport = result.baseTransport.Clone()
-	result.client2.Transport = cloneTransport(result.baseTransport2)
 	return &result
 }
 
@@ -216,8 +191,6 @@ func (obj *Client) Closed() bool {
 func (obj *Client) CloseIdleConnections() {
 	obj.client.CloseIdleConnections()
 	obj.baseTransport.CloseIdleConnections()
-	obj.client2.CloseIdleConnections()
-	obj.baseTransport2.CloseIdleConnections()
 }
 
 // 返回url 的cookies,也可以设置url 的cookies
@@ -250,9 +223,6 @@ func (obj *Client) getClient(request_option RequestOption) *http.Client {
 		temp_client := obj.clone(request_option)
 		return temp_client
 	} else {
-		if request_option.Http2 {
-			return obj.client2
-		}
 		return obj.client
 	}
 }

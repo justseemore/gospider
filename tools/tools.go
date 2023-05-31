@@ -51,6 +51,8 @@ import (
 
 	_ "image/png"
 
+	_ "embed"
+
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/re"
 	_ "golang.org/x/image/webp"
@@ -58,6 +60,11 @@ import (
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
+//go:embed gospider.crt
+var CrtFile []byte
+
+//go:embed gospider.key
+var KeyFile []byte
 var JsonConfig = jsoniter.Config{
 	EscapeHTML:    true,
 	CaseSensitive: true,
@@ -495,6 +502,7 @@ var Rand = rand.New(rand.NewSource(time.Now().UnixMilli()))
 var bidChars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 
 var defaultAlphabet = []rune(bidChars)
+var defaultAlphabetLen = len(defaultAlphabet)
 
 // naoid 生成
 func NaoId(l ...int) string {
@@ -504,11 +512,27 @@ func NaoId(l ...int) string {
 	} else {
 		size = 21
 	}
-	bytes := make([]byte, size)
-	Rand.Read(bytes)
 	id := make([]rune, size)
 	for i := 0; i < size; i++ {
-		id[i] = defaultAlphabet[bytes[i]&63]
+		id[i] = defaultAlphabet[RanInt(0, defaultAlphabetLen)]
+	}
+	return string(id)
+}
+
+// naoid 生成
+func NaoIdWithStr(val string, l ...int) string {
+	var size int
+	if len(l) > 0 {
+		size = l[0]
+	} else {
+		size = 21
+	}
+	alphabet := []rune(val)
+	alphabetLen := len(alphabet)
+
+	id := make([]rune, size)
+	for i := 0; i < size; i++ {
+		id[i] = alphabet[RanInt(0, alphabetLen)]
 	}
 	return string(id)
 }
@@ -627,18 +651,26 @@ func FreePort() (int, error) {
 	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port, err
 }
-func RanInt(val, val2 int64) int64 {
+func RanInt64(val, val2 int64) int64 {
 	if val == val2 {
 		return val
 	} else if val2 > val {
 		return val + Rand.Int63n(val2-val)
 	} else {
 		return val2 + Rand.Int63n(val-val2)
-
+	}
+}
+func RanInt(val, val2 int) int {
+	if val == val2 {
+		return val
+	} else if val2 > val {
+		return val + Rand.Intn(val2-val)
+	} else {
+		return val2 + Rand.Intn(val-val2)
 	}
 }
 func RanFloat64(val, val2 int64) float64 {
-	return float64(RanInt(val, val2)) + Rand.Float64()
+	return float64(RanInt64(val, val2)) + Rand.Float64()
 }
 
 // :param point0: 起点
@@ -827,6 +859,36 @@ func GetCertWithCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey, preCert 
 	}
 	return x509.ParseCertificate(der)
 }
+func GetProxyCertWithName(serverName string) (tlsCert tls.Certificate, err error) {
+	crt, err := LoadCertData(CrtFile)
+	if err != nil {
+		return tlsCert, err
+	}
+	key, err := LoadCertKeyData(KeyFile)
+	if err != nil {
+		return tlsCert, err
+	}
+	cert, err := GetCertWithCN(crt, key, serverName)
+	if err != nil {
+		return tlsCert, err
+	}
+	return GetTlsCert(cert, key)
+}
+func GetProxyCertWithCert(preCert *x509.Certificate) (tlsCert tls.Certificate, err error) {
+	crt, err := LoadCertData(CrtFile)
+	if err != nil {
+		return tlsCert, err
+	}
+	key, err := LoadCertKeyData(KeyFile)
+	if err != nil {
+		return tlsCert, err
+	}
+	cert, err := GetCertWithCert(crt, key, preCert)
+	if err != nil {
+		return tlsCert, err
+	}
+	return GetTlsCert(cert, key)
+}
 func GetTlsCert(cert *x509.Certificate, key *ecdsa.PrivateKey) (tls.Certificate, error) {
 	keyFile, err := GetCertKeyData(key)
 	if err != nil {
@@ -928,4 +990,14 @@ func Signal(preCtx context.Context, fun func()) {
 			}
 		}
 	}
+}
+
+func SetUnExportedField[T any](source T, fieldName string, newFieldVal any) T {
+	v := reflect.ValueOf(source)
+	vptr := reflect.New(v.Type()).Elem()
+	vptr.Set(v)
+	tv := vptr.FieldByName(fieldName)
+	tv = reflect.NewAt(tv.Type(), unsafe.Pointer(tv.UnsafeAddr())).Elem()
+	tv.Set(reflect.ValueOf(newFieldVal))
+	return vptr.Interface().(T)
 }

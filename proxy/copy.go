@@ -10,6 +10,7 @@ import (
 	"net/http"
 	_ "unsafe"
 
+	"gitee.com/baixudong/gospider/http2"
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
@@ -25,7 +26,9 @@ func (obj *Client) wsSend(ctx context.Context, wsClient *websocket.Conn, wsServe
 			return
 		}
 		if obj.WsCallBack != nil {
-			obj.WsCallBack(msgType, msgData, "send")
+			if err = obj.WsCallBack(msgType, msgData, Send); err != nil {
+				return err
+			}
 		}
 		if err = wsServer.Send(ctx, msgType, msgData); err != nil {
 			return
@@ -42,21 +45,29 @@ func (obj *Client) wsRecv(ctx context.Context, wsClient *websocket.Conn, wsServe
 			return
 		}
 		if obj.WsCallBack != nil {
-			obj.WsCallBack(msgType, msgData, "recv")
+			if err = obj.WsCallBack(msgType, msgData, Recv); err != nil {
+				return err
+			}
 		}
 		if err = wsClient.Send(ctx, msgType, msgData); err != nil {
 			return
 		}
 	}
 }
+
+type erringRoundTripper interface {
+	RoundTripErr() error
+}
+
 func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	defer client.Close()
 	defer server.Close()
-	serverConn, err := obj.http2Transport.NewClientConn(server)
-	if err != nil {
-		return err
+	serverConn := http2.Upg{
+		H2Ja3Spec: client.option.h2Ja3Spec,
+	}.UpgradeFn(server.option.host, server.conn.(*tls.Conn))
+	if erringRoundTripper, ok := serverConn.(erringRoundTripper); ok && erringRoundTripper.RoundTripErr() != nil {
+		return erringRoundTripper.RoundTripErr()
 	}
-	defer serverConn.Close()
 	var req *http.Request
 	var resp *http.Response
 	for {
@@ -78,7 +89,9 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 		resp.ProtoMinor = 1
 		resp.Request = req.WithContext(server.option.ctx)
 		if obj.ResponseCallBack != nil {
-			obj.ResponseCallBack(req, resp)
+			if err = obj.ResponseCallBack(req, resp); err != nil {
+				return
+			}
 		}
 		if err = resp.Write(client); err != nil {
 			return
@@ -103,7 +116,9 @@ func (obj *Client) http11Copy(ctx context.Context, client *ProxyConn, server *Pr
 		}
 		rsp.Request = req.WithContext(server.option.ctx)
 		if obj.ResponseCallBack != nil {
-			obj.ResponseCallBack(req, rsp)
+			if err = obj.ResponseCallBack(req, rsp); err != nil {
+				return
+			}
 		}
 		if err = rsp.Write(client); err != nil {
 			return
@@ -117,9 +132,12 @@ func (obj *Client) copyMain(ctx context.Context, client *ProxyConn, server *Prox
 		return obj.copyHttpMain(ctx, client, server)
 	} else if client.option.schema == "https" {
 		if obj.RequestCallBack != nil ||
-			obj.ResponseCallBack != nil || obj.WsCallBack != nil ||
-			obj.ja3 || obj.capture ||
-			http.MethodConnect != client.option.method {
+			obj.ResponseCallBack != nil ||
+			obj.WsCallBack != nil ||
+			client.option.ja3 ||
+			client.option.h2Ja3 ||
+			obj.Capture ||
+			client.option.method != http.MethodConnect {
 			return obj.copyHttpsMain(ctx, client, server)
 		}
 		return obj.copyHttpMain(ctx, client, server)
@@ -172,7 +190,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 	return obj.wsSend(ctx, wsClient, wsServer)
 }
 func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
-	tlsServer, http2, certs, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs)
+	tlsServer, http2, certs, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs, client.option.ja3, client.option.ja3Spec)
 	if err != nil {
 		return err
 	}
@@ -182,16 +200,16 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 	}
 	var cert tls.Certificate
 	if len(certs) > 0 {
-		cert, err = getCert2(certs[0])
+		cert, err = tools.GetProxyCertWithCert(certs[0])
 	} else {
-		cert, err = getCert(tools.GetServerName(client.option.host))
+		cert, err = tools.GetProxyCertWithName(tools.GetServerName(client.option.host))
 	}
 	if err != nil {
 		return err
 	}
 	clientH2 := server.option.http2
 	//如果服务端是h2,需要拦截请求 或需要设置h2指纹，就走12
-	if clientH2 && (obj.ResponseCallBack != nil || obj.RequestCallBack != nil || obj.h2Ja3) {
+	if clientH2 && (obj.ResponseCallBack != nil || obj.RequestCallBack != nil || client.option.h2Ja3) {
 		clientH2 = false
 	}
 	tlsClient, http2, err := obj.tlsClient(ctx, client, !clientH2, cert) //服务端为h2时，客户端随意，服务端为h1时，客户端必须为h1
@@ -220,9 +238,9 @@ func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, disHttp2 bool, 
 	}
 	return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
 }
-func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, disHttp2 bool) (net.Conn, bool, []*x509.Certificate, error) {
-	if obj.ja3 {
-		if tlsConn, err := ja3.NewClient(ctx, conn, obj.ja3Spec, disHttp2, addr); err != nil {
+func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, disHttp2 bool, isJa3 bool, ja3Spec ja3.ClientHelloSpec) (net.Conn, bool, []*x509.Certificate, error) {
+	if isJa3 {
+		if tlsConn, err := ja3.NewClient(ctx, conn, ja3Spec, disHttp2, addr); err != nil {
 			return tlsConn, false, nil, err
 		} else {
 			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().PeerCertificates, err

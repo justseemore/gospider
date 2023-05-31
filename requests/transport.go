@@ -11,21 +11,6 @@ import (
 	"gitee.com/baixudong/gospider/http2"
 )
 
-func newHttp2Transport(ctx context.Context, session_option ClientOption, dialCli *DialClient) *http2.Transport {
-	return &http2.Transport{
-		MaxDecoderHeaderTableSize: 65536,  //1:initialHeaderTableSize,65536
-		MaxEncoderHeaderTableSize: 65536,  //1:initialHeaderTableSize,65536
-		MaxHeaderListSize:         262144, //6:MaxHeaderListSize,262144
-
-		DisableCompression: session_option.DisCompression,
-		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
-		DialTLSContext:     dialCli.requestHttp2DialTlsContext,
-		AllowHTTP:          true,
-		ReadIdleTimeout:    time.Duration(session_option.IdleConnTimeout) * time.Second, //检测连接是否健康的间隔时间
-		PingTimeout:        time.Second * time.Duration(session_option.TLSHandshakeTimeout),
-		WriteByteTimeout:   time.Second * time.Duration(session_option.ResponseHeaderTimeout),
-	}
-}
 func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli *DialClient) http.Transport {
 	return http.Transport{
 		MaxIdleConns:        655350,
@@ -43,26 +28,22 @@ func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli 
 		DialContext:           dialCli.requestHttpDialContext,
 		DialTLSContext:        dialCli.requestHttpDialTlsContext,
 		ForceAttemptHTTP2:     true,
+		TLSNextProto: map[string]func(authority string, c *tls.Conn) http.RoundTripper{
+			"h2": http2.Upg{
+				H2Ja3Spec:      session_option.H2Ja3Spec,
+				DialTLSContext: dialCli.requestHttp2DialTlsContext,
+			}.UpgradeFn,
+		},
 		Proxy: func(r *http.Request) (*url.URL, error) {
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
 			ctxData.url = r.URL
-
-			if ctxData.disProxy || ctxData.proxy == nil { //关闭代理或没有代理，走自实现代理
-				return nil, nil
-			} else if ctxData.ja3 && ctxData.url.Scheme == "https" && ctxData.proxy.Scheme != "https" { //因为除了https 代理之外的其它代理无法走tlscontext 函数,使用自实现
+			if ctxData.disProxy || ctxData.ja3 { //关闭代理或ja3 走自实现代理
 				return nil, nil
 			}
-			//代理需要账号密码,发送http 请求，代理不是socks5 协议，要隐藏代理
-			if ctxData.proxy.User != nil && ctxData.url.Scheme == "http" && ctxData.proxy.Scheme != "socks5" {
-				ctxData.proxyUser, ctxData.proxy.User = ctxData.proxy.User, nil
+			if ctxData.proxy != nil {
+				ctxData.isCallback = true //官方代理实现
 			}
-			ctxData.isCallback = true //官方代理实现
 			return ctxData.proxy, nil
 		},
 	}
-}
-
-func cloneTransport(t *http2.Transport) *http2.Transport {
-	t2 := *t
-	return &t2
 }

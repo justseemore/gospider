@@ -165,6 +165,22 @@ func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
 	server.option.port = port
 	server.option.host = host
 	defer server.Close()
+
+	if client.option.schema == "https" {
+		if obj.Ja3Spec.IsSet() {
+			client.option.ja3 = true
+			client.option.ja3Spec = obj.Ja3Spec
+		} else if obj.Ja3 {
+			client.option.ja3 = true
+		}
+
+		if obj.H2Ja3Spec.IsSet() {
+			client.option.h2Ja3 = true
+			client.option.h2Ja3Spec = obj.H2Ja3Spec
+		} else if obj.H2Ja3 {
+			client.option.h2Ja3 = true
+		}
+	}
 	return obj.copyMain(ctx, client, server)
 }
 

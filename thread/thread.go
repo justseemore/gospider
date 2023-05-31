@@ -15,20 +15,20 @@ import (
 type DefaultClient = Client[bool]
 
 type Client[T any] struct {
-	Debug               bool          //是否显示调试信息
-	threadStartCallBack func(int64) T //返回请求客户端
-	threadEndCallBack   func(T)
-	ctx2                context.Context      //控制各个协程
-	cnl2                context.CancelFunc   //控制各个协程
-	ctx                 context.Context      //控制主进程，不会关闭各个协程
-	cnl                 context.CancelFunc   //控制主进程，不会关闭各个协程
-	ctx3                context.Context      //chanx 的协程控制
-	cnl3                context.CancelFunc   //chanx 的协程控制
-	tasks               chan *Task           //任务消费队列
-	threadTokens        chan struct{}        //线程可用队列
-	dones               chan struct{}        //任务完成通知队列
-	tasks2              *chanx.Client[*Task] //chanx 的队列任务
-	taskCallBack        func(*Task) error    //任务回调
+	Debug               bool                                    //是否显示调试信息
+	ThreadStartCallBack func(context.Context, int64) (T, error) //每一个线程开始时，根据线程id,创建一个局部对象
+	ThreadEndCallBack   func(context.Context, T) error          //线程被消毁时的回调,再这里可以安全的释放局部对象资源
+	ctx2                context.Context                         //控制各个协程
+	cnl2                context.CancelFunc                      //控制各个协程
+	ctx                 context.Context                         //控制主进程，不会关闭各个协程
+	cnl                 context.CancelFunc                      //控制主进程，不会关闭各个协程
+	ctx3                context.Context                         //chanx 的协程控制
+	cnl3                context.CancelFunc                      //chanx 的协程控制
+	tasks               chan *Task                              //任务消费队列
+	threadTokens        chan struct{}                           //线程可用队列
+	dones               chan struct{}                           //任务完成通知队列
+	tasks2              *chanx.Client[*Task]                    //chanx 的队列任务
+	taskCallBack        func(*Task) error                       //任务回调
 	err                 error
 	maxThreadId         atomic.Int64
 	maxNum              int64
@@ -53,9 +53,7 @@ func (obj *Task) Done() <-chan struct{} {
 }
 
 type BaseClientOption[T any] struct {
-	TaskCallBack        func(*Task) error //有序的任务完成回调
-	ThreadStartCallBack func(int64) T     //每一个线程开始时，根据线程id,创建一个局部对象
-	ThreadEndCallBack   func(T)           //线程被消毁时的回调,再这里可以安全的释放局部对象资源
+	TaskCallBack func(*Task) error //有序的任务完成回调
 }
 type ClientOption = BaseClientOption[bool]
 
@@ -85,17 +83,15 @@ func NewBaseClient[T any](preCtx context.Context, maxNum int64, options ...BaseC
 		threadTokens <- struct{}{}
 	}
 	pool := &Client[T]{
-		taskCallBack:        option.TaskCallBack, //任务回调
-		maxNum:              maxNum,
-		ctx2:                ctx2,
-		cnl2:                cnl2, //关闭协程
-		ctx:                 ctx,
-		cnl:                 cnl,   //通知关闭
-		tasks:               tasks, //任务队列
-		threadTokens:        threadTokens,
-		dones:               dones,
-		threadStartCallBack: option.ThreadStartCallBack, //线程开始回调
-		threadEndCallBack:   option.ThreadEndCallBack,   //线程结束回调
+		taskCallBack: option.TaskCallBack, //任务回调
+		maxNum:       maxNum,
+		ctx2:         ctx2,
+		cnl2:         cnl2, //关闭协程
+		ctx:          ctx,
+		cnl:          cnl,   //通知关闭
+		tasks:        tasks, //任务队列
+		threadTokens: threadTokens,
+		dones:        dones,
 
 		writeAfterTime: time.NewTimer(0),
 		runAfterTime:   time.NewTimer(0),
@@ -151,12 +147,16 @@ func (obj *Client[T]) runMain() {
 		}
 	}()
 	var runVal T
-	if obj.threadEndCallBack != nil { //处理回调
-		defer obj.threadEndCallBack(runVal)
+	var err error
+	if obj.ThreadEndCallBack != nil { //处理回调
+		defer obj.ThreadEndCallBack(obj.ctx, runVal)
 	}
 	threadId := obj.maxThreadId.Add(1)  //获取线程id
-	if obj.threadStartCallBack != nil { //线程开始回调
-		runVal = obj.threadStartCallBack(threadId)
+	if obj.ThreadStartCallBack != nil { //线程开始回调
+		runVal, err = obj.ThreadStartCallBack(obj.ctx, threadId)
+		if err != nil {
+			return
+		}
 	}
 	for {
 		obj.runAfterTime.Reset(time.Second * 30)
@@ -188,7 +188,7 @@ func (obj *Client[T]) verify(fun any, args []any) error {
 	}
 	typeOfFun := reflect.TypeOf(fun)
 	index := 1
-	if obj.threadStartCallBack != nil {
+	if obj.ThreadStartCallBack != nil {
 		index = 2
 		var tmpVal T
 		if reflect.TypeOf(tmpVal).String() != typeOfFun.In(1).String() {
@@ -313,12 +313,12 @@ func (obj *Client[T]) run(task *Task, option T, threadId int64) {
 	defer task.cnl()                                       //函数结束，任务完成
 	ctx := context.WithValue(task.ctx, ThreadId, threadId) //线程id 值写入ctx
 	index := 1
-	if obj.threadStartCallBack != nil {
+	if obj.ThreadStartCallBack != nil {
 		index = 2
 	}
 	params := make([]reflect.Value, len(task.Args)+index)
 	params[0] = reflect.ValueOf(ctx)
-	if obj.threadStartCallBack != nil {
+	if obj.ThreadStartCallBack != nil {
 		params[1] = reflect.ValueOf(option)
 	}
 	for k, param := range task.Args {

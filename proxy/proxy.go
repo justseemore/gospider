@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -13,9 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 
-	"gitee.com/baixudong/gospider/http2"
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/kinds"
 	"gitee.com/baixudong/gospider/requests"
@@ -23,60 +20,18 @@ import (
 	"gitee.com/baixudong/gospider/websocket"
 )
 
-//go:embed gospider.crt
-var CrtFile []byte
-
-//go:embed gospider.key
-var KeyFile []byte
-
-func getCert(serverName string) (tlsCert tls.Certificate, err error) {
-	crt, err := tools.LoadCertData(CrtFile)
-	if err != nil {
-		return tlsCert, err
-	}
-	key, err := tools.LoadCertKeyData(KeyFile)
-	if err != nil {
-		return tlsCert, err
-	}
-	cert, err := tools.GetCertWithCN(crt, key, serverName)
-	if err != nil {
-		return tlsCert, err
-	}
-	return tools.GetTlsCert(cert, key)
-}
-func getCert2(preCert *x509.Certificate) (tlsCert tls.Certificate, err error) {
-	crt, err := tools.LoadCertData(CrtFile)
-	if err != nil {
-		return tlsCert, err
-	}
-	key, err := tools.LoadCertKeyData(KeyFile)
-	if err != nil {
-		return tlsCert, err
-	}
-	cert, err := tools.GetCertWithCert(crt, key, preCert)
-	if err != nil {
-		return tlsCert, err
-	}
-	return tools.GetTlsCert(cert, key)
-}
-
 type ClientOption struct {
-	Ja3     bool                //是否开启ja3
-	Ja3Spec ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	ProxyJa3     bool                //连接代理时是否开启ja3
+	ProxyJa3Spec ja3.ClientHelloSpec //连接代理时指定ja3Spec,//指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	DisDnsCache  bool                //是否关闭dns 缓存
+	Usr          string              //用户名
+	Pwd          string              //密码
+	IpWhite      []net.IP            //白名单 192.168.1.1,192.168.1.2
+	Port         int                 //代理端口
+	Host         string              //代理host
+	CrtFile      []byte              //公钥,根证书
+	KeyFile      []byte              //私钥
 
-	H2Ja3 bool //是否开启h2 指纹
-
-	ProxyJa3            bool                                                    //连接代理时是否开启ja3
-	ProxyJa3Spec        ja3.ClientHelloSpec                                     //连接代理时指定ja3Spec,//指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
-	DisDnsCache         bool                                                    //是否关闭dns 缓存
-	Usr                 string                                                  //用户名
-	Pwd                 string                                                  //密码
-	IpWhite             []net.IP                                                //白名单 192.168.1.1,192.168.1.2
-	Port                int                                                     //代理端口
-	Host                string                                                  //代理host
-	CrtFile             []byte                                                  //公钥,根证书
-	KeyFile             []byte                                                  //私钥
-	Capture             bool                                                    //抓包开关
 	TLSHandshakeTimeout int64                                                   //tls 握手超时时间
 	DnsCacheTime        int64                                                   //dns 缓存时间
 	GetProxy            func(ctx context.Context, url *url.URL) (string, error) //代理ip http://116.62.55.139:8888
@@ -89,29 +44,45 @@ type ClientOption struct {
 	AddrType            requests.AddrType                                       //host优先解析的类型
 	GetAddrType         func(string) requests.AddrType                          //控制host优先解析的类型
 }
+type WsType int
+
+const (
+	Send = 1
+	Recv = 2
+)
 
 type Client struct {
-	Debug            bool  //是否打印debug
-	Err              error //错误
-	DisVerify        bool  //关闭验证
-	ResponseCallBack func(*http.Request, *http.Response)
-	WsCallBack       func(websocket.MessageType, []byte, string)
-	RequestCallBack  func(*http.Request)
+	Debug     bool  //是否打印debug
+	Err       error //错误
+	DisVerify bool  //关闭验证
+	//接收response 回调，返回error,则中断请求
+	ResponseCallBack func(*http.Request, *http.Response) error
+	//websocket 传输回调，返回error,则中断请求
+	WsCallBack func(websocket.MessageType, []byte, WsType) error
+	//发送request 回调，返回error,则中断请求
+	RequestCallBack func(*http.Request) error
+	//http,https 代理根据请求验证用户权限，返回error 则中断请求
+	VerifyAuthWithHttp func(*http.Request) error
+	//支持根据http,https代理的请求，动态生成ja3,h2指纹。注意这请求是客户端和代理协议协商的请求，不是客户端请求目标地址的请求
+	//返回空结构体，则不会设置指纹
+	CreateSpecWithHttp func(*http.Request) (ja3.ClientHelloSpec, ja3.H2Ja3Spec)
 
-	capture bool
+	Capture bool //抓包开关
 
-	http2Transport *http2.Transport
-	cert           tls.Certificate
-	dialer         *requests.DialClient //连接的Dialer
-	listener       net.Listener         //Listener 服务
-	basic          string
-	usr            string
-	pwd            string
-	vpn            bool
-	ipWhite        *kinds.Set[string]
-	ja3            bool
-	ja3Spec        ja3.ClientHelloSpec
-	h2Ja3          bool
+	cert     tls.Certificate
+	dialer   *requests.DialClient //连接的Dialer
+	listener net.Listener         //Listener 服务
+	basic    string
+	usr      string
+	pwd      string
+	vpn      bool
+	ipWhite  *kinds.Set[string]
+
+	Ja3     bool                //是否开启ja3
+	Ja3Spec ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+
+	H2Ja3     bool          //是否开启h2 指纹
+	H2Ja3Spec ja3.H2Ja3Spec //h2 指纹
 
 	ctx  context.Context
 	cnl  context.CancelFunc
@@ -139,13 +110,6 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 		server.usr = option.Usr
 		server.pwd = option.Pwd
 	}
-	if option.Ja3 {
-		server.ja3 = true
-	} else if option.Ja3Spec.IsSet() {
-		server.ja3 = true
-	}
-	server.ja3Spec = option.Ja3Spec
-	server.h2Ja3 = option.H2Ja3
 	//白名单
 	server.ipWhite = kinds.NewSet[string]()
 	for _, ip_white := range option.IpWhite {
@@ -172,7 +136,7 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 	}
 	//证书
 	if option.CrtFile == nil || option.KeyFile == nil {
-		if server.cert, err = getCert(option.ServerName); err != nil {
+		if server.cert, err = tools.GetProxyCertWithName(option.ServerName); err != nil {
 			return nil, err
 		}
 	} else {
@@ -186,14 +150,6 @@ func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error
 	}
 	if server.host, server.port, err = net.SplitHostPort(server.listener.Addr().String()); err != nil {
 		return nil, err
-	}
-	server.capture = option.Capture
-	server.http2Transport = &http2.Transport{
-		MaxDecoderHeaderTableSize: 65536,  //1:initialHeaderTableSize,65536
-		MaxEncoderHeaderTableSize: 65536,  //1:initialHeaderTableSize,65536
-		MaxHeaderListSize:         262144, //6:MaxHeaderListSize,262144
-		AllowHTTP:                 true,
-		PingTimeout:               time.Second * time.Duration(option.TLSHandshakeTimeout),
 	}
 	return &server, nil
 }

@@ -270,8 +270,8 @@ func (w *writePushPromise) writeFrame(ctx writeContext) error {
 	buf.Reset()
 
 	encKV(enc, ":method", w.method)
-	encKV(enc, ":authority", w.url.Host)
 	encKV(enc, ":scheme", w.url.Scheme)
+	encKV(enc, ":authority", w.url.Host)
 	encKV(enc, ":path", w.url.RequestURI())
 	encodeHeaders(enc, w.h, nil)
 

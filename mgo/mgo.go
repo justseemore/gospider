@@ -573,7 +573,7 @@ func (obj *Client) ClearOplog(preCctx context.Context, Func func(context.Context
 			if t.Result[2] != nil {
 				return t.Result[2].(error)
 			}
-			taskMap.Rem(t.Result[0].(ObjectID))
+			taskMap.Del(t.Result[0].(ObjectID))
 			lastOid = t.Result[1].(Timestamp)
 			if cur%int64(clearOption.Thread) == 0 {
 				if _, err := obj.NewTable("oplogSyncDataFile", "TempSyncData").Upsert(pre_ctx, syncFilter, map[string]Timestamp{"oid": lastOid}); err != nil {

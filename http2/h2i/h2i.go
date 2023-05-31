@@ -501,10 +501,10 @@ func (app *h2i) encodeHeaders(req *http.Request) []byte {
 		path = "/"
 	}
 
-	app.writeHeader(":method", req.Method)
 	app.writeHeader(":authority", host) // probably not right for all sites
-	app.writeHeader(":scheme", "https")
+	app.writeHeader(":method", req.Method)
 	app.writeHeader(":path", path)
+	app.writeHeader(":scheme", "https")
 
 	for k, vv := range req.Header {
 		lowKey := strings.ToLower(k)

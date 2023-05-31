@@ -105,13 +105,11 @@ var (
 type reqCtxData struct {
 	ja3Spec     ja3.ClientHelloSpec
 	isCallback  bool
-	proxyUser   *url.Userinfo
 	proxy       *url.URL
 	url         *url.URL
 	host        string
 	redirectNum int
 	disProxy    bool
-	h2          bool
 	ws          bool
 	ja3         bool
 }
@@ -157,7 +155,6 @@ type RequestOption struct {
 	DisAlive      bool                                        //关闭长连接,这次请求不会复用之前的连接
 	DisRead       bool                                        //关闭默认读取请求体,不会主动读取body里面的内容，需用你自己读取
 	DisUnZip      bool                                        //关闭自动解压
-	Http2         bool                                        //开启http2 transport,强制使用http2
 	WsOption      websocket.Option                            //websocket option,使用websocket 请求的option
 
 	converUrl   string
@@ -417,9 +414,6 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	if !option.DisUnZip {
 		option.DisUnZip = obj.DisUnZip
 	}
-	if !option.Http2 {
-		option.Http2 = obj.Http2
-	}
 	if !option.Ja3 {
 		option.Ja3 = obj.ja3
 	}
@@ -481,7 +475,6 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	}
 	//开始请求
 	var tryNum int64
-	var setHttp2Try bool
 	for tryNum = 0; tryNum <= optionBak.TryNum; tryNum++ {
 		select {
 		case <-obj.ctx.Done():
@@ -506,13 +499,7 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 			resp, err = obj.tempRequest(preCtx, option)
 			if err != nil { //有错误
 				if errors.Is(err, ErrFatal) { //致命错误直接返回
-					if option.Ja3 && !setHttp2Try && strings.Contains(err.Error(), "http2=true") {
-						obj.http2Keys.Add(option.Url.Host)
-						setHttp2Try = true
-						tryNum--
-					} else {
-						return
-					}
+					return
 				} else if option.ErrCallBack != nil && option.ErrCallBack(preCtx, err) { //不是致命错误，有错误回调,错误回调true,直接返回
 					return
 				}
@@ -520,13 +507,7 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 				return
 			} else if err = option.AfterCallBack(preCtx, resp); err != nil { //没有错误，有回调，回调错误
 				if errors.Is(err, ErrFatal) { //致命错误直接返回
-					if option.Ja3 && !setHttp2Try && strings.Contains(err.Error(), "http2=true") {
-						obj.http2Keys.Add(option.Url.Host)
-						setHttp2Try = true
-						tryNum--
-					} else {
-						return
-					}
+					return
 				} else if option.ErrCallBack != nil && option.ErrCallBack(preCtx, err) { //不是致命错误，有错误回调,错误回调true,直接返回
 					return
 				}
@@ -625,20 +606,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		ctxData.ws = true
 		reqs.URL.Scheme = "https"
 	}
-	if request_option.Ja3 && !request_option.Http2 && obj.http2Keys.Has(request_option.Url.Host) {
-		request_option.Http2 = true
-	}
-
-	//根据scheme判断是否启动http2
-	if request_option.Http2 {
-		if ctxData.ws {
-			request_option.Http2 = false
-		} else if reqs.URL.Scheme == "https" {
-			ctxData.h2 = request_option.Http2
-		} else {
-			request_option.Http2 = false
-		}
-	}
 	//添加headers
 	var headOk bool
 	if reqs.Header, headOk = request_option.Headers.(http.Header); !headOk {
@@ -655,9 +622,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	} else if reqs.Header.Get("Host") != "" {
 		reqs.Host = reqs.Header.Get("Host")
 	}
-
 	//添加cookies
-
 	if request_option.Cookies != nil {
 		cooks, cookOk := request_option.Cookies.(Cookies)
 		if !cookOk {
@@ -666,9 +631,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		for _, vv := range cooks {
 			reqs.AddCookie(vv)
 		}
-	}
-	if !request_option.Http2 {
-		reqs.Close = request_option.DisAlive
 	}
 	//开始发送请求
 	var r *http.Response
