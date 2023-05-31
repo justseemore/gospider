@@ -12,7 +12,7 @@ import (
 )
 
 func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli *DialClient) http.Transport {
-	return http.Transport{
+	t := http.Transport{
 		MaxIdleConns:        655350,
 		MaxConnsPerHost:     655350,
 		MaxIdleConnsPerHost: 655350,
@@ -28,12 +28,6 @@ func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli 
 		DialContext:           dialCli.requestHttpDialContext,
 		DialTLSContext:        dialCli.requestHttpDialTlsContext,
 		ForceAttemptHTTP2:     true,
-		TLSNextProto: map[string]func(authority string, c *tls.Conn) http.RoundTripper{
-			"h2": http2.Upg{
-				H2Ja3Spec:      session_option.H2Ja3Spec,
-				DialTLSContext: dialCli.requestHttp2DialTlsContext,
-			}.UpgradeFn,
-		},
 		Proxy: func(r *http.Request) (*url.URL, error) {
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
 			ctxData.url = r.URL
@@ -46,4 +40,13 @@ func newHttpTransport(ctx context.Context, session_option ClientOption, dialCli 
 			return ctxData.proxy, nil
 		},
 	}
+	if session_option.H2Ja3 || session_option.H2Ja3Spec.IsSet() {
+		t.TLSNextProto = map[string]func(authority string, c *tls.Conn) http.RoundTripper{
+			"h2": http2.Upg{
+				H2Ja3Spec:      session_option.H2Ja3Spec,
+				DialTLSContext: dialCli.requestHttp2DialTlsContext,
+			}.UpgradeFn,
+		}
+	}
+	return t
 }

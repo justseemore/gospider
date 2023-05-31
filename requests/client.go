@@ -27,6 +27,7 @@ type ClientOption struct {
 	Dns                   string              //dns
 	Ja3                   bool                //开启ja3
 	Ja3Spec               ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	H2Ja3                 bool                //开启h2指纹
 	H2Ja3Spec             ja3.H2Ja3Spec       //h2指纹
 }
 type Client struct {
