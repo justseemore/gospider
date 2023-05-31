@@ -3,7 +3,8 @@
 * 支持http,https,socks五
 * 支持隧道代理的开发
 * 支持白名单，用户名密码
-* 支持ja3 指纹代理,使客户端隐藏自身ja3指纹
+* 支持ja3,h2 指纹代理,使客户端隐藏自身ja3指纹
+* 支持根据请求动态设置指纹
 * 支持链式代理，设置下游代理
 * 支持http,https,websocket,http2 抓包
 * 让不支持http2协议的客户端访问http2网站,例如：python 中requests 不支持http2协议,使其支持http2协议
@@ -60,11 +61,11 @@ func main() {
 		Port: 7006,
 		Usr:  "admin",
 		Pwd:  "password",
-		Ja3:  true,//开启ja3指纹
 	})
 	if err != nil {
 		log.Panic(err)
 	}
+	proCli.Ja3=true//开启ja3指纹
 	log.Print(proCli.Addr())
 	log.Panic(proCli.Run())
 }
@@ -80,18 +81,59 @@ func main() {
 		Port:    7006,
 		Usr:     "admin",
 		Pwd:     "password",
-		Ja3Spec: spec,
 	})
 	if err != nil {
 		log.Panic(err)
 	}
+	proCli.Ja3Spec=spec
 	log.Print(proCli.Addr())
 	log.Panic(proCli.Run())
 }
 ```
 
+## h2指纹开关
+```go
+func main() {
+	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
+		Port: 7006,
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	proCli.DisVerify = true
+	proCli.H2Ja3 = true
+	log.Print(proCli.Addr())
+	log.Panic(proCli.Run())
+}
+```
 
-
-
-
-
+## h2指纹自定义
+```go
+func main() {
+	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
+		Port: 7006,
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	proCli.DisVerify = true
+	proCli.H2Ja3Spec = ja3.H2Ja3Spec{
+		InitialSetting: []ja3.Setting{
+			{Id: 1, Val: 65555},
+			{Id: 2, Val: 1},
+			{Id: 3, Val: 2000},
+			{Id: 4, Val: 6291457},
+			{Id: 6, Val: 262145},
+		},
+		ConnFlow: 15663106,
+		OrderHeaders: []string{
+			":method",
+			":path",
+			":scheme",
+			":authority",
+		},
+	}
+	log.Print(proCli.Addr())
+	log.Panic(proCli.Run())
+}
+```

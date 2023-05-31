@@ -149,7 +149,55 @@ func main() {
 	log.Print(response.Json().Get("ja3").String())
 }
 ```
-
+## h2 指纹开关
+```go
+func main() {
+	reqCli, err := requests.NewClient(nil, requests.ClientOption{
+		H2Ja3: true,
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	href := "https://tools.scrapfly.io/api/fp/anything"
+	resp, err := reqCli.Request(nil, "get", href)
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Print(resp.Text())
+}
+```
+## 修改h2指纹
+```go
+func main() {
+	reqCli, err := requests.NewClient(nil, requests.ClientOption{
+		H2Ja3Spec: ja3.H2Ja3Spec{
+			InitialSetting: []ja3.Setting{
+				{Id: 1, Val: 65555},
+				{Id: 2, Val: 1},
+				{Id: 3, Val: 2000},
+				{Id: 4, Val: 6291457},
+				{Id: 6, Val: 262145},
+			},
+			ConnFlow: 15663106,
+			OrderHeaders: []string{
+				":method",
+				":path",
+				":scheme",
+				":authority",
+			},
+		},
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	href := "https://tools.scrapfly.io/api/fp/anything"
+	resp, err := reqCli.Request(nil, "get", href)
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Print(resp.Text())
+}
+```
 ## 采集全国公共资源网和中国政府采购网的列表页的标题
 ```go
 package main
