@@ -106,7 +106,6 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	reqCli.Http2 = true
 	response, err := reqCli.Request(nil, "get", "https://tools.scrapfly.io/api/fp/ja3?extended=1", requests.RequestOption{Ja3Spec: Ja3Spec})
 	if err != nil {
 		log.Panic(err)
@@ -126,7 +125,6 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	reqCli.Http2 = true
 	response, err := reqCli.Request(nil, "get", "https://tools.scrapfly.io/api/fp/ja3?extended=1", requests.RequestOption{Ja3Spec: Ja3Spec})
 	if err != nil {
 		log.Panic(err)
@@ -141,7 +139,6 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	reqCli.Http2 = true
 	response, err := reqCli.Request(nil, "get", "https://tools.scrapfly.io/api/fp/ja3?extended=1", requests.RequestOption{Ja3: true})//使用最新chrome 指纹
 	if err != nil {
 		log.Panic(err)
