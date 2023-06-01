@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -539,8 +540,6 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 		return obj.DialContext(ctx, network, addr)
 	} else if reqData.proxy != nil { //单独代理设置优先级最高
 		if reqData.isCallback { //走官方代理
-			obj.DialContext(ctx, network, addr)
-
 			return obj.DialContext(ctx, network, addr)
 		}
 		nowProxy = reqData.proxy
@@ -552,8 +551,7 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 	}
 	return obj.DialContext(ctx, network, addr)
 }
-func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network string, addr string) (tlsConn net.Conn, err error) {
-	var conn net.Conn
+func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network string, addr string) (conn net.Conn, err error) {
 	defer func() {
 		if err != nil && conn != nil {
 			conn.Close()
@@ -563,6 +561,10 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		return nil, err
 	}
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
+	if reqData.isCallback && reqData.proxy != nil {
+		reqData.host = reqData.proxy.Host
+	}
+	var tlsConn *tls.Conn
 	if reqData.ja3 { //使用ja3 指纹
 		tlsConn, err = ja3.NewClient(ctx, conn, reqData.ja3Spec, reqData.ws, reqData.host)
 	} else {
@@ -579,7 +581,9 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 				NextProtos:         []string{"h2", "http/1.1"},
 			})
 		}
+		err = tlsConn.HandshakeContext(ctx)
 	}
+	log.Print("连接成功", err)
 	return tlsConn, err
 }
 func (obj *DialClient) requestHttp2DialTlsContext(ctx context.Context, network string, addr string, cfg *tls.Config) (net.Conn, error) { //验证tls 是否可以直接用
