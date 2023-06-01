@@ -71,8 +71,12 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 	var req *http.Request
 	var resp *http.Response
 	for {
-		if req, err = client.readRequest(server.option.ctx, obj.RequestCallBack); err != nil {
-			return
+		if client.req != nil {
+			req, client.req = client.req, nil
+		} else {
+			if req, err = client.readRequest(server.option.ctx, obj.RequestCallBack); err != nil {
+				return
+			}
 		}
 		req = req.WithContext(client.option.ctx)
 		req.Proto = "HTTP/2.0"
@@ -104,8 +108,12 @@ func (obj *Client) http11Copy(ctx context.Context, client *ProxyConn, server *Pr
 	var req *http.Request
 	var rsp *http.Response
 	for !server.option.isWs {
-		if req, err = client.readRequest(server.option.ctx, obj.RequestCallBack); err != nil {
-			return
+		if client.req != nil {
+			req, client.req = client.req, nil
+		} else {
+			if req, err = client.readRequest(server.option.ctx, obj.RequestCallBack); err != nil {
+				return
+			}
 		}
 		req = req.WithContext(client.option.ctx)
 		if err = req.Write(server); err != nil {
@@ -163,14 +171,21 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		return tools.CopyWitchContext(ctx, server, client)
 	}
 	if obj.ResponseCallBack == nil && obj.WsCallBack == nil && obj.RequestCallBack == nil { //没有回调直接返回
+		if client.req != nil {
+			if err = client.req.Write(server); err != nil {
+				return err
+			}
+			client.req = nil
+		}
 		go func() {
 			defer client.Close()
 			defer server.Close()
-			tools.CopyWitchContext(ctx, client, server)
+			err = tools.CopyWitchContext(ctx, client, server)
 		}()
-		return tools.CopyWitchContext(ctx, server, client)
+		err = tools.CopyWitchContext(ctx, server, client)
+		return
 	}
-	if err = obj.http11Copy(ctx, client, server); err != nil { //http 开始回调
+	if err = obj.http11Copy(ctx, client, server); err != nil { //http11 开始回调
 		return err
 	}
 	if obj.WsCallBack == nil { //没有ws 回调直接返回

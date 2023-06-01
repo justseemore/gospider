@@ -539,6 +539,8 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 		return obj.DialContext(ctx, network, addr)
 	} else if reqData.proxy != nil { //单独代理设置优先级最高
 		if reqData.isCallback { //走官方代理
+			obj.DialContext(ctx, network, addr)
+
 			return obj.DialContext(ctx, network, addr)
 		}
 		nowProxy = reqData.proxy

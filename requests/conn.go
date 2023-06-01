@@ -18,7 +18,7 @@ func (obj *pwdConn) Write(b []byte) (n int, err error) {
 	if obj.proxyAuthorization == "" {
 		return obj.rawConn.Write(b)
 	}
-	b = bytes.Replace(b, []byte("\r\n"), tools.StringToBytes(fmt.Sprintf("\r\nProxy-Authorization: Basic %s\r\n", obj.proxyAuthorization)), 1)
+	b = bytes.Replace(b, []byte("\r\n\r\n"), tools.StringToBytes(fmt.Sprintf("\r\nProxy-Authorization: Basic %s\r\n\r\n", obj.proxyAuthorization)), 1)
 	obj.proxyAuthorization = ""
 	return obj.rawConn.Write(b)
 }

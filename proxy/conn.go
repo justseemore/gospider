@@ -38,6 +38,7 @@ type ProxyOption struct {
 type ProxyConn struct {
 	client bool
 	conn   net.Conn
+	req    *http.Request
 	reader *bufio.Reader
 	option *ProxyOption
 }

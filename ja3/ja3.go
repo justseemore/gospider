@@ -20,14 +20,30 @@ import (
 type ClientHelloId = utls.ClientHelloID
 
 var (
+	// HelloGolang will use default "crypto/tls" handshake marshaling codepath, which WILL
+	// overwrite your changes to Hello(Config, Session are fine).
+	// You might want to call BuildHandshakeState() before applying any changes.
+	// UConn.Extensions will be completely ignored.
+	HelloGolang = utls.HelloGolang
+
+	// HelloCustom will prepare ClientHello with empty uconn.Extensions so you can fill it with
+	// TLSExtensions manually or use ApplyPreset function
+	HelloCustom = utls.HelloCustom
+
+	// HelloRandomized* randomly adds/reorders extensions, ciphersuites, etc.
+	HelloRandomized       = utls.HelloRandomized
+	HelloRandomizedALPN   = utls.HelloRandomizedALPN
+	HelloRandomizedNoALPN = utls.HelloRandomizedNoALPN
+
+	// The rest will will parrot given browser.
 	HelloFirefox_Auto = utls.HelloFirefox_Auto
 	HelloFirefox_55   = utls.HelloFirefox_55
 	HelloFirefox_56   = utls.HelloFirefox_56
 	HelloFirefox_63   = utls.HelloFirefox_63
 	HelloFirefox_65   = utls.HelloFirefox_65
 	HelloFirefox_99   = utls.HelloFirefox_99
-
-	HelloFirefox_105 = utls.HelloFirefox_105
+	HelloFirefox_102  = utls.HelloFirefox_102
+	HelloFirefox_105  = utls.HelloFirefox_105
 
 	HelloChrome_Auto        = utls.HelloChrome_Auto
 	HelloChrome_58          = utls.HelloChrome_58
@@ -40,6 +56,10 @@ var (
 	HelloChrome_100         = utls.HelloChrome_100
 	HelloChrome_102         = utls.HelloChrome_102
 	HelloChrome_106_Shuffle = utls.HelloChrome_106_Shuffle
+
+	// Chrome with PSK: Chrome start sending this ClientHello after doing TLS 1.3 handshake with the same server.
+	HelloChrome_100_PSK      = utls.HelloChrome_100_PSK
+	HelloChrome_112_PSK_Shuf = utls.HelloChrome_112_PSK_Shuf
 
 	HelloIOS_Auto = utls.HelloIOS_Auto
 	HelloIOS_11_1 = utls.HelloIOS_11_1
@@ -63,13 +83,31 @@ var (
 	HelloQQ_Auto = utls.HelloQQ_Auto
 	HelloQQ_11_1 = utls.HelloQQ_11_1
 )
+
 var ClientHelloIDs = []ClientHelloId{
+	// HelloGolang will use default "crypto/tls" handshake marshaling codepath, which WILL
+	// overwrite your changes to Hello(Config, Session are fine).
+	// You might want to call BuildHandshakeState() before applying any changes.
+	// UConn.Extensions will be completely ignored.
+	HelloGolang,
+
+	// HelloCustom will prepare ClientHello with empty uconn.Extensions so you can fill it with
+	// TLSExtensions manually or use ApplyPreset function
+	HelloCustom,
+
+	// HelloRandomized* randomly adds/reorders extensions, ciphersuites, etc.
+	HelloRandomized,
+	HelloRandomizedALPN,
+	HelloRandomizedNoALPN,
+
+	// The rest will will parrot given browser.
 	HelloFirefox_Auto,
 	HelloFirefox_55,
 	HelloFirefox_56,
 	HelloFirefox_63,
 	HelloFirefox_65,
 	HelloFirefox_99,
+	HelloFirefox_102,
 	HelloFirefox_105,
 
 	HelloChrome_Auto,
@@ -83,6 +121,10 @@ var ClientHelloIDs = []ClientHelloId{
 	HelloChrome_100,
 	HelloChrome_102,
 	HelloChrome_106_Shuffle,
+
+	// Chrome with PSK: Chrome start sending this ClientHello after doing TLS 1.3 handshake with the same server.
+	HelloChrome_100_PSK,
+	HelloChrome_112_PSK_Shuf,
 
 	HelloIOS_Auto,
 	HelloIOS_11_1,
@@ -288,7 +330,7 @@ func getExtensionWithId(extensionId uint16) utls.TLSExtension {
 			PskIdentities: []utls.PskIdentity{ // must set identity
 				{
 					Label:               []byte("gospider"), // change this
-					ObfuscatedTicketAge: 1,                  // change this
+					ObfuscatedTicketAge: 0,                  // change this
 				},
 			},
 			PskBinders: [][]byte{ // must set psk binders

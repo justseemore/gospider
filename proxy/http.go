@@ -2,12 +2,10 @@ package proxy
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -88,11 +86,7 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 			return err
 		}
 	} else {
-		tempBytes := bytes.NewBuffer(nil)
-		if err = clientReq.Write(tempBytes); err != nil {
-			return err
-		}
-		client.reader = bufio.NewReader(io.MultiReader(tempBytes, client.reader))
+		client.req = clientReq
 	}
 	return obj.copyMain(ctx, client, server)
 }

@@ -606,6 +606,9 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		ctxData.ws = true
 		reqs.URL.Scheme = "https"
 	}
+	if reqs.URL.Scheme == "http" {
+		ctxData.ja3 = false
+	}
 	//添加headers
 	var headOk bool
 	if reqs.Header, headOk = request_option.Headers.(http.Header); !headOk {
