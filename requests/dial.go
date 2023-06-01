@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -583,7 +582,6 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		}
 		err = tlsConn.HandshakeContext(ctx)
 	}
-	log.Print("连接成功", err)
 	return tlsConn, err
 }
 func (obj *DialClient) requestHttp2DialTlsContext(ctx context.Context, network string, addr string, cfg *tls.Config) (net.Conn, error) { //验证tls 是否可以直接用
