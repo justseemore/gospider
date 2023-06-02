@@ -43,18 +43,9 @@ type ClientOption struct {
 	Dns                 string                                                  //dns
 	AddrType            requests.AddrType                                       //host优先解析的类型
 	GetAddrType         func(string) requests.AddrType                          //控制host优先解析的类型
-}
-type WsType int
 
-const (
-	Send = 1
-	Recv = 2
-)
-
-type Client struct {
-	Debug     bool  //是否打印debug
-	Err       error //错误
-	DisVerify bool  //关闭验证
+	Debug     bool //是否打印debug
+	DisVerify bool //关闭验证
 	//接收response 回调，返回error,则中断请求
 	ResponseCallBack func(*http.Request, *http.Response) error
 	//websocket 传输回调，返回error,则中断请求
@@ -66,9 +57,34 @@ type Client struct {
 	//支持根据http,https代理的请求，动态生成ja3,h2指纹。注意这请求是客户端和代理协议协商的请求，不是客户端请求目标地址的请求
 	//返回空结构体，则不会设置指纹
 	CreateSpecWithHttp func(*http.Request) (ja3.ClientHelloSpec, ja3.H2Ja3Spec)
+	Ja3                bool                //是否开启ja3
+	Ja3Spec            ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	H2Ja3              bool                //是否开启h2 指纹
+	H2Ja3Spec          ja3.H2Ja3Spec       //h2 指纹
+}
+type WsType int
 
-	Capture bool //抓包开关
+const (
+	Send = 1
+	Recv = 2
+)
 
+type Client struct {
+	debug              bool
+	disVerify          bool
+	responseCallBack   func(*http.Request, *http.Response) error
+	wsCallBack         func(websocket.MessageType, []byte, WsType) error
+	requestCallBack    func(*http.Request) error
+	verifyAuthWithHttp func(*http.Request) error
+	createSpecWithHttp func(*http.Request) (ja3.ClientHelloSpec, ja3.H2Ja3Spec)
+
+	ja3     bool                //是否开启ja3
+	ja3Spec ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+
+	h2Ja3     bool          //是否开启h2 指纹
+	h2Ja3Spec ja3.H2Ja3Spec //h2 指纹
+
+	err      error //错误
 	cert     tls.Certificate
 	dialer   *requests.DialClient //连接的Dialer
 	listener net.Listener         //Listener 服务
@@ -77,29 +93,30 @@ type Client struct {
 	pwd      string
 	vpn      bool
 	ipWhite  *kinds.Set[string]
-
-	Ja3     bool                //是否开启ja3
-	Ja3Spec ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
-
-	H2Ja3     bool          //是否开启h2 指纹
-	H2Ja3Spec ja3.H2Ja3Spec //h2 指纹
-
-	ctx  context.Context
-	cnl  context.CancelFunc
-	host string
-	port string
+	ctx      context.Context
+	cnl      context.CancelFunc
+	host     string
+	port     string
 }
 
-func NewClient(pre_ctx context.Context, options ...ClientOption) (*Client, error) {
-	var option ClientOption
-	if len(options) > 0 {
-		option = options[0]
-	}
+func NewClient(pre_ctx context.Context, option ClientOption) (*Client, error) {
 	if pre_ctx == nil {
 		pre_ctx = context.TODO()
 	}
 	ctx, cnl := context.WithCancel(pre_ctx)
-	server := Client{}
+	server := Client{
+		debug:              option.Debug,
+		disVerify:          option.DisVerify,
+		responseCallBack:   option.ResponseCallBack,
+		wsCallBack:         option.WsCallBack,
+		requestCallBack:    option.RequestCallBack,
+		verifyAuthWithHttp: option.VerifyAuthWithHttp,
+		createSpecWithHttp: option.CreateSpecWithHttp,
+		ja3:                option.Ja3,
+		ja3Spec:            option.Ja3Spec,
+		h2Ja3:              option.H2Ja3,
+		h2Ja3Spec:          option.H2Ja3Spec,
+	}
 	server.ctx = ctx
 	server.cnl = cnl
 	if option.Vpn {
@@ -164,12 +181,12 @@ func (obj *Client) Run() error {
 	for {
 		select {
 		case <-obj.ctx.Done():
-			obj.Err = obj.ctx.Err()
-			return obj.Err
+			obj.err = obj.ctx.Err()
+			return obj.err
 		default:
 			client, err := obj.listener.Accept() //接受数据
 			if err != nil {
-				obj.Err = err
+				obj.err = err
 				return err
 			}
 			go obj.mainHandle(obj.ctx, client)
@@ -185,7 +202,7 @@ func (obj *Client) Done() <-chan struct{} {
 }
 
 func (obj *Client) whiteVerify(client net.Conn) bool {
-	if obj.DisVerify {
+	if obj.disVerify {
 		return true
 	}
 	host, _, err := net.SplitHostPort(client.RemoteAddr().String())
@@ -208,7 +225,7 @@ func (obj *Client) getHttpProxyConn(ctx context.Context, ipUrl *url.URL) (net.Co
 }
 func (obj *Client) mainHandle(ctx context.Context, client net.Conn) (err error) {
 	defer recover()
-	if obj.Debug {
+	if obj.debug {
 		defer func() {
 			if err != nil {
 				log.Print("proxy debugger:\n", err)

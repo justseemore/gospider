@@ -25,8 +25,8 @@ func (obj *Client) wsSend(ctx context.Context, wsClient *websocket.Conn, wsServe
 		if msgType, msgData, err = wsClient.Recv(ctx); err != nil {
 			return
 		}
-		if obj.WsCallBack != nil {
-			if err = obj.WsCallBack(msgType, msgData, Send); err != nil {
+		if obj.wsCallBack != nil {
+			if err = obj.wsCallBack(msgType, msgData, Send); err != nil {
 				return err
 			}
 		}
@@ -44,8 +44,8 @@ func (obj *Client) wsRecv(ctx context.Context, wsClient *websocket.Conn, wsServe
 		if msgType, msgData, err = wsServer.Recv(ctx); err != nil {
 			return
 		}
-		if obj.WsCallBack != nil {
-			if err = obj.WsCallBack(msgType, msgData, Recv); err != nil {
+		if obj.wsCallBack != nil {
+			if err = obj.wsCallBack(msgType, msgData, Recv); err != nil {
 				return err
 			}
 		}
@@ -74,7 +74,7 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 		if client.req != nil {
 			req, client.req = client.req, nil
 		} else {
-			if req, err = client.readRequest(server.option.ctx, obj.RequestCallBack); err != nil {
+			if req, err = client.readRequest(server.option.ctx, obj.requestCallBack); err != nil {
 				return
 			}
 		}
@@ -92,8 +92,8 @@ func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *Pr
 		resp.ProtoMajor = 1
 		resp.ProtoMinor = 1
 		resp.Request = req.WithContext(server.option.ctx)
-		if obj.ResponseCallBack != nil {
-			if err = obj.ResponseCallBack(req, resp); err != nil {
+		if obj.responseCallBack != nil {
+			if err = obj.responseCallBack(req, resp); err != nil {
 				return
 			}
 		}
@@ -111,7 +111,7 @@ func (obj *Client) http11Copy(ctx context.Context, client *ProxyConn, server *Pr
 		if client.req != nil {
 			req, client.req = client.req, nil
 		} else {
-			if req, err = client.readRequest(server.option.ctx, obj.RequestCallBack); err != nil {
+			if req, err = client.readRequest(server.option.ctx, obj.requestCallBack); err != nil {
 				return
 			}
 		}
@@ -123,8 +123,8 @@ func (obj *Client) http11Copy(ctx context.Context, client *ProxyConn, server *Pr
 			return
 		}
 		rsp.Request = req.WithContext(server.option.ctx)
-		if obj.ResponseCallBack != nil {
-			if err = obj.ResponseCallBack(req, rsp); err != nil {
+		if obj.responseCallBack != nil {
+			if err = obj.responseCallBack(req, rsp); err != nil {
 				return
 			}
 		}
@@ -139,12 +139,11 @@ func (obj *Client) copyMain(ctx context.Context, client *ProxyConn, server *Prox
 	if client.option.schema == "http" {
 		return obj.copyHttpMain(ctx, client, server)
 	} else if client.option.schema == "https" {
-		if obj.RequestCallBack != nil ||
-			obj.ResponseCallBack != nil ||
-			obj.WsCallBack != nil ||
+		if obj.requestCallBack != nil ||
+			obj.responseCallBack != nil ||
+			obj.wsCallBack != nil ||
 			client.option.ja3 ||
 			client.option.h2Ja3 ||
-			obj.Capture ||
 			client.option.method != http.MethodConnect {
 			return obj.copyHttpsMain(ctx, client, server)
 		}
@@ -170,7 +169,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 		}()
 		return tools.CopyWitchContext(ctx, server, client)
 	}
-	if obj.ResponseCallBack == nil && obj.WsCallBack == nil && obj.RequestCallBack == nil { //没有回调直接返回
+	if obj.responseCallBack == nil && obj.wsCallBack == nil && obj.requestCallBack == nil { //没有回调直接返回
 		if client.req != nil {
 			if err = client.req.Write(server); err != nil {
 				return err
@@ -188,7 +187,7 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 	if err = obj.http11Copy(ctx, client, server); err != nil { //http11 开始回调
 		return err
 	}
-	if obj.WsCallBack == nil { //没有ws 回调直接返回
+	if obj.wsCallBack == nil { //没有ws 回调直接返回
 		go func() {
 			defer client.Close()
 			defer server.Close()
@@ -224,7 +223,7 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 	}
 	clientH2 := server.option.http2
 	//如果服务端是h2,需要拦截请求 或需要设置h2指纹，就走12
-	if clientH2 && (obj.ResponseCallBack != nil || obj.RequestCallBack != nil || client.option.h2Ja3) {
+	if clientH2 && (obj.responseCallBack != nil || obj.requestCallBack != nil || client.option.h2Ja3) {
 		clientH2 = false
 	}
 	tlsClient, http2, err := obj.tlsClient(ctx, client, !clientH2, cert) //服务端为h2时，客户端随意，服务端为h1时，客户端必须为h1

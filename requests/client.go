@@ -32,8 +32,7 @@ type ClientOption struct {
 	Ja3Spec               ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	H2Ja3                 bool                //开启h2指纹
 	H2Ja3Spec             ja3.H2Ja3Spec       //h2指纹
-}
-type Client struct {
+
 	RedirectNum   int                                         //重定向次数
 	DisDecode     bool                                        //关闭自动编码
 	DisRead       bool                                        //关闭默认读取请求体
@@ -45,8 +44,22 @@ type Client struct {
 	Timeout       int64                                       //请求超时时间
 	Headers       any                                         //请求头
 	Bar           bool                                        //是否开启bar
-	ja3           bool                                        //开启ja3
-	ja3Spec       ja3.ClientHelloSpec                         //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+}
+type Client struct {
+	redirectNum   int                                         //重定向次数
+	disDecode     bool                                        //关闭自动编码
+	disRead       bool                                        //关闭默认读取请求体
+	disUnZip      bool                                        //变比自动解压
+	tryNum        int64                                       //重试次数
+	beforCallBack func(context.Context, *RequestOption) error //请求前回调的方法
+	afterCallBack func(context.Context, *Response) error      //请求后回调的方法
+	errCallBack   func(context.Context, error) bool           //请求error回调
+	timeout       int64                                       //请求超时时间
+	headers       any                                         //请求头
+	bar           bool                                        //是否开启bar
+
+	ja3           bool                //开启ja3
+	ja3Spec       ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	disCookie     bool
 	disAlive      bool
 	client        *http.Client
@@ -157,6 +170,18 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		disCookie:     session_option.DisCookie,
 		ja3:           session_option.Ja3,
 		ja3Spec:       session_option.Ja3Spec,
+
+		redirectNum:   session_option.RedirectNum,
+		disDecode:     session_option.DisDecode,
+		disRead:       session_option.DisRead,
+		disUnZip:      session_option.DisUnZip,
+		tryNum:        session_option.TryNum,
+		beforCallBack: session_option.BeforCallBack,
+		afterCallBack: session_option.AfterCallBack,
+		errCallBack:   session_option.ErrCallBack,
+		timeout:       session_option.Timeout,
+		headers:       session_option.Headers,
+		bar:           session_option.Bar,
 	}
 	if isG {
 		go func() {

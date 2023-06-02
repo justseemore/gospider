@@ -31,7 +31,7 @@ func main() {
     log.Print(response.Text())    //获取内容,解析为字符串
     log.Print(response.Content()) //获取内容,解析为字节
     log.Print(response.Json())    //获取json,解析为gjson
-    log.Print(response.Html())    //获取内容,解析为html
+    log.Print(response.Html())    //获取内容,解析为dom
     log.Print(response.Cookies()) //获取cookies
 }
 
@@ -63,7 +63,7 @@ func main() {
 	}
 	defer response.Close()
 	wsCli := response.WebSocket()
-	if err = wsCli.Send(context.TODO(), websocket.MessageText, []byte("测试")); err != nil { //发送txt 消息
+	if err = wsCli.Send(context.TODO(), websocket.MessageText, "测试"); err != nil { //发送txt 消息
 		log.Panic(err)
 	}
 	msgType, con, err := wsCli.Recv(context.TODO()) //接收消息

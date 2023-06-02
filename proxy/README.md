@@ -14,11 +14,11 @@
 func main() {
 	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
 		Port:    7006,
+		DisVerify:true,//关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
 	})
 	if err != nil {
 		log.Panic(err)
 	}
-	proCli.DisVerify = true//关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
 	log.Print(proCli.Addr())
 	log.Panic(proCli.Run())
 }
@@ -61,11 +61,11 @@ func main() {
 		Port: 7006,
 		Usr:  "admin",
 		Pwd:  "password",
+		Ja3:true,//开启ja3指纹
 	})
 	if err != nil {
 		log.Panic(err)
 	}
-	proCli.Ja3=true//开启ja3指纹
 	log.Print(proCli.Addr())
 	log.Panic(proCli.Run())
 }
@@ -81,11 +81,11 @@ func main() {
 		Port:    7006,
 		Usr:     "admin",
 		Pwd:     "password",
+		Ja3Spec: spec,
 	})
 	if err != nil {
 		log.Panic(err)
 	}
-	proCli.Ja3Spec=spec
 	log.Print(proCli.Addr())
 	log.Panic(proCli.Run())
 }
@@ -96,12 +96,12 @@ func main() {
 func main() {
 	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
 		Port: 7006,
+		DisVerify : true,
+		H2Ja3 : true,
 	})
 	if err != nil {
 		log.Panic(err)
 	}
-	proCli.DisVerify = true
-	proCli.H2Ja3 = true
 	log.Print(proCli.Addr())
 	log.Panic(proCli.Run())
 }
@@ -112,12 +112,8 @@ func main() {
 func main() {
 	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
 		Port: 7006,
-	})
-	if err != nil {
-		log.Panic(err)
-	}
-	proCli.DisVerify = true
-	proCli.H2Ja3Spec = ja3.H2Ja3Spec{
+		DisVerify:true,
+		H2Ja3Spec:ja3.H2Ja3Spec{
 		InitialSetting: []ja3.Setting{
 			{Id: 1, Val: 65555},
 			{Id: 2, Val: 1},
@@ -132,6 +128,10 @@ func main() {
 			":scheme",
 			":authority",
 		},
+	},
+	})
+	if err != nil {
+		log.Panic(err)
 	}
 	log.Print(proCli.Addr())
 	log.Panic(proCli.Run())

@@ -178,11 +178,7 @@ func (obj *mgoDialer) DialContext(ctx context.Context, network string, addr stri
 }
 
 // 新建客户端
-func NewClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
-	var opt ClientOption
-	if len(opts) > 0 {
-		opt = opts[0]
-	}
+func NewClient(ctx context.Context, opt ClientOption) (*Client, error) {
 	if opt.Host == "" {
 		opt.Host = "localhost"
 	}

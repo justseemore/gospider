@@ -69,7 +69,7 @@ func (obj *Client) sort() {
 	if obj.dataSortKeys.Len() == 0 {
 		return
 	}
-	for k := range obj.dataSortKeys.Data {
+	for k := range obj.dataSortKeys.Map() {
 		obj.dataOrdLen[k] = make([]int, obj.dataLen[k].Len())
 		for i, vv := range obj.dataLen[k].Array() {
 			obj.dataOrdLen[k][i] = vv

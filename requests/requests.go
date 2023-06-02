@@ -372,32 +372,32 @@ func (obj *RequestOption) optionInit() error {
 }
 func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error) {
 	if option.TryNum == 0 {
-		option.TryNum = obj.TryNum
+		option.TryNum = obj.tryNum
 	}
 	if option.BeforCallBack == nil {
-		option.BeforCallBack = obj.BeforCallBack
+		option.BeforCallBack = obj.beforCallBack
 	}
 	if option.AfterCallBack == nil {
-		option.AfterCallBack = obj.AfterCallBack
+		option.AfterCallBack = obj.afterCallBack
 	}
 	if option.ErrCallBack == nil {
-		option.ErrCallBack = obj.ErrCallBack
+		option.ErrCallBack = obj.errCallBack
 	}
 	if option.Headers == nil {
-		if obj.Headers == nil {
+		if obj.headers == nil {
 			option.Headers = defaultHeaders.Clone()
 		} else {
-			option.Headers = obj.Headers
+			option.Headers = obj.headers
 		}
 	}
 	if !option.Bar {
-		option.Bar = obj.Bar
+		option.Bar = obj.bar
 	}
 	if option.RedirectNum == 0 {
-		option.RedirectNum = obj.RedirectNum
+		option.RedirectNum = obj.redirectNum
 	}
 	if option.Timeout == 0 {
-		option.Timeout = obj.Timeout
+		option.Timeout = obj.timeout
 	}
 	if !option.DisAlive {
 		option.DisAlive = obj.disAlive
@@ -406,13 +406,13 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 		option.DisCookie = obj.disCookie
 	}
 	if !option.DisDecode {
-		option.DisDecode = obj.DisDecode
+		option.DisDecode = obj.disDecode
 	}
 	if !option.DisRead {
-		option.DisRead = obj.DisRead
+		option.DisRead = obj.disRead
 	}
 	if !option.DisUnZip {
-		option.DisUnZip = obj.DisUnZip
+		option.DisUnZip = obj.disUnZip
 	}
 	if !option.Ja3 {
 		option.Ja3 = obj.ja3

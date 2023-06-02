@@ -10,12 +10,13 @@ import (
 )
 
 func TestProxy(t *testing.T) {
-	proCli, err := proxy.NewClient(nil)
+	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
+		DisVerify: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proCli.Close()
-	proCli.DisVerify = true //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
 	go proCli.Run()
 	proxyIp := proCli.Addr()
 	reqCli, err := requests.NewClient(nil)
@@ -47,8 +48,9 @@ func TestProxy(t *testing.T) {
 
 func TestProxy2(t *testing.T) {
 	proCliPre, err := proxy.NewClient(nil, proxy.ClientOption{
-		Usr: "gospider",
-		Pwd: "gospider123456789",
+		Usr:       "gospider",
+		Pwd:       "gospider123456789",
+		DisVerify: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +66,6 @@ func TestProxy2(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer proCli.Close()
-	proCli.DisVerify = true //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
 	go proCli.Run()
 	proxyIp := proCli.Addr()
 	reqCli, err := requests.NewClient(nil)
@@ -95,13 +96,15 @@ func TestProxy2(t *testing.T) {
 }
 
 func TestProxyJa3(t *testing.T) {
-	proCli, err := proxy.NewClient(nil)
+	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
+		Ja3:       true,
+		DisVerify: true, //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
+
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proCli.Close()
-	proCli.Ja3 = true
-	proCli.DisVerify = true //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
 	go proCli.Run()
 	proxyIp := proCli.Addr()
 	reqCli, err := requests.NewClient(nil, requests.ClientOption{})
@@ -139,14 +142,16 @@ func TestProxyJa3(t *testing.T) {
 	}
 }
 func TestProxyH2Ja3(t *testing.T) {
-	proCli, err := proxy.NewClient(nil)
+	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
+		Ja3:       true,
+		H2Ja3:     true,
+		DisVerify: true, //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
+
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proCli.Close()
-	proCli.Ja3 = true
-	proCli.H2Ja3 = true
-	proCli.DisVerify = true //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
 	go proCli.Run()
 	proxyIp := proCli.Addr()
 	reqCli, err := requests.NewClient(nil, requests.ClientOption{})
@@ -187,20 +192,21 @@ func TestProxyAuth(t *testing.T) {
 	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
 		Usr: "admin",
 		Pwd: "password",
+		Ja3: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proCli.Close()
-	proCli.Ja3 = true
 	go proCli.Run()
 	proxyIp := proCli.Addr()
-	reqCli, err := requests.NewClient(nil, requests.ClientOption{})
+	reqCli, err := requests.NewClient(nil, requests.ClientOption{
+		TryNum: 2,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var resp *requests.Response
-	reqCli.TryNum = 2
 	resp, err = reqCli.Request(nil, "get", "https://tools.scrapfly.io/api/fp/ja3?extended=1", requests.RequestOption{Proxy: "http://admin:password@" + proxyIp})
 	// resp, err := reqCli.Request(nil, "get", "https://myip.top", requests.RequestOption{Proxy: "http://admin:password@" + proxyIp})
 	if err != nil {
@@ -227,13 +233,14 @@ func TestProxyAuth(t *testing.T) {
 }
 
 func TestProxyJa32(t *testing.T) {
-	proCli, err := proxy.NewClient(nil)
+	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
+		Ja3:       true,
+		DisVerify: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proCli.Close()
-	proCli.Ja3 = true
-	proCli.DisVerify = true //关闭白名单验证和密码验证，在没有白名单和密码的情况下如果不关闭，用不了
 	go proCli.Run()
 	proxyIp := proCli.Addr()
 	reqCli, err := requests.NewClient(nil, requests.ClientOption{Proxy: "http://" + proxyIp})

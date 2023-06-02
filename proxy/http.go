@@ -14,7 +14,7 @@ import (
 func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	defer client.Close()
 	var err error
-	clientReq, err := client.readRequest(ctx, obj.RequestCallBack)
+	clientReq, err := client.readRequest(ctx, obj.requestCallBack)
 	if err != nil {
 		return err
 	}
@@ -26,8 +26,8 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	if err = obj.verifyPwd(client, clientReq); err != nil {
 		return err
 	}
-	if obj.VerifyAuthWithHttp != nil {
-		if err = obj.VerifyAuthWithHttp(clientReq); err != nil {
+	if obj.verifyAuthWithHttp != nil {
+		if err = obj.verifyAuthWithHttp(clientReq); err != nil {
 			return err
 		}
 	}
@@ -44,39 +44,39 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 	server := newProxyCon(ctx, proxyServer, bufio.NewReader(proxyServer), *client.option, false)
 	defer server.Close()
 	if client.option.schema == "https" {
-		if obj.CreateSpecWithHttp != nil {
-			ja3Spec, h2Ja3Spec := obj.CreateSpecWithHttp(clientReq)
+		if obj.createSpecWithHttp != nil {
+			ja3Spec, h2Ja3Spec := obj.createSpecWithHttp(clientReq)
 			if ja3Spec.IsSet() {
 				client.option.ja3 = true
 				client.option.ja3Spec = ja3Spec
-			} else if obj.Ja3Spec.IsSet() {
+			} else if obj.ja3Spec.IsSet() {
 				client.option.ja3 = true
-				client.option.ja3Spec = obj.Ja3Spec
-			} else if obj.Ja3 {
+				client.option.ja3Spec = obj.ja3Spec
+			} else if obj.ja3 {
 				client.option.ja3 = true
 			}
 
 			if h2Ja3Spec.IsSet() {
 				client.option.h2Ja3 = true
 				client.option.h2Ja3Spec = h2Ja3Spec
-			} else if obj.H2Ja3Spec.IsSet() {
+			} else if obj.h2Ja3Spec.IsSet() {
 				client.option.h2Ja3 = true
-				client.option.h2Ja3Spec = obj.H2Ja3Spec
-			} else if obj.H2Ja3 {
+				client.option.h2Ja3Spec = obj.h2Ja3Spec
+			} else if obj.h2Ja3 {
 				client.option.h2Ja3 = true
 			}
 		} else {
-			if obj.Ja3Spec.IsSet() {
+			if obj.ja3Spec.IsSet() {
 				client.option.ja3 = true
-				client.option.ja3Spec = obj.Ja3Spec
-			} else if obj.Ja3 {
+				client.option.ja3Spec = obj.ja3Spec
+			} else if obj.ja3 {
 				client.option.ja3 = true
 			}
 
-			if obj.H2Ja3Spec.IsSet() {
+			if obj.h2Ja3Spec.IsSet() {
 				client.option.h2Ja3 = true
-				client.option.h2Ja3Spec = obj.H2Ja3Spec
-			} else if obj.H2Ja3 {
+				client.option.h2Ja3Spec = obj.h2Ja3Spec
+			} else if obj.h2Ja3 {
 				client.option.h2Ja3 = true
 			}
 		}

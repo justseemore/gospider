@@ -25,11 +25,7 @@ type ClientOption struct {
 	Db   int    //数据库
 }
 
-func NewClient(options ...ClientOption) (*Client, error) {
-	var option ClientOption
-	if len(options) > 0 {
-		option = options[0]
-	}
+func NewClient(option ClientOption) (*Client, error) {
 	if option.Host == "" {
 		option.Host = "localhost"
 	}

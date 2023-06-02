@@ -24,18 +24,19 @@ import (
 )
 
 type ClientOption struct {
-	Name    string   //程序执行的名字
-	Args    []string //程序的执行参数
-	Dir     string   //程序执行的位置
-	TimeOut int      //程序超时时间
-	Leak    bool     //是否防止内存泄漏
+	Name          string   //程序执行的名字
+	Args          []string //程序的执行参数
+	Dir           string   //程序执行的位置
+	TimeOut       int      //程序超时时间
+	Leak          bool     //是否防止内存泄漏
+	CloseCallBack func()   //关闭时执行的函数
 }
 type Client struct {
 	err           error
 	cmd           *exec.Cmd
 	ctx           context.Context
 	cnl           context.CancelFunc
-	CloseCallBack func() //关闭时执行的函数
+	closeCallBack func() //关闭时执行的函数
 }
 
 func serve(cnl context.CancelFunc, l *leakless.Launcher, uid string) (string, error) {
@@ -100,9 +101,10 @@ func NewClient(pre_ctx context.Context, option ClientOption) (*Client, error) {
 	}
 	cmd.Dir = option.Dir
 	result := &Client{
-		cmd: cmd,
-		ctx: ctx,
-		cnl: cnl,
+		cmd:           cmd,
+		ctx:           ctx,
+		cnl:           cnl,
+		closeCallBack: option.CloseCallBack,
 	}
 	go tools.Signal(ctx, result.Close)
 	return result, err
@@ -408,8 +410,8 @@ func (obj *Client) Close() {
 	if obj.cmd.Process != nil {
 		obj.cmd.Process.Kill()
 	}
-	if obj.CloseCallBack != nil {
-		obj.CloseCallBack()
+	if obj.closeCallBack != nil {
+		obj.closeCallBack()
 	}
 }
 
