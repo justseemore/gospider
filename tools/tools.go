@@ -874,14 +874,18 @@ func GetProxyCertWithName(serverName string) (tlsCert tls.Certificate, err error
 	}
 	return GetTlsCert(cert, key)
 }
-func GetProxyCertWithCert(preCert *x509.Certificate) (tlsCert tls.Certificate, err error) {
-	crt, err := LoadCertData(CrtFile)
-	if err != nil {
-		return tlsCert, err
+func GetProxyCertWithCert(crt *x509.Certificate, key *ecdsa.PrivateKey, preCert *x509.Certificate) (tlsCert tls.Certificate, err error) {
+	if crt == nil {
+		crt, err = LoadCertData(CrtFile)
+		if err != nil {
+			return tlsCert, err
+		}
 	}
-	key, err := LoadCertKeyData(KeyFile)
-	if err != nil {
-		return tlsCert, err
+	if key == nil {
+		key, err = LoadCertKeyData(KeyFile)
+		if err != nil {
+			return tlsCert, err
+		}
 	}
 	cert, err := GetCertWithCert(crt, key, preCert)
 	if err != nil {
