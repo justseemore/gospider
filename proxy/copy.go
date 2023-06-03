@@ -214,7 +214,7 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 	}
 	var cert tls.Certificate
 	if len(certs) > 0 {
-		cert, err = tools.GetProxyCertWithCert(obj.crt, obj.key, certs[0])
+		cert, err = tools.GetProxyCertWithCert(nil, nil, certs[0])
 	} else {
 		cert, err = tools.GetProxyCertWithName(tools.GetServerName(client.option.host))
 	}

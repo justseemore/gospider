@@ -3,9 +3,7 @@ package proxy
 import (
 	"bufio"
 	"context"
-	"crypto/ecdsa"
 	"crypto/tls"
-	"crypto/x509"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -87,9 +85,7 @@ type Client struct {
 	h2Ja3Spec ja3.H2Ja3Spec //h2 指纹
 
 	err      error //错误
-	crt      *x509.Certificate
 	cert     tls.Certificate
-	key      *ecdsa.PrivateKey
 	dialer   *requests.DialClient //连接的Dialer
 	listener net.Listener         //Listener 服务
 	basic    string
@@ -161,14 +157,6 @@ func NewClient(pre_ctx context.Context, option ClientOption) (*Client, error) {
 			return nil, err
 		}
 	} else {
-		server.crt, err = tools.LoadCertData(option.CrtFile)
-		if err != nil {
-			return nil, err
-		}
-		server.key, err = tools.LoadCertKeyData(option.KeyFile)
-		if err != nil {
-			return nil, err
-		}
 		if server.cert, err = tls.X509KeyPair(option.CrtFile, option.KeyFile); err != nil {
 			return nil, err
 		}

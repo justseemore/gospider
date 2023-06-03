@@ -48,9 +48,9 @@ func TestProxy(t *testing.T) {
 
 func TestProxy2(t *testing.T) {
 	proCliPre, err := proxy.NewClient(nil, proxy.ClientOption{
-		Usr:       "gospider",
-		Pwd:       "gospider123456789",
-		DisVerify: true,
+		Usr: "gospider",
+		Pwd: "gospider123456789",
+		// DisVerify: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +60,8 @@ func TestProxy2(t *testing.T) {
 	proIp := proCliPre.Addr()
 
 	proCli, err := proxy.NewClient(nil, proxy.ClientOption{
-		Proxy: "https://gospider:gospider123456789@" + proIp,
+		Proxy:     "https://gospider:gospider123456789@" + proIp,
+		DisVerify: true,
 	})
 	if err != nil {
 		t.Fatal(err)

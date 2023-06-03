@@ -808,15 +808,9 @@ func GetCertKey() (*ecdsa.PrivateKey, error) {
 }
 func GetCertWithCN(rootCert *x509.Certificate, key *ecdsa.PrivateKey, commonName string) (*x509.Certificate, error) {
 	csr := &x509.Certificate{
-		Version:      3,
-		SerialNumber: big.NewInt(time.Now().Unix()),
-		Subject: pkix.Name{
-			Country:            []string{"CN"},
-			Province:           []string{"Shanghai"},
-			Locality:           []string{"Shanghai"},
-			Organization:       []string{"GoSpider"},
-			OrganizationalUnit: []string{"GoSpiderProxy"},
-		},
+		Version:               3,
+		SerialNumber:          big.NewInt(time.Now().Unix()),
+		Subject:               rootCert.Subject,
 		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1)},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(1000, 0, 0),
@@ -840,18 +834,23 @@ func GetCertWithCN(rootCert *x509.Certificate, key *ecdsa.PrivateKey, commonName
 	}
 	return x509.ParseCertificate(der)
 }
+
 func GetCertWithCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey, preCert *x509.Certificate) (*x509.Certificate, error) {
 	csr := &x509.Certificate{
 		Version:               3,
 		SerialNumber:          big.NewInt(time.Now().Unix()),
-		Subject:               preCert.Subject,
+		Subject:               rootCert.Subject,
 		DNSNames:              preCert.DNSNames,
+		IPAddresses:           preCert.IPAddresses,
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(1000, 0, 0),
 		BasicConstraintsValid: true,
 		IsCA:                  false,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+	}
+	if len(preCert.DNSNames) > 0 {
+		csr.Subject.CommonName = preCert.DNSNames[0]
 	}
 	der, err := x509.CreateCertificate(rand2.Reader, csr, rootCert, key.Public(), key)
 	if err != nil {
