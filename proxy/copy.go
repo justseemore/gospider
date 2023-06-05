@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"net"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
+	"golang.org/x/exp/slices"
 )
 
 func (obj *Client) wsSend(ctx context.Context, wsClient *websocket.Conn, wsServer *websocket.Conn) (err error) {
@@ -204,33 +204,64 @@ func (obj *Client) copyHttpMain(ctx context.Context, client *ProxyConn, server *
 	return obj.wsSend(ctx, wsClient, wsServer)
 }
 func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
-	tlsServer, http2, certs, err := obj.tlsServer(ctx, server, client.option.host, client.option.isWs || server.option.isWs, client.option.ja3, client.option.ja3Spec)
-	if err != nil {
-		return err
-	}
-	server.option.http2 = http2
-	if client.option.method != http.MethodConnect {
+	var nextProtos []string
+	if client.option.method != http.MethodConnect { //直连转发
+		if client.option.isWs || server.option.isWs {
+			nextProtos = []string{"http/1.1"}
+		} else {
+			nextProtos = []string{"h2", "http/1.1"}
+		}
+		tlsServer, err := obj.tlsServer(ctx, server, client.option.host, nextProtos, client.option.ja3, client.option.ja3Spec)
+		if err != nil {
+			return err
+		}
 		return obj.copyHttpMain(ctx, client, newProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option, false))
 	}
-	var cert tls.Certificate
-	if len(certs) > 0 {
-		cert, err = tools.GetProxyCertWithCert(nil, nil, certs[0])
-	} else {
-		cert, err = tools.GetProxyCertWithName(tools.GetServerName(client.option.host))
-	}
-	if err != nil {
+	var tlsClient *tls.Conn
+	var tlsServer *tls.Conn
+	tlsClient = tls.Server(client, &tls.Config{
+		InsecureSkipVerify: true,
+		GetConfigForClient: func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+			tlsServer, err = obj.tlsServer(ctx, server, client.option.host, chi.SupportedProtos, client.option.ja3, client.option.ja3Spec)
+			if err != nil {
+				return nil, err
+			}
+			var cert tls.Certificate
+			if len(tlsServer.ConnectionState().PeerCertificates) > 0 {
+				cert, err = tools.GetProxyCertWithCert(nil, nil, tlsServer.ConnectionState().PeerCertificates[0])
+			} else {
+				cert, err = tools.GetProxyCertWithName(tools.GetServerName(client.option.host))
+			}
+			if err != nil {
+				return nil, err
+			}
+			if tlsServer.ConnectionState().NegotiatedProtocol == "h2" {
+				if obj.responseCallBack != nil ||
+					obj.requestCallBack != nil ||
+					obj.wsCallBack != nil ||
+					client.option.h2Ja3 { //需要拦截请求 或需要设置h2指纹，就走12
+					nextProtos = []string{"http/1.1"}
+				} else {
+					nextProtos = []string{"h2", "http/1.1"}
+				}
+			} else {
+				nextProtos = []string{"http/1.1"}
+			}
+			return &tls.Config{
+				InsecureSkipVerify: true,
+				Certificates:       []tls.Certificate{cert},
+				NextProtos:         nextProtos,
+			}, nil
+		},
+	})
+	if err = tlsClient.HandshakeContext(ctx); err != nil {
 		return err
 	}
-	clientH2 := server.option.http2
-	//如果服务端是h2,需要拦截请求 或需要设置h2指纹，就走12
-	if clientH2 && (obj.responseCallBack != nil || obj.requestCallBack != nil || client.option.h2Ja3) {
-		clientH2 = false
-	}
-	tlsClient, http2, err := obj.tlsClient(ctx, client, !clientH2, cert) //服务端为h2时，客户端随意，服务端为h1时，客户端必须为h1
-	if err != nil {
-		return err
-	}
-	client.option.http2 = http2
+
+	server.option.http2 = tlsServer.ConnectionState().NegotiatedProtocol == "h2"
+	client.option.http2 = tlsClient.ConnectionState().NegotiatedProtocol == "h2"
+
+	//重新包装连接
 	clientProxy := newProxyCon(ctx, tlsClient, bufio.NewReader(tlsClient), *client.option, true)
 	serverProxy := newProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option, false)
 	return obj.copyHttpMain(ctx, clientProxy, serverProxy)
@@ -252,25 +283,11 @@ func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, disHttp2 bool, 
 	}
 	return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
 }
-func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, disHttp2 bool, isJa3 bool, ja3Spec ja3.ClientHelloSpec) (net.Conn, bool, []*x509.Certificate, error) {
+func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, nextProtos []string, isJa3 bool, ja3Spec ja3.ClientHelloSpec) (*tls.Conn, error) {
 	if isJa3 {
-		if tlsConn, err := ja3.NewClient(ctx, conn, ja3Spec, disHttp2, addr); err != nil {
-			return tlsConn, false, nil, err
-		} else {
-			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().PeerCertificates, err
-		}
+		return ja3.NewClient(ctx, conn, ja3Spec, !slices.Contains(nextProtos, "h2"), addr)
 	} else {
-		var nextProtos []string
-		if disHttp2 {
-			nextProtos = []string{"http/1.1"}
-		} else {
-			nextProtos = []string{"h2", "http/1.1"}
-		}
-		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: nextProtos})
-		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			return tlsConn, false, nil, err
-		} else {
-			return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", tlsConn.ConnectionState().PeerCertificates, err
-		}
+		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: addr, NextProtos: nextProtos})
+		return tlsConn, tlsConn.HandshakeContext(ctx)
 	}
 }

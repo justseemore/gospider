@@ -551,11 +551,6 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 	return obj.DialContext(ctx, network, addr)
 }
 func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network string, addr string) (conn net.Conn, err error) {
-	defer func() {
-		if err != nil && conn != nil {
-			conn.Close()
-		}
-	}()
 	if conn, err = obj.requestHttpDialContext(ctx, network, addr); err != nil {
 		return nil, err
 	}

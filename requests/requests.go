@@ -140,7 +140,7 @@ type RequestOption struct {
 	Json          any                                         //发送application/json,支持：string,[]bytes,json,map
 	Text          any                                         //发送text/xml,支持string,[]bytes,json,map
 	Raw           any                                         //不设置context-type,支持string,[]bytes,json,map
-	TempData      any                                         //临时变量，用于回调存储或自由度更高的用法
+	TempData      map[string]any                              //临时变量，用于回调存储或自由度更高的用法
 	DisCookie     bool                                        //关闭cookies管理,这个请求不用cookies池
 	DisDecode     bool                                        //关闭自动解码
 	Bar           bool                                        //是否开启bar
