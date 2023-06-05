@@ -46,6 +46,7 @@ type ClientOption struct {
 	Bar           bool                                        //是否开启bar
 }
 type Client struct {
+	http2Upg      *http2.Upg
 	redirectNum   int                                         //重定向次数
 	disDecode     bool                                        //关闭自动编码
 	disRead       bool                                        //关闭默认读取请求体
@@ -150,12 +151,11 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 			return ctxData.proxy, nil
 		},
 	}
+	var http2Upg *http2.Upg
 	if session_option.H2Ja3 || session_option.H2Ja3Spec.IsSet() {
+		http2Upg = http2.NewUpg(http2.UpgOption{H2Ja3Spec: session_option.H2Ja3Spec, DialTLSContext: dialClient.requestHttp2DialTlsContext})
 		baseTransport.TLSNextProto = map[string]func(authority string, c *tls.Conn) http.RoundTripper{
-			"h2": http2.Upg{
-				H2Ja3Spec:      session_option.H2Ja3Spec,
-				DialTLSContext: dialClient.requestHttp2DialTlsContext,
-			}.UpgradeFn,
+			"h2": http2Upg.UpgradeFn,
 		}
 	}
 	client.Transport = baseTransport.Clone()
@@ -165,6 +165,7 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		ctx:           ctx,
 		cnl:           cnl,
 		client:        &client,
+		http2Upg:      http2Upg,
 		baseTransport: &baseTransport,
 		disAlive:      session_option.DisAlive,
 		disCookie:     session_option.DisCookie,
@@ -255,6 +256,9 @@ func (obj *Client) Closed() bool {
 func (obj *Client) CloseIdleConnections() {
 	obj.client.CloseIdleConnections()
 	obj.baseTransport.CloseIdleConnections()
+	if obj.http2Upg != nil {
+		obj.http2Upg.CloseIdleConnections()
+	}
 }
 
 // 返回url 的cookies,也可以设置url 的cookies

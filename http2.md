@@ -25,6 +25,10 @@ v0.10.0
 ## 添加函数
 ```go
 type Upg struct {
+	connPool *clientConnPool
+	t        *Transport
+}
+type UpgOption struct {
 	H2Ja3Spec             ja3.H2Ja3Spec
 	DisableCompression    bool
 	DialTLSContext        func(ctx context.Context, network string, addr string, cfg *tls.Config) (net.Conn, error)
@@ -33,11 +37,15 @@ type Upg struct {
 	ResponseHeaderTimeout int64
 }
 
-func (obj Upg) UpgradeFn(authority string, c *tls.Conn) http.RoundTripper {
+func NewUpg(options ...UpgOption) *Upg {
+	var option UpgOption
+	if len(options) > 0 {
+		option = options[0]
+	}
 	var headerTableSize uint32 = 65536
 	var maxHeaderListSize uint32 = 262144
-	if obj.H2Ja3Spec.InitialSetting != nil {
-		for _, setting := range obj.H2Ja3Spec.InitialSetting {
+	if option.H2Ja3Spec.InitialSetting != nil {
+		for _, setting := range option.H2Ja3Spec.InitialSetting {
 			switch setting.Id {
 			case 1:
 				headerTableSize = setting.Val
@@ -46,7 +54,7 @@ func (obj Upg) UpgradeFn(authority string, c *tls.Conn) http.RoundTripper {
 			}
 		}
 	} else {
-		obj.H2Ja3Spec.InitialSetting = []ja3.Setting{
+		option.H2Ja3Spec.InitialSetting = []ja3.Setting{
 			{Id: 1, Val: headerTableSize},
 			{Id: 2, Val: 0},
 			{Id: 3, Val: 1000},
@@ -54,50 +62,59 @@ func (obj Upg) UpgradeFn(authority string, c *tls.Conn) http.RoundTripper {
 			{Id: 6, Val: maxHeaderListSize},
 		}
 	}
-	if obj.H2Ja3Spec.OrderHeaders == nil {
-		obj.H2Ja3Spec.OrderHeaders = []string{":method", ":authority", ":scheme", ":path"}
+	if option.H2Ja3Spec.OrderHeaders == nil {
+		option.H2Ja3Spec.OrderHeaders = []string{":method", ":authority", ":scheme", ":path"}
 	}
-	if obj.H2Ja3Spec.ConnFlow == 0 {
-		obj.H2Ja3Spec.ConnFlow = 15663105
+	if option.H2Ja3Spec.ConnFlow == 0 {
+		option.H2Ja3Spec.ConnFlow = 15663105
 	}
 
-	if obj.IdleConnTimeout == 0 {
-		obj.IdleConnTimeout = 30
+	if option.IdleConnTimeout == 0 {
+		option.IdleConnTimeout = 30
 	}
-	if obj.TLSHandshakeTimeout == 0 {
-		obj.TLSHandshakeTimeout = 15
+	if option.TLSHandshakeTimeout == 0 {
+		option.TLSHandshakeTimeout = 15
 	}
-	if obj.ResponseHeaderTimeout == 0 {
-		obj.ResponseHeaderTimeout = 30
+	if option.ResponseHeaderTimeout == 0 {
+		option.ResponseHeaderTimeout = 30
 	}
 
 	connPool := new(clientConnPool)
 	t2 := &Transport{
-		H2Ja3Spec:                 obj.H2Ja3Spec,
+		H2Ja3Spec:                 option.H2Ja3Spec,
 		MaxDecoderHeaderTableSize: headerTableSize,   //1:initialHeaderTableSize,65536
 		MaxEncoderHeaderTableSize: headerTableSize,   //1:initialHeaderTableSize,65536
 		MaxHeaderListSize:         maxHeaderListSize, //6:MaxHeaderListSize,262144
-		DisableCompression:        obj.DisableCompression,
+		DisableCompression:        option.DisableCompression,
 
 		TLSClientConfig:  &tls.Config{InsecureSkipVerify: true},
-		DialTLSContext:   obj.DialTLSContext,
+		DialTLSContext:   option.DialTLSContext,
 		AllowHTTP:        true,
-		ReadIdleTimeout:  time.Duration(obj.IdleConnTimeout) * time.Second, //检测连接是否健康的间隔时间
-		PingTimeout:      time.Second * time.Duration(obj.TLSHandshakeTimeout),
-		WriteByteTimeout: time.Second * time.Duration(obj.ResponseHeaderTimeout),
+		ReadIdleTimeout:  time.Duration(option.IdleConnTimeout) * time.Second, //检测连接是否健康的间隔时间
+		PingTimeout:      time.Second * time.Duration(option.TLSHandshakeTimeout),
+		WriteByteTimeout: time.Second * time.Duration(option.ResponseHeaderTimeout),
 
 		ConnPool: noDialClientConnPool{connPool},
 	}
 	connPool.t = t2
+	return &Upg{
+		connPool: connPool,
+		t:        t2,
+	}
+}
+func (obj *Upg) CloseIdleConnections() {
+	obj.t.CloseIdleConnections()
+}
+func (obj *Upg) UpgradeFn(authority string, c *tls.Conn) http.RoundTripper {
 	addr := authorityAddr("https", authority)
-	if used, err := connPool.addConnIfNeeded(addr, t2, c); err != nil {
+	if used, err := obj.connPool.addConnIfNeeded(addr, obj.t, c); err != nil {
 		defer c.Close()
 		return erringRoundTripper{err}
 	} else if !used {
 		defer c.Close()
 		return erringRoundTripper{errors.New("used")}
 	}
-	return t2
+	return obj.t
 }
 ```
 

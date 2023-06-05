@@ -7,7 +7,6 @@
 * 支持根据请求动态设置指纹
 * 支持链式代理，设置下游代理
 * 支持http,https,websocket,http2 抓包
-* 让不支持http2协议的客户端访问http2网站,例如：python 中requests 不支持http2协议,使其支持http2协议
 
 #  一个端口同时实现 http,https,socks五 代理
 ```go
