@@ -407,7 +407,7 @@ func (obj *Client) Join() {
 
 // 关闭客户端
 func (obj *Client) Close() {
-	obj.cnl()
+	defer obj.cnl()
 	if obj.cmd.Process != nil {
 		killProcess(obj.cmd)
 	}
