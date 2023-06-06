@@ -644,8 +644,9 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	r, err = obj.getClient(request_option).Do(reqs)
 	if r != nil {
 		if ctxData.ws {
-			request_option.DisRead = true
-			if r.StatusCode != 101 && err == nil {
+			if r.StatusCode == 101 {
+				request_option.DisRead = true
+			} else if err == nil {
 				err = errors.New("statusCode not 101")
 			}
 		} else if r.Header.Get("Content-Type") == "text/event-stream" {
