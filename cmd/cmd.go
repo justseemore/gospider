@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"sync"
@@ -18,9 +17,6 @@ import (
 	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/tools"
 	"github.com/tidwall/gjson"
-	"github.com/ysmood/leakless"
-	"github.com/ysmood/leakless/pkg/shared"
-	"github.com/ysmood/leakless/pkg/utils"
 )
 
 type ClientOption struct {
@@ -28,7 +24,6 @@ type ClientOption struct {
 	Args          []string //程序的执行参数
 	Dir           string   //程序执行的位置
 	TimeOut       int      //程序超时时间
-	Leak          bool     //是否防止内存泄漏
 	CloseCallBack func()   //关闭时执行的函数
 }
 type Client struct {
@@ -37,47 +32,6 @@ type Client struct {
 	ctx           context.Context
 	cnl           context.CancelFunc
 	closeCallBack func() //关闭时执行的函数
-}
-
-func serve(cnl context.CancelFunc, l *leakless.Launcher, uid string) (string, error) {
-	srv, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return "", err
-	}
-	go func() {
-		defer srv.Close()
-		conn, err := srv.Accept()
-		if err != nil {
-			cnl()
-			return
-		}
-		enc := json.NewEncoder(conn)
-		err = enc.Encode(shared.Message{UID: uid})
-		if err != nil {
-			cnl()
-			return
-		}
-		dec := json.NewDecoder(conn)
-		var msg shared.Message
-		err = dec.Decode(&msg)
-		if err != nil {
-			cnl()
-			return
-		}
-		_ = dec.Decode(&msg)
-	}()
-	return srv.Addr().String(), nil
-}
-func leakCommandContext(ctx context.Context, cnl context.CancelFunc, name string, arg ...string) (*exec.Cmd, error) {
-	l := leakless.New()
-	bin := ""
-	func() {
-		defer leakless.LockPort(l.Lock)()
-		bin = leakless.GetLeaklessBin()
-	}()
-	uid := fmt.Sprintf("%x", utils.RandBytes(16))
-	addr, err := serve(cnl, l, uid)
-	return exec.CommandContext(ctx, bin, append([]string{uid, addr, name}, arg...)...), err
 }
 
 // 普通的cmd 客户端
@@ -93,12 +47,7 @@ func NewClient(pre_ctx context.Context, option ClientOption) (*Client, error) {
 	} else {
 		ctx, cnl = context.WithCancel(pre_ctx)
 	}
-	var cmd *exec.Cmd
-	if option.Leak {
-		cmd, err = leakCommandContext(ctx, cnl, option.Name, option.Args...)
-	} else {
-		cmd = exec.CommandContext(ctx, option.Name, option.Args...)
-	}
+	cmd := exec.CommandContext(ctx, option.Name, option.Args...)
 	setAttr(cmd)
 	cmd.Dir = option.Dir
 	result := &Client{
