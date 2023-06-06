@@ -769,7 +769,8 @@ func SplitHostPort(address string) (string, int, error) {
 	return host, portnum, nil
 }
 
-func GetRootCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
+// 生成根证书
+func CreateRootCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
 	beforDate, err := time.ParseInLocation(time.DateOnly, "2023-03-20", time.Local)
 	if err != nil {
 		return nil, err
@@ -803,7 +804,9 @@ func GetRootCert(key *ecdsa.PrivateKey) (*x509.Certificate, error) {
 	}
 	return x509.ParseCertificate(rootDer)
 }
-func GetCertKey() (*ecdsa.PrivateKey, error) {
+
+// 生成私钥
+func CreateCertKey() (*ecdsa.PrivateKey, error) {
 	return ecdsa.GenerateKey(elliptic.P256(), rand2.Reader)
 }
 func GetCertWithCN(rootCert *x509.Certificate, key *ecdsa.PrivateKey, commonName string) (*x509.Certificate, error) {
@@ -835,7 +838,7 @@ func GetCertWithCN(rootCert *x509.Certificate, key *ecdsa.PrivateKey, commonName
 	return x509.ParseCertificate(der)
 }
 
-func GetCertWithCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey, preCert *x509.Certificate) (*x509.Certificate, error) {
+func CreateCertWithCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey, preCert *x509.Certificate) (*x509.Certificate, error) {
 	csr := &x509.Certificate{
 		Version:               3,
 		SerialNumber:          big.NewInt(time.Now().Unix()),
@@ -858,7 +861,7 @@ func GetCertWithCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey, preCert 
 	}
 	return x509.ParseCertificate(der)
 }
-func GetProxyCertWithName(serverName string) (tlsCert tls.Certificate, err error) {
+func CreateProxyCertWithName(serverName string) (tlsCert tls.Certificate, err error) {
 	crt, err := LoadCertData(CrtFile)
 	if err != nil {
 		return tlsCert, err
@@ -873,7 +876,7 @@ func GetProxyCertWithName(serverName string) (tlsCert tls.Certificate, err error
 	}
 	return GetTlsCert(cert, key)
 }
-func GetProxyCertWithCert(crt *x509.Certificate, key *ecdsa.PrivateKey, preCert *x509.Certificate) (tlsCert tls.Certificate, err error) {
+func CreateProxyCertWithCert(crt *x509.Certificate, key *ecdsa.PrivateKey, preCert *x509.Certificate) (tlsCert tls.Certificate, err error) {
 	if crt == nil {
 		crt, err = LoadCertData(CrtFile)
 		if err != nil {
@@ -886,7 +889,7 @@ func GetProxyCertWithCert(crt *x509.Certificate, key *ecdsa.PrivateKey, preCert 
 			return tlsCert, err
 		}
 	}
-	cert, err := GetCertWithCert(crt, key, preCert)
+	cert, err := CreateCertWithCert(crt, key, preCert)
 	if err != nil {
 		return tlsCert, err
 	}
@@ -941,6 +944,7 @@ func CopySlicess[T any](value [][]T) [][]T {
 func GetContentTypeWithBytes(content []byte) string {
 	return http.DetectContentType(content)
 }
+
 func Uuid() uuid.UUID {
 	return uuid.New()
 }

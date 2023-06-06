@@ -226,9 +226,9 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 			}
 			var cert tls.Certificate
 			if len(tlsServer.ConnectionState().PeerCertificates) > 0 {
-				cert, err = tools.GetProxyCertWithCert(nil, nil, tlsServer.ConnectionState().PeerCertificates[0])
+				cert, err = tools.CreateProxyCertWithCert(nil, nil, tlsServer.ConnectionState().PeerCertificates[0])
 			} else {
-				cert, err = tools.GetProxyCertWithName(tools.GetServerName(client.option.host))
+				cert, err = tools.CreateProxyCertWithName(tools.GetServerName(client.option.host))
 			}
 			if err != nil {
 				return nil, err

@@ -153,7 +153,7 @@ func NewClient(pre_ctx context.Context, option ClientOption) (*Client, error) {
 	}
 	//证书
 	if option.CrtFile == nil || option.KeyFile == nil {
-		if server.cert, err = tools.GetProxyCertWithName(option.ServerName); err != nil {
+		if server.cert, err = tools.CreateProxyCertWithName(option.ServerName); err != nil {
 			return nil, err
 		}
 	} else {

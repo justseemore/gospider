@@ -238,9 +238,9 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 	certs := utlsConn.ConnectionState().PeerCertificates
 	var cert tls.Certificate
 	if len(certs) > 0 {
-		cert, err = tools.GetProxyCertWithCert(nil, nil, certs[0])
+		cert, err = tools.CreateProxyCertWithCert(nil, nil, certs[0])
 	} else {
-		cert, err = tools.GetProxyCertWithName(tools.GetServerName(addr))
+		cert, err = tools.CreateProxyCertWithName(tools.GetServerName(addr))
 	}
 	if err != nil {
 		return nil, err
