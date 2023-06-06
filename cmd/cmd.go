@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"syscall"
 	"time"
 
 	"gitee.com/baixudong/gospider/conf"
@@ -100,11 +99,7 @@ func NewClient(pre_ctx context.Context, option ClientOption) (*Client, error) {
 	} else {
 		cmd = exec.CommandContext(ctx, option.Name, option.Args...)
 	}
-
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow: true,
-	}
-
+	setAttr(cmd)
 	cmd.Dir = option.Dir
 	result := &Client{
 		cmd:           cmd,
@@ -414,7 +409,7 @@ func (obj *Client) Join() {
 func (obj *Client) Close() {
 	obj.cnl()
 	if obj.cmd.Process != nil {
-		obj.cmd.Process.Kill()
+		killProcess(obj.cmd)
 	}
 	if obj.closeCallBack != nil {
 		obj.closeCallBack()
