@@ -46,6 +46,8 @@ type ClientOption struct {
 	Bar           bool                                        //是否开启bar
 }
 type Client struct {
+	ja3           bool
+	proxy         string //全局代理
 	http2Upg      *http2.Upg
 	redirectNum   int                                         //重定向次数
 	disDecode     bool                                        //关闭自动编码
@@ -59,8 +61,8 @@ type Client struct {
 	headers       any                                         //请求头
 	bar           bool                                        //是否开启bar
 
-	ja3           bool                //开启ja3
-	ja3Spec       ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	// ja3           bool                //开启ja3
+	// ja3Spec       ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	disCookie     bool
 	disAlive      bool
 	client        *http.Client
@@ -98,7 +100,12 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 	if session_option.DnsCacheTime == 0 {
 		session_option.DnsCacheTime = 60 * 30
 	}
+	if session_option.Ja3Spec.IsSet() {
+		session_option.Ja3 = true
+	}
 	dialClient, err := NewDail(DialOption{
+		Ja3:                 session_option.Ja3,
+		Ja3Spec:             session_option.Ja3Spec,
 		TLSHandshakeTimeout: session_option.TLSHandshakeTimeout,
 		DnsCacheTime:        session_option.DnsCacheTime,
 		GetProxy:            session_option.GetProxy,
@@ -142,10 +149,15 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		Proxy: func(r *http.Request) (*url.URL, error) {
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
 			ctxData.url = r.URL
-			if ctxData.disProxy || ctxData.ja3 { //关闭代理或ja3, 走自实现代理
+			ctxData.host = r.Host
+			if ctxData.rawHost != "" { //还原host
+				r.URL.Host, ctxData.rawHost = ctxData.rawHost, ""
+			}
+			if ctxData.disProxy || session_option.Ja3 { //关闭代理,直接返回
 				return nil, nil
 			}
 			if ctxData.proxy != nil {
+				ctxData.host = ctxData.proxy.Host
 				ctxData.isCallback = true //官方代理实现
 			}
 			return ctxData.proxy, nil
@@ -162,16 +174,16 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 	client.Jar = jar
 	client.CheckRedirect = checkRedirect
 	result := &Client{
-		ctx:           ctx,
-		cnl:           cnl,
+		ctx: ctx,
+		cnl: cnl,
+
+		ja3:           session_option.Ja3,
+		proxy:         session_option.Proxy,
 		client:        &client,
 		http2Upg:      http2Upg,
 		baseTransport: &baseTransport,
 		disAlive:      session_option.DisAlive,
 		disCookie:     session_option.DisCookie,
-		ja3:           session_option.Ja3,
-		ja3Spec:       session_option.Ja3Spec,
-
 		redirectNum:   session_option.RedirectNum,
 		disDecode:     session_option.DisDecode,
 		disRead:       session_option.DisRead,
@@ -195,8 +207,6 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 func checkRedirect(req *http.Request, via []*http.Request) error {
 	ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
 	if ctxData.redirectNum == 0 || ctxData.redirectNum >= len(via) {
-		ctxData.url = req.URL
-		ctxData.host = req.Host
 		return nil
 	}
 	return http.ErrUseLastResponse

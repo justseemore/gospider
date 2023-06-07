@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"gitee.com/baixudong/gospider/db"
-	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/websocket"
 
@@ -134,8 +133,6 @@ type WebSockOption struct {
 	Proxy            string
 	DataCache        bool //开启数据缓存
 	IsReplaceRequest bool
-	Ja3Spec          ja3.ClientHelloSpec
-	Ja3              bool
 }
 
 func NewWebSock(preCtx context.Context, globalReqCli *requests.Client, ws string, option WebSockOption, db *db.Client[FulData]) (*WebSock, error) {

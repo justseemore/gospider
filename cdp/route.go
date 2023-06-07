@@ -155,9 +155,7 @@ func keyMd5(key RequestOption, resourceType string) [16]byte {
 }
 func (obj *Route) Request(ctx context.Context, routeOption RequestOption, options ...requests.RequestOption) (FulData, error) {
 	option := requests.RequestOption{
-		Proxy:   obj.webSock.option.Proxy,
-		Ja3Spec: obj.webSock.option.Ja3Spec,
-		Ja3:     obj.webSock.option.Ja3,
+		Proxy: obj.webSock.option.Proxy,
 	}
 	if len(options) > 0 {
 		option = options[0]

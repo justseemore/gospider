@@ -252,11 +252,15 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 		ServerName:         addr,
 		NextProtos:         []string{"h2", "http/1.1"},
 	})
+	proto := utlsConn.ConnectionState().NegotiatedProtocol
+	if proto == "" {
+		proto = "http/1.1"
+	}
 	//代理接收方
 	tlsClientConn := tls.Server(remoteConn, &tls.Config{
 		InsecureSkipVerify: true,
 		Certificates:       []tls.Certificate{cert},
-		NextProtos:         []string{utlsConn.ConnectionState().NegotiatedProtocol},
+		NextProtos:         []string{proto},
 	})
 	go func() {
 		defer tlsConn.Close()

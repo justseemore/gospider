@@ -18,19 +18,21 @@ import (
 )
 
 type DialClient struct {
-	getProxy    func(ctx context.Context, url *url.URL) (string, error)
-	proxy       *url.URL
-	dialer      *net.Dialer
-	dnsIpData   map[string]msgClient
-	lock        sync.RWMutex
-	dnsTimeout  int64
-	addrType    AddrType //使用ipv4,ipv6 ,或自动选项
-	getAddrType func(string) AddrType
-	ja3         bool //是否启用ja3
-	ja3Spec     ja3.ClientHelloSpec
-	disDnsCache bool   //是否关闭dns 缓存
-	dns         string //dns
-	resolver    *net.Resolver
+	getProxy     func(ctx context.Context, url *url.URL) (string, error)
+	proxy        *url.URL
+	dialer       *net.Dialer
+	dnsIpData    map[string]msgClient
+	lock         sync.RWMutex
+	dnsTimeout   int64
+	addrType     AddrType //使用ipv4,ipv6 ,或自动选项
+	getAddrType  func(string) AddrType
+	proxyJa3     bool //是否启用ja3
+	proxyJa3Spec ja3.ClientHelloSpec
+	ja3          bool //是否启用ja3
+	ja3Spec      ja3.ClientHelloSpec
+	disDnsCache  bool   //是否关闭dns 缓存
+	dns          string //dns
+	resolver     *net.Resolver
 }
 type msgClient struct {
 	time int64
@@ -55,6 +57,8 @@ type DialOption struct {
 	GetAddrType         func(string) AddrType
 	Ja3                 bool                //是否启用ja3
 	Ja3Spec             ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	ProxyJa3            bool                //代理是否启用ja3
+	ProxyJa3Spec        ja3.ClientHelloSpec //指定代理ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	DisDnsCache         bool                //是否关闭dns 缓存
 	Dns                 string              //dns
 }
@@ -72,6 +76,9 @@ func NewDail(option DialOption) (*DialClient, error) {
 	if option.Ja3Spec.IsSet() {
 		option.Ja3 = true
 	}
+	if option.ProxyJa3Spec.IsSet() {
+		option.ProxyJa3 = true
+	}
 	var err error
 	dialCli := &DialClient{
 		dnsIpData: make(map[string]msgClient),
@@ -79,14 +86,16 @@ func NewDail(option DialOption) (*DialClient, error) {
 			Timeout:   time.Second * time.Duration(option.TLSHandshakeTimeout),
 			KeepAlive: time.Second * time.Duration(option.KeepAlive),
 		},
-		dnsTimeout:  option.DnsCacheTime,
-		getProxy:    option.GetProxy,
-		addrType:    option.AddrType,
-		getAddrType: option.GetAddrType,
-		ja3:         option.Ja3,
-		ja3Spec:     option.Ja3Spec,
-		disDnsCache: option.DisDnsCache,
-		dns:         option.Dns,
+		dnsTimeout:   option.DnsCacheTime,
+		getProxy:     option.GetProxy,
+		addrType:     option.AddrType,
+		getAddrType:  option.GetAddrType,
+		proxyJa3:     option.ProxyJa3,
+		proxyJa3Spec: option.ProxyJa3Spec,
+		ja3:          option.Ja3,
+		ja3Spec:      option.Ja3Spec,
+		disDnsCache:  option.DisDnsCache,
+		dns:          option.Dns,
 	}
 	dialCli.resolver = &net.Resolver{
 		Dial: dialCli.DnsDialContext,
@@ -334,10 +343,10 @@ func (obj *DialClient) DialTlsProxyContext(ctx context.Context, netword string, 
 	if err != nil {
 		return conn, err
 	}
-	if obj.ja3 {
-		return ja3.NewClient(ctx, conn, obj.ja3Spec, false, tools.GetServerName(addr))
+	if obj.proxyJa3 {
+		return ja3.NewClient(ctx, conn, obj.proxyJa3Spec, true, tools.GetServerName(addr))
 	}
-	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"h2", "http/1.1"}})
+	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"http/1.1"}})
 	return tlsConn, tlsConn.HandshakeContext(ctx)
 }
 
@@ -530,17 +539,14 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 	if reqData.url == nil {
 		return nil, tools.WrapError(ErrFatal, "not found reqData.url")
 	}
-	if reqData.host == "" {
-		reqData.host = tools.GetServerName(addr)
+	if reqData.rawAddr != "" { //还原addr
+		addr, reqData.rawAddr = reqData.rawAddr, ""
 	}
 	var nowProxy *url.URL
 	var err error
-	if reqData.disProxy { //关闭代理直接返回
+	if reqData.disProxy || reqData.isCallback { //走正常连接
 		return obj.DialContext(ctx, network, addr)
 	} else if reqData.proxy != nil { //单独代理设置优先级最高
-		if reqData.isCallback { //走官方代理
-			return obj.DialContext(ctx, network, addr)
-		}
 		nowProxy = reqData.proxy
 	} else if nowProxy, err = obj.GetProxy(ctx, reqData.url); err != nil {
 		return nil, err
@@ -555,12 +561,9 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		return nil, err
 	}
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
-	if reqData.isCallback && reqData.proxy != nil {
-		reqData.host = reqData.proxy.Host
-	}
 	var tlsConn *tls.Conn
-	if reqData.ja3 { //使用ja3 指纹
-		tlsConn, err = ja3.NewClient(ctx, conn, reqData.ja3Spec, reqData.ws, reqData.host)
+	if obj.ja3 { //使用ja3 指纹
+		tlsConn, err = ja3.NewClient(ctx, conn, obj.ja3Spec, reqData.ws, reqData.host)
 	} else {
 		if reqData.ws {
 			tlsConn = tls.Client(conn, &tls.Config{

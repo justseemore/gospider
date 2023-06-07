@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 
 	"net/http"
 	"net/textproto"
@@ -16,7 +17,6 @@ import (
 	"time"
 	_ "unsafe"
 
-	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
@@ -103,15 +103,15 @@ var (
 )
 
 type reqCtxData struct {
-	ja3Spec     ja3.ClientHelloSpec
 	isCallback  bool
 	proxy       *url.URL
 	url         *url.URL
 	host        string
+	rawAddr     string
+	rawHost     string
 	redirectNum int
 	disProxy    bool
 	ws          bool
-	ja3         bool
 }
 
 // 构造一个文件
@@ -145,8 +145,6 @@ type RequestOption struct {
 	DisDecode     bool                                        //关闭自动解码
 	Bar           bool                                        //是否开启bar
 	DisProxy      bool                                        //是否关闭代理,强制关闭代理
-	Ja3           bool                                        //是否开启ja3
-	Ja3Spec       ja3.ClientHelloSpec                         //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	TryNum        int64                                       //重试次数
 	BeforCallBack func(context.Context, *RequestOption) error //请求之前回调
 	AfterCallBack func(context.Context, *Response) error      //请求之后回调
@@ -364,9 +362,6 @@ func (obj *RequestOption) optionInit() error {
 	if err = obj.newHeaders(); err != nil {
 		return err
 	}
-	if obj.Ja3Spec.IsSet() { //有值
-		obj.Ja3 = true
-	}
 	//构造cookies
 	return obj.newCookies()
 }
@@ -382,6 +377,9 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	}
 	if option.ErrCallBack == nil {
 		option.ErrCallBack = obj.errCallBack
+	}
+	if option.Proxy == "" {
+		option.Proxy = obj.proxy
 	}
 	if option.Headers == nil {
 		if obj.headers == nil {
@@ -413,12 +411,6 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	}
 	if !option.DisUnZip {
 		option.DisUnZip = obj.disUnZip
-	}
-	if !option.Ja3 {
-		option.Ja3 = obj.ja3
-	}
-	if !option.Ja3Spec.IsSet() {
-		option.Ja3Spec = obj.ja3Spec
 	}
 	var err error
 	if con, ok := option.Json.(io.Reader); ok {
@@ -543,8 +535,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	//构造ctxData
 	ctxData := new(reqCtxData)
 	ctxData.disProxy = request_option.DisProxy
-	ctxData.ja3 = request_option.Ja3
-	ctxData.ja3Spec = request_option.Ja3Spec
 	if request_option.Proxy != "" { //代理相关构造
 		tempProxy, err := verifyProxy(request_option.Proxy)
 		if err != nil {
@@ -606,9 +596,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		ctxData.ws = true
 		reqs.URL.Scheme = "https"
 	}
-	if reqs.URL.Scheme == "http" {
-		ctxData.ja3 = false
-	}
 	//添加headers
 	var headOk bool
 	if reqs.Header, headOk = request_option.Headers.(http.Header); !headOk {
@@ -618,7 +605,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	if reqs.Header.Get("Content-type") == "" && request_option.contentType != "" {
 		reqs.Header.Set("Content-Type", request_option.contentType)
 	}
-
 	//host构造
 	if request_option.Host != "" {
 		reqs.Host = request_option.Host
@@ -640,6 +626,18 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	var err2 error
 	if ctxData.ws {
 		websocket.SetClientHeaders(reqs.Header, request_option.WsOption)
+	}
+	//ja3相关处理
+	if obj.ja3 && !ctxData.disProxy && ctxData.proxy != nil { //修改host,addr
+		rawPort := reqs.URL.Port()
+		if rawPort == "" {
+			if reqs.URL.Scheme == "https" {
+				rawPort = "443"
+			} else {
+				rawPort = "80"
+			}
+		}
+		ctxData.rawHost, ctxData.rawAddr, reqs.URL.Host = reqs.URL.Host, net.JoinHostPort(reqs.URL.Hostname(), rawPort), fmt.Sprintf("%s_%s", fmt.Sprintf("%s_%s_%s", ctxData.proxy.Scheme, ctxData.proxy.Hostname(), ctxData.proxy.Port()), reqs.Host)
 	}
 	r, err = obj.getClient(request_option).Do(reqs)
 	if r != nil {

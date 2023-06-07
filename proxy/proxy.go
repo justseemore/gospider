@@ -141,8 +141,10 @@ func NewClient(pre_ctx context.Context, option ClientOption) (*Client, error) {
 		Proxy:               option.Proxy,
 		KeepAlive:           option.KeepAlive,
 		LocalAddr:           option.LocalAddr,
-		Ja3:                 option.ProxyJa3,
-		Ja3Spec:             option.ProxyJa3Spec,
+		ProxyJa3:            option.ProxyJa3,
+		ProxyJa3Spec:        option.ProxyJa3Spec,
+		Ja3:                 option.Ja3,
+		Ja3Spec:             option.Ja3Spec,
 
 		DisDnsCache: option.DisDnsCache,
 		Dns:         option.Dns,
