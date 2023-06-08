@@ -270,7 +270,6 @@ func (obj *Upg) UpgradeFn(authority string, c *tls.Conn) http.RoundTripper {
 		return erringRoundTripper{err}
 	} else if !used {
 		defer c.Close()
-		return erringRoundTripper{errors.New("used")}
 	}
 	return obj.t
 }

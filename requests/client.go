@@ -150,9 +150,6 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
 			ctxData.url = r.URL
 			ctxData.host = r.Host
-			if ctxData.rawHost != "" { //还原host
-				r.URL.Host, ctxData.rawHost = ctxData.rawHost, ""
-			}
 			if ctxData.disProxy || session_option.Ja3 { //关闭代理,直接返回
 				return nil, nil
 			}
