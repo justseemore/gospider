@@ -86,10 +86,10 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		session_option = client_optinos[0]
 	}
 	if session_option.IdleConnTimeout == 0 {
-		session_option.IdleConnTimeout = 30
+		session_option.IdleConnTimeout = 90
 	}
 	if session_option.KeepAlive == 0 {
-		session_option.KeepAlive = 15
+		session_option.KeepAlive = 30
 	}
 	if session_option.TLSHandshakeTimeout == 0 {
 		session_option.TLSHandshakeTimeout = 15
