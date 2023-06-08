@@ -62,7 +62,7 @@ type erringRoundTripper interface {
 func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	defer client.Close()
 	defer server.Close()
-	serverConn := http2.NewUpg(http2.UpgOption{H2Ja3Spec: client.option.h2Ja3Spec}).UpgradeFn(server.option.host, server.conn.(*tls.Conn))
+	serverConn := http2.NewUpg(nil, http2.UpgOption{H2Ja3Spec: client.option.h2Ja3Spec}).UpgradeFn(server.option.host, server.conn.(*tls.Conn))
 	if erringRoundTripper, ok := serverConn.(erringRoundTripper); ok && erringRoundTripper.RoundTripErr() != nil {
 		return erringRoundTripper.RoundTripErr()
 	}

@@ -195,7 +195,7 @@ type UpgOption struct {
 	ResponseHeaderTimeout int64
 }
 
-func NewUpg(options ...UpgOption) *Upg {
+func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 	var option UpgOption
 	if len(options) > 0 {
 		option = options[0]
@@ -239,6 +239,7 @@ func NewUpg(options ...UpgOption) *Upg {
 
 	connPool := new(clientConnPool)
 	t2 := &Transport{
+		t1:                        t1,
 		H2Ja3Spec:                 option.H2Ja3Spec,
 		MaxDecoderHeaderTableSize: headerTableSize,   //1:initialHeaderTableSize,65536
 		MaxEncoderHeaderTableSize: headerTableSize,   //1:initialHeaderTableSize,65536

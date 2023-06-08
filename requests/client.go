@@ -162,7 +162,7 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 	}
 	var http2Upg *http2.Upg
 	if session_option.H2Ja3 || session_option.H2Ja3Spec.IsSet() {
-		http2Upg = http2.NewUpg(http2.UpgOption{H2Ja3Spec: session_option.H2Ja3Spec, DialTLSContext: dialClient.requestHttp2DialTlsContext})
+		http2Upg = http2.NewUpg(&baseTransport, http2.UpgOption{H2Ja3Spec: session_option.H2Ja3Spec, DialTLSContext: dialClient.requestHttp2DialTlsContext})
 		baseTransport.TLSNextProto = map[string]func(authority string, c *tls.Conn) http.RoundTripper{
 			"h2": http2Upg.UpgradeFn,
 		}
