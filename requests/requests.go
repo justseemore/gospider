@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net"
 
 	"net/http"
 	"net/textproto"
@@ -628,17 +627,17 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		websocket.SetClientHeaders(reqs.Header, request_option.WsOption)
 	}
 	//ja3相关处理
-	if obj.ja3 && !ctxData.disProxy && ctxData.proxy != nil { //修改host,addr
-		rawPort := reqs.URL.Port()
-		if rawPort == "" {
-			if reqs.URL.Scheme == "https" {
-				rawPort = "443"
-			} else {
-				rawPort = "80"
-			}
-		}
-		ctxData.rawHost, ctxData.rawAddr, reqs.URL.Host = reqs.URL.Host, net.JoinHostPort(reqs.URL.Hostname(), rawPort), fmt.Sprintf("%s_%s", fmt.Sprintf("%s_%s_%s", ctxData.proxy.Scheme, ctxData.proxy.Hostname(), ctxData.proxy.Port()), reqs.Host)
-	}
+	// if obj.ja3 && !ctxData.disProxy && ctxData.proxy != nil { //修改host,addr
+	// 	rawPort := reqs.URL.Port()
+	// 	if rawPort == "" {
+	// 		if reqs.URL.Scheme == "https" {
+	// 			rawPort = "443"
+	// 		} else {
+	// 			rawPort = "80"
+	// 		}
+	// 	}
+	// 	ctxData.rawHost, ctxData.rawAddr, reqs.URL.Host = reqs.URL.Host, net.JoinHostPort(reqs.URL.Hostname(), rawPort), fmt.Sprintf("%s_%s", fmt.Sprintf("%s_%s_%s", ctxData.proxy.Scheme, ctxData.proxy.Hostname(), ctxData.proxy.Port()), reqs.Host)
+	// }
 	r, err = obj.getClient(request_option).Do(reqs)
 	if r != nil {
 		if ctxData.ws {
