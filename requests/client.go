@@ -18,13 +18,11 @@ type ClientOption struct {
 	TLSHandshakeTimeout   int64                                                   //tls 超时时间,default:15
 	ResponseHeaderTimeout int64                                                   //第一个response headers 接收超时时间,default:30
 	DisCookie             bool                                                    //关闭cookies管理
-	DisAlive              bool                                                    //关闭长连接
 	DisCompression        bool                                                    //关闭请求头中的压缩功能
 	LocalAddr             string                                                  //本地网卡出口ip
-	IdleConnTimeout       int64                                                   //空闲连接在连接池中的超时时间,default:30
-	KeepAlive             int64                                                   //keepalive保活检测定时,default:15
+	IdleConnTimeout       int64                                                   //空闲连接在连接池中的超时时间,default:90
+	KeepAlive             int64                                                   //keepalive保活检测定时,default:30
 	DnsCacheTime          int64                                                   //dns解析缓存时间60*30
-	DisDnsCache           bool                                                    //是否关闭dns 缓存,影响dns 解析
 	AddrType              AddrType                                                //优先使用的addr 类型
 	GetAddrType           func(string) AddrType
 	Dns                   string              //dns
@@ -33,7 +31,7 @@ type ClientOption struct {
 	H2Ja3                 bool                //开启h2指纹
 	H2Ja3Spec             ja3.H2Ja3Spec       //h2指纹
 
-	RedirectNum   int                                         //重定向次数
+	RedirectNum   int                                         //重定向次数,小于0为禁用,0:不限制
 	DisDecode     bool                                        //关闭自动编码
 	DisRead       bool                                        //关闭默认读取请求体
 	DisUnZip      bool                                        //变比自动解压
@@ -46,7 +44,6 @@ type ClientOption struct {
 	Bar           bool                                        //是否开启bar
 }
 type Client struct {
-	ja3           bool
 	proxy         string //全局代理
 	http2Upg      *http2.Upg
 	redirectNum   int                                         //重定向次数
@@ -61,18 +58,15 @@ type Client struct {
 	headers       any                                         //请求头
 	bar           bool                                        //是否开启bar
 
-	// ja3           bool                //开启ja3
-	// ja3Spec       ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
-	disCookie     bool
-	disAlive      bool
-	client        *http.Client
-	baseTransport *http.Transport
-	ctx           context.Context
-	cnl           context.CancelFunc
+	disCookie bool
+	client    *http.Client
+
+	ctx context.Context
+	cnl context.CancelFunc
 }
 
 // 新建一个请求客户端,发送请求必须创建哈
-func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client, error) {
+func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error) {
 	var isG bool
 	if preCtx == nil {
 		preCtx = context.TODO()
@@ -80,42 +74,41 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 		isG = true
 	}
 	ctx, cnl := context.WithCancel(preCtx)
-	var session_option ClientOption
+	var option ClientOption
 	//初始化参数
-	if len(client_optinos) > 0 {
-		session_option = client_optinos[0]
+	if len(options) > 0 {
+		option = options[0]
 	}
-	if session_option.IdleConnTimeout == 0 {
-		session_option.IdleConnTimeout = 90
+	if option.IdleConnTimeout == 0 {
+		option.IdleConnTimeout = 90
 	}
-	if session_option.KeepAlive == 0 {
-		session_option.KeepAlive = 30
+	if option.KeepAlive == 0 {
+		option.KeepAlive = 30
 	}
-	if session_option.TLSHandshakeTimeout == 0 {
-		session_option.TLSHandshakeTimeout = 15
+	if option.TLSHandshakeTimeout == 0 {
+		option.TLSHandshakeTimeout = 15
 	}
-	if session_option.ResponseHeaderTimeout == 0 {
-		session_option.ResponseHeaderTimeout = 30
+	if option.ResponseHeaderTimeout == 0 {
+		option.ResponseHeaderTimeout = 30
 	}
-	if session_option.DnsCacheTime == 0 {
-		session_option.DnsCacheTime = 60 * 30
+	if option.DnsCacheTime == 0 {
+		option.DnsCacheTime = 60 * 30
 	}
-	if session_option.Ja3Spec.IsSet() {
-		session_option.Ja3 = true
+	if option.Ja3Spec.IsSet() {
+		option.Ja3 = true
 	}
 	dialClient, err := NewDail(DialOption{
-		Ja3:                 session_option.Ja3,
-		Ja3Spec:             session_option.Ja3Spec,
-		TLSHandshakeTimeout: session_option.TLSHandshakeTimeout,
-		DnsCacheTime:        session_option.DnsCacheTime,
-		GetProxy:            session_option.GetProxy,
-		Proxy:               session_option.Proxy,
-		KeepAlive:           session_option.KeepAlive,
-		LocalAddr:           session_option.LocalAddr,
-		AddrType:            session_option.AddrType,
-		GetAddrType:         session_option.GetAddrType,
-		DisDnsCache:         session_option.DisDnsCache,
-		Dns:                 session_option.Dns,
+		Ja3:                 option.Ja3,
+		Ja3Spec:             option.Ja3Spec,
+		TLSHandshakeTimeout: option.TLSHandshakeTimeout,
+		DnsCacheTime:        option.DnsCacheTime,
+		GetProxy:            option.GetProxy,
+		Proxy:               option.Proxy,
+		KeepAlive:           option.KeepAlive,
+		LocalAddr:           option.LocalAddr,
+		AddrType:            option.AddrType,
+		GetAddrType:         option.GetAddrType,
+		Dns:                 option.Dns,
 	})
 	if err != nil {
 		cnl()
@@ -124,25 +117,24 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 	var client http.Client
 	//创建cookiesjar
 	var jar *cookiejar.Jar
-	if !session_option.DisCookie {
+	if !option.DisCookie {
 		if jar, err = cookiejar.New(nil); err != nil {
 			cnl()
 			return nil, err
 		}
 	}
-	baseTransport := http.Transport{
+	baseTransport := &http.Transport{
 		MaxIdleConns:        655350,
 		MaxConnsPerHost:     655350,
 		MaxIdleConnsPerHost: 655350,
 		ProxyConnectHeader: http.Header{
 			"User-Agent": []string{UserAgent},
 		},
-		TLSHandshakeTimeout:   time.Second * time.Duration(session_option.TLSHandshakeTimeout),
-		ResponseHeaderTimeout: time.Second * time.Duration(session_option.ResponseHeaderTimeout),
-		DisableKeepAlives:     session_option.DisAlive,
-		DisableCompression:    session_option.DisCompression,
+		TLSHandshakeTimeout:   time.Second * time.Duration(option.TLSHandshakeTimeout),
+		ResponseHeaderTimeout: time.Second * time.Duration(option.ResponseHeaderTimeout),
+		DisableCompression:    option.DisCompression,
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-		IdleConnTimeout:       time.Duration(session_option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
+		IdleConnTimeout:       time.Duration(option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
 		DialContext:           dialClient.requestHttpDialContext,
 		DialTLSContext:        dialClient.requestHttpDialTlsContext,
 		ForceAttemptHTTP2:     true,
@@ -150,48 +142,43 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
 			ctxData.url = r.URL
 			ctxData.host = r.Host
-			if ctxData.disProxy || session_option.Ja3 { //关闭代理,直接返回
-				return nil, nil
-			}
-			if ctxData.proxy != nil {
-				ctxData.host = ctxData.proxy.Host
-				ctxData.isCallback = true //官方代理实现
-			}
-			return ctxData.proxy, nil
+			return nil, nil
 		},
 	}
 	var http2Upg *http2.Upg
-	if session_option.H2Ja3 || session_option.H2Ja3Spec.IsSet() {
-		http2Upg = http2.NewUpg(&baseTransport, http2.UpgOption{H2Ja3Spec: session_option.H2Ja3Spec, DialTLSContext: dialClient.requestHttp2DialTlsContext})
+	if option.H2Ja3 || option.H2Ja3Spec.IsSet() {
+		http2Upg = http2.NewUpg(baseTransport, http2.UpgOption{H2Ja3Spec: option.H2Ja3Spec, DialTLSContext: dialClient.requestHttp2DialTlsContext})
 		baseTransport.TLSNextProto = map[string]func(authority string, c *tls.Conn) http.RoundTripper{
 			"h2": http2Upg.UpgradeFn,
 		}
 	}
-	client.Transport = baseTransport.Clone()
+	client.Transport = baseTransport
 	client.Jar = jar
-	client.CheckRedirect = checkRedirect
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
+		if ctxData.redirectNum == 0 || ctxData.redirectNum >= len(via) {
+			return nil
+		}
+		return http.ErrUseLastResponse
+	}
 	result := &Client{
-		ctx: ctx,
-		cnl: cnl,
-
-		ja3:           session_option.Ja3,
-		proxy:         session_option.Proxy,
+		ctx:           ctx,
+		cnl:           cnl,
+		proxy:         option.Proxy,
 		client:        &client,
 		http2Upg:      http2Upg,
-		baseTransport: &baseTransport,
-		disAlive:      session_option.DisAlive,
-		disCookie:     session_option.DisCookie,
-		redirectNum:   session_option.RedirectNum,
-		disDecode:     session_option.DisDecode,
-		disRead:       session_option.DisRead,
-		disUnZip:      session_option.DisUnZip,
-		tryNum:        session_option.TryNum,
-		beforCallBack: session_option.BeforCallBack,
-		afterCallBack: session_option.AfterCallBack,
-		errCallBack:   session_option.ErrCallBack,
-		timeout:       session_option.Timeout,
-		headers:       session_option.Headers,
-		bar:           session_option.Bar,
+		disCookie:     option.DisCookie,
+		redirectNum:   option.RedirectNum,
+		disDecode:     option.DisDecode,
+		disRead:       option.DisRead,
+		disUnZip:      option.DisUnZip,
+		tryNum:        option.TryNum,
+		beforCallBack: option.BeforCallBack,
+		afterCallBack: option.AfterCallBack,
+		errCallBack:   option.ErrCallBack,
+		timeout:       option.Timeout,
+		headers:       option.Headers,
+		bar:           option.Bar,
 	}
 	if isG {
 		go func() {
@@ -201,47 +188,17 @@ func NewClient(preCtx context.Context, client_optinos ...ClientOption) (*Client,
 	}
 	return result, nil
 }
-func checkRedirect(req *http.Request, via []*http.Request) error {
-	ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
-	if ctxData.redirectNum == 0 || ctxData.redirectNum >= len(via) {
-		return nil
-	}
-	return http.ErrUseLastResponse
-}
-
-func (obj *Client) clone(request_option RequestOption) *http.Client {
-	cli := &http.Client{
-		CheckRedirect: obj.client.CheckRedirect,
-	}
-	if !request_option.DisCookie && obj.client.Jar != nil {
-		cli.Jar = obj.client.Jar
-	}
-	if !request_option.DisAlive {
-		cli.Transport = obj.client.Transport
-	} else {
-		cli.Transport = obj.baseTransport.Clone()
-	}
-	return cli
-}
-
-// 克隆请求客户端,返回一个由相同option 构造的客户端，但是不会克隆:连接池,ookies
-func (obj *Client) Clone() *Client {
-	result := *obj
-	result.client.Transport = result.baseTransport.Clone()
-	return &result
-}
 
 // 重置客户端至初始状态
 func (obj *Client) Reset() error {
 	if obj.client.Jar != nil {
-		jar, err := cookiejar.New(nil)
-		if err != nil {
+		if jar, err := cookiejar.New(nil); err != nil {
 			return err
+		} else {
+			obj.client.Jar = jar
 		}
-		obj.client.Jar = jar
 	}
 	obj.CloseIdleConnections()
-	obj.client.Transport = obj.baseTransport.Clone()
 	return nil
 }
 
@@ -250,19 +207,10 @@ func (obj *Client) Close() {
 	obj.CloseIdleConnections()
 	obj.cnl()
 }
-func (obj *Client) Closed() bool {
-	select {
-	case <-obj.ctx.Done():
-		return true
-	default:
-		return false
-	}
-}
 
 // 关闭客户端中的空闲连接
 func (obj *Client) CloseIdleConnections() {
 	obj.client.CloseIdleConnections()
-	obj.baseTransport.CloseIdleConnections()
 	if obj.http2Upg != nil {
 		obj.http2Upg.CloseIdleConnections()
 	}
@@ -283,21 +231,22 @@ func (obj *Client) Cookies(href string, cookies ...*http.Cookie) Cookies {
 
 // 清除cookies
 func (obj *Client) ClearCookies() error {
-	var jar *cookiejar.Jar
-	var err error
-	jar, err = cookiejar.New(nil)
-	if err != nil {
-		return err
+	if obj.client.Jar == nil {
+		return nil
 	}
-	obj.client.Jar = jar
-	obj.client.Jar = jar
+	if jar, err := cookiejar.New(nil); err != nil {
+		return err
+	} else {
+		obj.client.Jar = jar
+	}
 	return nil
 }
 func (obj *Client) getClient(request_option RequestOption) *http.Client {
-	if request_option.DisAlive || request_option.DisCookie {
-		temp_client := obj.clone(request_option)
-		return temp_client
-	} else {
+	if !request_option.DisCookie || obj.client.Jar == nil {
 		return obj.client
+	}
+	return &http.Client{
+		Transport:     obj.client.Transport,
+		CheckRedirect: obj.client.CheckRedirect,
 	}
 }

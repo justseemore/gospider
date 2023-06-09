@@ -162,9 +162,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 				response.Close()
 			}
 		}
-		if obj.Closed() {
-			obj.Close()
-		}
 	}()
 	//创建request
 	if request_option.body != nil {
@@ -230,7 +227,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		websocket.SetClientHeaders(reqs.Header, request_option.WsOption)
 	}
 	// ja3相关处理
-	if obj.ja3 && !ctxData.disProxy && ctxData.proxy != nil { //修改host,addr
+	if !ctxData.disProxy && ctxData.proxy != nil { //修改host,addr
 		rawPort := reqs.URL.Port()
 		if rawPort == "" {
 			if reqs.URL.Scheme == "https" {
@@ -239,7 +236,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 				rawPort = "80"
 			}
 		}
-		ctxData.rawAddr, reqs.URL.Host = net.JoinHostPort(reqs.URL.Hostname(), rawPort), fmt.Sprintf("%s_%s", fmt.Sprintf("%s_%s_%s", ctxData.proxy.Scheme, ctxData.proxy.Hostname(), ctxData.proxy.Port()), reqs.Host)
+		ctxData.rawAddr, reqs.URL.Host = net.JoinHostPort(reqs.URL.Hostname(), rawPort), tools.Hex(tools.Md5(fmt.Sprintf("%s_%s", fmt.Sprintf("%s_%s_%s", ctxData.proxy.Scheme, ctxData.proxy.Hostname(), ctxData.proxy.Port()), reqs.Host)))
 	}
 	r, err = obj.getClient(request_option).Do(reqs)
 	if r != nil {
@@ -252,7 +249,6 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		} else if r.Header.Get("Content-Type") == "text/event-stream" {
 			request_option.DisRead = true
 		}
-		r.Close = request_option.DisAlive
 		if response, err2 = obj.newResponse(reqCtx, cancel, r, request_option); err2 != nil { //创建 response
 			return response, err2
 		}

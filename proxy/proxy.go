@@ -23,7 +23,6 @@ import (
 type ClientOption struct {
 	ProxyJa3     bool                //连接代理时是否开启ja3
 	ProxyJa3Spec ja3.ClientHelloSpec //连接代理时指定ja3Spec,//指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
-	DisDnsCache  bool                //是否关闭dns 缓存
 	Usr          string              //用户名
 	Pwd          string              //密码
 	IpWhite      []net.IP            //白名单 192.168.1.1,192.168.1.2
@@ -146,7 +145,6 @@ func NewClient(pre_ctx context.Context, option ClientOption) (*Client, error) {
 		Ja3:                 option.Ja3,
 		Ja3Spec:             option.Ja3Spec,
 
-		DisDnsCache: option.DisDnsCache,
 		Dns:         option.Dns,
 		GetAddrType: option.GetAddrType,
 		AddrType:    option.AddrType,

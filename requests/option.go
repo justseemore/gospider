@@ -41,7 +41,6 @@ type RequestOption struct {
 	AfterCallBack func(context.Context, *Response) error      //请求之后回调
 	ErrCallBack   func(context.Context, error) bool           //返回true 中断重试请求
 	RedirectNum   int                                         //重定向次数,小于零 关闭重定向
-	DisAlive      bool                                        //关闭长连接,这次请求不会复用之前的连接
 	DisRead       bool                                        //关闭默认读取请求体,不会主动读取body里面的内容，需用你自己读取
 	DisUnZip      bool                                        //关闭自动解压
 	WsOption      websocket.Option                            //websocket option,使用websocket 请求的option
@@ -162,9 +161,6 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	}
 	if option.Timeout == 0 {
 		option.Timeout = obj.timeout
-	}
-	if !option.DisAlive {
-		option.DisAlive = obj.disAlive
 	}
 	if !option.DisCookie {
 		option.DisCookie = obj.disCookie

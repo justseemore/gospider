@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -31,7 +30,6 @@ type DialClient struct {
 	proxyJa3Spec ja3.ClientHelloSpec
 	ja3          bool //是否启用ja3
 	ja3Spec      ja3.ClientHelloSpec
-	disDnsCache  bool   //是否关闭dns 缓存
 	dns          string //dns
 	resolver     *net.Resolver
 }
@@ -60,7 +58,6 @@ type DialOption struct {
 	Ja3Spec             ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
 	ProxyJa3            bool                //代理是否启用ja3
 	ProxyJa3Spec        ja3.ClientHelloSpec //指定代理ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
-	DisDnsCache         bool                //是否关闭dns 缓存
 	Dns                 string              //dns
 }
 
@@ -95,7 +92,6 @@ func NewDail(option DialOption) (*DialClient, error) {
 		proxyJa3Spec: option.ProxyJa3Spec,
 		ja3:          option.Ja3,
 		ja3Spec:      option.Ja3Spec,
-		disDnsCache:  option.DisDnsCache,
 		dns:          option.Dns,
 	}
 	dialCli.resolver = &net.Resolver{
@@ -151,9 +147,6 @@ func (obj *DialClient) loadHost(host string) (string, bool) {
 	return host, false
 }
 func (obj *DialClient) AddrToIp(ctx context.Context, addr string) (string, error) {
-	if obj.disDnsCache {
-		return addr, nil
-	}
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return addr, err
@@ -418,10 +411,6 @@ func (obj *DialClient) clientVerifyHttps(ctx context.Context, proxyUrl *url.URL,
 	var resp *http.Response
 	go func() {
 		defer close(didReadResponse)
-		var recvHost string
-		if recvHost, err = obj.AddrToIp(ctx, addr); err != nil {
-			return
-		}
 		cHost := host
 		_, hport, _ := net.SplitHostPort(host)
 		if hport == "" {
@@ -432,7 +421,7 @@ func (obj *DialClient) clientVerifyHttps(ctx context.Context, proxyUrl *url.URL,
 		}
 		connectReq := &http.Request{
 			Method: http.MethodConnect,
-			URL:    &url.URL{Opaque: recvHost},
+			URL:    &url.URL{Opaque: addr},
 			Host:   cHost,
 			Header: hdr,
 		}
@@ -511,10 +500,6 @@ func (obj *DialClient) DialContextForProxy(ctx context.Context, netword string, 
 		case "https":
 			return obj.Http2HttpsProxy(ctx, netword, addr, host, proxyUrl)
 		case "socks5":
-			addr, err := obj.AddrToIp(ctx, addr)
-			if err != nil {
-				return nil, err
-			}
 			return obj.Http2Socks5Proxy(ctx, netword, addr, proxyUrl)
 		default:
 			return nil, errors.New("proxyUrl Scheme error")
@@ -540,10 +525,7 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 	if reqData.url == nil {
 		return nil, tools.WrapError(ErrFatal, "not found reqData.url")
 	}
-	log.Print(addr)
 	if reqData.rawAddr != "" { //还原addr
-
-		log.Print("ddd")
 		addr, reqData.rawAddr = reqData.rawAddr, ""
 	}
 	var nowProxy *url.URL
