@@ -250,7 +250,7 @@ func (obj *Client) mainHandle(ctx context.Context, client net.Conn) (err error) 
 		if firstCons[0] == 22 {
 			return obj.httpsHandle(ctx, newProxyCon(ctx, client, clientReader, ProxyOption{}, true))
 		}
-		return errors.New("vpn error")
+		return fmt.Errorf("vpn error first byte: %d", firstCons[0])
 	}
 	switch firstCons[0] {
 	case 5: //socks5 代理

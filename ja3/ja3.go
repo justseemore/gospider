@@ -271,6 +271,7 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 			return
 		}
 		go func() {
+			defer tlsConn.Close()
 			defer tlsClientConn.Close()
 			defer utlsConn.Close()
 			_, err = io.Copy(utlsConn, tlsClientConn)
