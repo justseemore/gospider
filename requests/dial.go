@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -539,7 +540,10 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 	if reqData.url == nil {
 		return nil, tools.WrapError(ErrFatal, "not found reqData.url")
 	}
+	log.Print(addr)
 	if reqData.rawAddr != "" { //还原addr
+
+		log.Print("ddd")
 		addr, reqData.rawAddr = reqData.rawAddr, ""
 	}
 	var nowProxy *url.URL
