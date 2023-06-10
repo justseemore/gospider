@@ -3,7 +3,6 @@ package proxy
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
 	"net"
 	"net/http"
 	"time"
@@ -11,7 +10,6 @@ import (
 
 	"gitee.com/baixudong/gospider/ja3"
 	"gitee.com/baixudong/gospider/websocket"
-	utls "github.com/refraction-networking/utls"
 )
 
 //go:linkname readRequest net/http.readRequest
@@ -47,40 +45,6 @@ func newProxyCon(preCtx context.Context, conn net.Conn, reader *bufio.Reader, op
 	option.ctx, option.cnl = context.WithCancel(preCtx)
 
 	return &ProxyConn{conn: conn, reader: reader, option: &option, client: client}
-}
-
-type connectionStater interface {
-	ConnectionState() tls.ConnectionState
-}
-type connectionStater2 interface {
-	ConnectionState() utls.ConnectionState
-}
-
-func (obj *ProxyConn) ConnectionState() tls.ConnectionState {
-	tlsConn, ok := obj.conn.(connectionStater)
-	if ok {
-		return tlsConn.ConnectionState()
-	} else {
-		tlsConn2, ok := obj.conn.(connectionStater2)
-		connstate := tlsConn2.ConnectionState()
-		if ok {
-			return tls.ConnectionState{
-				Version:                     connstate.Version,
-				HandshakeComplete:           connstate.HandshakeComplete,
-				DidResume:                   connstate.DidResume,
-				CipherSuite:                 connstate.CipherSuite,
-				NegotiatedProtocol:          connstate.NegotiatedProtocol,
-				NegotiatedProtocolIsMutual:  connstate.NegotiatedProtocolIsMutual,
-				ServerName:                  connstate.ServerName,
-				PeerCertificates:            connstate.PeerCertificates,
-				VerifiedChains:              connstate.VerifiedChains,
-				SignedCertificateTimestamps: connstate.SignedCertificateTimestamps,
-				OCSPResponse:                connstate.OCSPResponse,
-				TLSUnique:                   connstate.TLSUnique,
-			}
-		}
-	}
-	return tls.ConnectionState{}
 }
 func (obj *ProxyConn) Read(b []byte) (int, error) {
 	obj.SetDeadline(time.Now().Add(time.Second * 300))

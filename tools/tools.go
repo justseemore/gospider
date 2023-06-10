@@ -822,7 +822,7 @@ func GetCertWithCN(rootCert *x509.Certificate, key *ecdsa.PrivateKey, commonName
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	}
-	csr.IPAddresses = GetHosts()
+	csr.IPAddresses = []net.IP{}
 	if commonName != "" {
 		if ip, ipType := ParseHost(commonName); ipType == 0 {
 			csr.Subject.CommonName = commonName
@@ -839,6 +839,10 @@ func GetCertWithCN(rootCert *x509.Certificate, key *ecdsa.PrivateKey, commonName
 }
 
 func CreateCertWithCert(rootCert *x509.Certificate, key *ecdsa.PrivateKey, preCert *x509.Certificate) (*x509.Certificate, error) {
+	if preCert.DNSNames == nil && preCert.Subject.CommonName != "" {
+		preCert.DNSNames = []string{preCert.Subject.CommonName}
+	}
+	rootCert.Subject.CommonName = preCert.Subject.CommonName
 	csr := &x509.Certificate{
 		Version:               3,
 		SerialNumber:          big.NewInt(time.Now().Unix()),

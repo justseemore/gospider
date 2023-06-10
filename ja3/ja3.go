@@ -187,7 +187,7 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 	if disHttp2 {
 		utlsConn = utls.UClient(conn, &utls.Config{
 			InsecureSkipVerify: true,
-			ServerName:         addr,
+			ServerName:         tools.GetServerName(addr),
 			NextProtos:         []string{"http/1.1"},
 			SessionTicketKey: [32]byte{
 				0, 0, 0, 0, 0, 0, 0, 0,
@@ -249,7 +249,7 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 	//正常路径发送方
 	tlsConn := tls.Client(localConn, &tls.Config{
 		InsecureSkipVerify: true,
-		ServerName:         addr,
+		ServerName:         tools.GetServerName(addr),
 		NextProtos:         []string{"h2", "http/1.1"},
 	})
 	proto := utlsConn.ConnectionState().NegotiatedProtocol

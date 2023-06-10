@@ -220,15 +220,25 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 	tlsClient = tls.Server(client, &tls.Config{
 		InsecureSkipVerify: true,
 		GetConfigForClient: func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
-			tlsServer, err = obj.tlsServer(ctx, server, client.option.host, chi.SupportedProtos, client.option.ja3, client.option.ja3Spec)
+			serverName := chi.ServerName
+			if serverName == "" {
+				serverName = tools.GetServerName(client.option.host)
+			}
+			tlsServer, err = obj.tlsServer(ctx, server, serverName, chi.SupportedProtos, client.option.ja3, client.option.ja3Spec)
 			if err != nil {
 				return nil, err
 			}
 			var cert tls.Certificate
 			if len(tlsServer.ConnectionState().PeerCertificates) > 0 {
-				cert, err = tools.CreateProxyCertWithCert(nil, nil, tlsServer.ConnectionState().PeerCertificates[0])
+				preCert := tlsServer.ConnectionState().PeerCertificates[0]
+				if chi.ServerName == "" && preCert.IPAddresses == nil && serverName != "" {
+					if ip, ipType := tools.ParseHost(serverName); ipType != 0 {
+						preCert.IPAddresses = []net.IP{ip}
+					}
+				}
+				cert, err = tools.CreateProxyCertWithCert(nil, nil, preCert)
 			} else {
-				cert, err = tools.CreateProxyCertWithName(tools.GetServerName(client.option.host))
+				cert, err = tools.CreateProxyCertWithName(serverName)
 			}
 			if err != nil {
 				return nil, err
@@ -285,7 +295,7 @@ func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, ne
 	if isJa3 {
 		return ja3.NewClient(ctx, conn, ja3Spec, !slices.Contains(nextProtos, "h2"), addr)
 	} else {
-		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: addr, NextProtos: nextProtos})
+		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: nextProtos})
 		return tlsConn, tlsConn.HandshakeContext(ctx)
 	}
 }
