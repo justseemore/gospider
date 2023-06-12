@@ -189,12 +189,7 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 			InsecureSkipVerify: true,
 			ServerName:         tools.GetServerName(addr),
 			NextProtos:         []string{"http/1.1"},
-			SessionTicketKey: [32]byte{
-				0, 0, 0, 0, 0, 0, 0, 0,
-				0, 0, 0, 0, 0, 0, 0, 0,
-				0, 0, 0, 0, 0, 0, 0, 0,
-				0, 0, 0, 0, 0, 0, 0, 0,
-			},
+			SessionTicketKey:   [32]byte{},
 			ClientSessionCache: utls.NewLRUClientSessionCache(0),
 		},
 			utls.HelloCustom)
@@ -216,13 +211,8 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 			InsecureSkipTimeVerify: true,
 			ServerName:             tools.GetServerName(addr),
 			NextProtos:             []string{"h2", "http/1.1"},
-			SessionTicketKey: [32]byte{
-				0, 0, 0, 0, 0, 0, 0, 0,
-				0, 0, 0, 0, 0, 0, 0, 0,
-				0, 0, 0, 0, 0, 0, 0, 0,
-				0, 0, 0, 0, 0, 0, 0, 0,
-			},
-			ClientSessionCache: utls.NewLRUClientSessionCache(0),
+			SessionTicketKey:       [32]byte{},
+			ClientSessionCache:     utls.NewLRUClientSessionCache(0),
 		},
 			utls.HelloCustom,
 		)
@@ -372,7 +362,6 @@ func getExtensionWithId(extensionId uint16) utls.TLSExtension {
 			KeyShares: []utls.KeyShare{
 				{Group: utls.CurveID(utls.GREASE_PLACEHOLDER), Data: []byte{0}},
 				{Group: utls.X25519},
-				{Group: utls.CurveP256},
 			},
 		}
 	case 13172:
@@ -410,9 +399,9 @@ func cloneExtension(extension utls.TLSExtension) (utls.TLSExtension, bool) {
 		}, true
 	case *utls.UtlsPaddingExtension:
 		return &utls.UtlsPaddingExtension{
+			GetPaddingLen: ext.GetPaddingLen,
 			PaddingLen:    ext.PaddingLen,
 			WillPad:       ext.WillPad,
-			GetPaddingLen: ext.GetPaddingLen,
 		}, true
 	case *utls.FakeTokenBindingExtension:
 		return &utls.FakeTokenBindingExtension{
@@ -473,14 +462,6 @@ func cloneExtension(extension utls.TLSExtension) (utls.TLSExtension, bool) {
 		return &utls.RenegotiationInfoExtension{
 			Renegotiation: ext.Renegotiation,
 		}, true
-	// case *utls.StatusRequestExtension:
-	// 	return ext, true
-	// case *utls.StatusRequestV2Extension:
-	// 	return 17, true
-	// case *utls.SCTExtension:
-	// 	return 18, true
-	// case *utls.UtlsExtendedMasterSecretExtension:
-	// 	return 23, true
 	default:
 		return nil, false
 	}
@@ -540,8 +521,6 @@ func createTlsVersion(ver uint16, extensions []string) (tlsVersion uint16, tlsSu
 				utls.GREASE_PLACEHOLDER,
 				utls.VersionTLS13,
 				utls.VersionTLS12,
-				utls.VersionTLS11,
-				utls.VersionTLS10,
 			},
 		}
 	case utls.VersionTLS12:
@@ -551,7 +530,6 @@ func createTlsVersion(ver uint16, extensions []string) (tlsVersion uint16, tlsSu
 				utls.GREASE_PLACEHOLDER,
 				utls.VersionTLS12,
 				utls.VersionTLS11,
-				utls.VersionTLS10,
 			},
 		}
 	case utls.VersionTLS11:
@@ -630,8 +608,8 @@ func createExtensions(extensions []string, tlsExtension, curvesExtension, pointE
 				if isGREASEUint16(extensionId) {
 					allExtensions = append(allExtensions, &utls.UtlsGREASEExtension{})
 				} else {
-					allExtensions = append(allExtensions, &utls.GenericExtension{Id: extensionId})
 				}
+				allExtensions = append(allExtensions, &utls.GenericExtension{Id: extensionId})
 			} else {
 				if ext == nil {
 					return nil, errors.New("ja3Str 字符串中extension错误,utls不支持的扩展: " + extension)
@@ -677,9 +655,8 @@ func CreateSpecWithStr(ja3Str string) (clientHelloSpec ClientHelloSpec, err erro
 	if err != nil {
 		return clientHelloSpec, err
 	}
-	clientHelloSpec.CompressionMethods = []byte{0x00}
+	clientHelloSpec.CompressionMethods = []byte{0}
 	clientHelloSpec.GetSessionID = sha256.Sum256
-
 	clientHelloSpec.Extensions, err = createExtensions(extensions, tlsExtension, curvesExtension, pointExtension)
 	return
 }

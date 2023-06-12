@@ -554,13 +554,13 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		if reqData.ws {
 			tlsConn = tls.Client(conn, &tls.Config{
 				InsecureSkipVerify: true,
-				ServerName:         reqData.host,
+				ServerName:         tools.GetServerName(reqData.host),
 				NextProtos:         []string{"http/1.1"},
 			})
 		} else {
 			tlsConn = tls.Client(conn, &tls.Config{
 				InsecureSkipVerify: true,
-				ServerName:         reqData.host,
+				ServerName:         tools.GetServerName(reqData.host),
 				NextProtos:         []string{"h2", "http/1.1"},
 			})
 		}
