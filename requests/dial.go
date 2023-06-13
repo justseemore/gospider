@@ -114,16 +114,16 @@ func NewDail(option DialOption) (*DialClient, error) {
 	return dialCli, err
 }
 
-func (obj *DialClient) GetProxy(ctx context.Context, url *url.URL) (*url.URL, error) {
+func (obj *DialClient) GetProxy(ctx context.Context, href *url.URL) (*url.URL, error) {
 	if obj.proxy != nil {
 		return obj.proxy, nil
 	}
 	if obj.getProxy != nil {
-		href, err := obj.getProxy(ctx, url)
-		if err != nil {
+		proxy, err := obj.getProxy(ctx, href)
+		if proxy == "" || err != nil {
 			return nil, err
 		}
-		return url.Parse(href)
+		return url.Parse(proxy)
 	}
 	return nil, nil
 }
@@ -332,15 +332,27 @@ func (obj *DialClient) DialContext(ctx context.Context, netword string, addr str
 	}
 	return obj.dialer.DialContext(ctx, netword, revHost)
 }
-func (obj *DialClient) DialTlsProxyContext(ctx context.Context, netword string, addr string, host string) (net.Conn, error) {
-	conn, err := obj.DialContext(ctx, netword, addr)
-	if err != nil {
-		return conn, err
-	}
+func (obj *DialClient) AddProxyTls(ctx context.Context, conn net.Conn, host string) (net.Conn, error) {
 	if obj.proxyJa3 {
-		return ja3.NewClient(ctx, conn, obj.proxyJa3Spec, true, tools.GetServerName(addr))
+		return ja3.NewClient(ctx, conn, obj.proxyJa3Spec, true, tools.GetServerName(host))
 	}
-	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: []string{"http/1.1"}})
+	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(host), NextProtos: []string{"http/1.1"}})
+	return tlsConn, tlsConn.HandshakeContext(ctx)
+}
+func (obj *DialClient) AddTls(ctx context.Context, conn net.Conn, host string, disHttp bool) (*tls.Conn, error) {
+	if obj.ja3 {
+		utlsConn, err := ja3.NewClient(ctx, conn, obj.ja3Spec, disHttp, tools.GetServerName(host))
+		if err != nil {
+			return nil, err
+		}
+		return ja3.Utls2Tls(ctx, utlsConn, host)
+	}
+	var tlsConn *tls.Conn
+	if disHttp {
+		tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(host), NextProtos: []string{"http/1.1"}})
+	} else {
+		tlsConn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(host), NextProtos: []string{"h2", "http/1.1"}})
+	}
 	return tlsConn, tlsConn.HandshakeContext(ctx)
 }
 
@@ -353,31 +365,7 @@ func (obj *DialClient) newPwdConn(conn net.Conn, proxyUrl *url.URL) net.Conn {
 	}
 	return conn
 }
-func (obj *DialClient) Http2HttpProxy(ctx context.Context, network string, proxyUrl *url.URL) (conn net.Conn, err error) {
-	defer func() {
-		if err != nil && conn != nil {
-			conn.Close()
-		}
-	}()
-	conn, err = obj.DialContext(ctx, network, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port()))
-	if proxyUrl.User != nil {
-		return obj.newPwdConn(conn, proxyUrl), err
-	}
-	return
-}
-func (obj *DialClient) Http2HttpsProxy(ctx context.Context, network string, addr string, host string, proxyUrl *url.URL) (conn net.Conn, err error) {
-	defer func() {
-		if err != nil && conn != nil {
-			conn.Close()
-		}
-	}()
-	conn, err = obj.DialTlsProxyContext(ctx, network, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port()), host)
-	if proxyUrl.User != nil {
-		return obj.newPwdConn(conn, proxyUrl), err
-	}
-	return
-}
-func (obj *DialClient) Http2Socks5Proxy(ctx context.Context, network string, addr string, proxyUrl *url.URL) (conn net.Conn, err error) {
+func (obj *DialClient) Socks5Proxy(ctx context.Context, network string, addr string, proxyUrl *url.URL) (conn net.Conn, err error) {
 	defer func() {
 		if err != nil && conn != nil {
 			conn.Close()
@@ -398,7 +386,6 @@ func (obj *DialClient) Http2Socks5Proxy(ctx context.Context, network string, add
 		return
 	}
 }
-
 func (obj *DialClient) clientVerifyHttps(ctx context.Context, proxyUrl *url.URL, addr string, host string, conn net.Conn) (err error) {
 	hdr := make(http.Header)
 	hdr.Set("User-Agent", UserAgent)
@@ -447,41 +434,7 @@ func (obj *DialClient) clientVerifyHttps(ctx context.Context, proxyUrl *url.URL,
 	}
 	return
 }
-
-func (obj *DialClient) Https2HttpProxy(ctx context.Context, network string, addr string, host string, proxyUrl *url.URL) (conn net.Conn, err error) {
-	defer func() {
-		if err != nil && conn != nil {
-			conn.Close()
-		}
-	}()
-	if conn, err = obj.DialContext(ctx, network, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port())); err != nil {
-		return
-	}
-	if err = obj.clientVerifyHttps(ctx, proxyUrl, addr, host, conn); err != nil {
-		return
-	}
-	return
-}
-
-func (obj *DialClient) Https2HttpsProxy(ctx context.Context, network string, addr string, host string, proxyUrl *url.URL) (conn net.Conn, err error) {
-	defer func() {
-		if err != nil && conn != nil {
-			conn.Close()
-		}
-	}()
-	if conn, err = obj.DialTlsProxyContext(ctx, network, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port()), host); err != nil {
-		return
-	}
-	if err = obj.clientVerifyHttps(ctx, proxyUrl, addr, host, conn); err != nil {
-		return
-	}
-	return
-}
-
-func (obj *DialClient) Https2Socks5Proxy(ctx context.Context, network string, addr string, host string, proxyUrl *url.URL) (conn net.Conn, err error) {
-	return obj.Http2Socks5Proxy(ctx, network, addr, proxyUrl)
-}
-func (obj *DialClient) DialContextForProxy(ctx context.Context, netword string, scheme string, addr string, host string, proxyUrl *url.URL) (net.Conn, error) {
+func (obj *DialClient) DialContextWithProxy(ctx context.Context, netword string, scheme string, addr string, host string, proxyUrl *url.URL) (net.Conn, error) {
 	if proxyUrl == nil {
 		return obj.DialContext(ctx, netword, addr)
 	}
@@ -492,26 +445,51 @@ func (obj *DialClient) DialContextForProxy(ctx context.Context, netword string, 
 			proxyUrl.Host = net.JoinHostPort(proxyUrl.Hostname(), "443")
 		}
 	}
+
 	switch scheme {
 	case "http":
 		switch proxyUrl.Scheme {
 		case "http":
-			return obj.Http2HttpProxy(ctx, netword, proxyUrl)
+			conn, err := obj.DialContext(ctx, netword, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port()))
+			if err == nil && proxyUrl.User != nil {
+				return obj.newPwdConn(conn, proxyUrl), err
+			}
+			return conn, err
 		case "https":
-			return obj.Http2HttpsProxy(ctx, netword, addr, host, proxyUrl)
+			conn, err := obj.DialContext(ctx, netword, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port()))
+			if err != nil {
+				return conn, err
+			}
+			tlsConn, err := obj.AddProxyTls(ctx, conn, proxyUrl.Host)
+			if err == nil && proxyUrl.User != nil {
+				return obj.newPwdConn(tlsConn, proxyUrl), err
+			}
+			return tlsConn, err
 		case "socks5":
-			return obj.Http2Socks5Proxy(ctx, netword, addr, proxyUrl)
+			return obj.Socks5Proxy(ctx, netword, addr, proxyUrl)
 		default:
 			return nil, errors.New("proxyUrl Scheme error")
 		}
 	case "https":
 		switch proxyUrl.Scheme {
 		case "http":
-			return obj.Https2HttpProxy(ctx, netword, addr, host, proxyUrl)
+			conn, err := obj.DialContext(ctx, netword, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port()))
+			if err != nil {
+				return conn, err
+			}
+			return conn, obj.clientVerifyHttps(ctx, proxyUrl, addr, host, conn)
 		case "https":
-			return obj.Https2HttpsProxy(ctx, netword, addr, host, proxyUrl)
+			conn, err := obj.DialContext(ctx, netword, net.JoinHostPort(proxyUrl.Hostname(), proxyUrl.Port()))
+			if err != nil {
+				return conn, err
+			}
+			tlsConn, err := obj.AddProxyTls(ctx, conn, proxyUrl.Host)
+			if err == nil {
+				return tlsConn, obj.clientVerifyHttps(ctx, proxyUrl, addr, host, tlsConn)
+			}
+			return tlsConn, err
 		case "socks5":
-			return obj.Https2Socks5Proxy(ctx, netword, addr, host, proxyUrl)
+			return obj.Socks5Proxy(ctx, netword, addr, proxyUrl)
 		default:
 			return nil, errors.New("proxyUrl Scheme error")
 		}
@@ -538,7 +516,7 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 		return nil, err
 	}
 	if nowProxy != nil { //走自实现代理
-		return obj.DialContextForProxy(ctx, network, reqData.url.Scheme, addr, reqData.host, nowProxy)
+		return obj.DialContextWithProxy(ctx, network, reqData.url.Scheme, addr, reqData.host, nowProxy)
 	}
 	return obj.DialContext(ctx, network, addr)
 }
@@ -547,26 +525,7 @@ func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network st
 		return nil, err
 	}
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
-	var tlsConn *tls.Conn
-	if obj.ja3 { //使用ja3 指纹
-		tlsConn, err = ja3.NewClient(ctx, conn, obj.ja3Spec, reqData.ws, reqData.host)
-	} else {
-		if reqData.ws {
-			tlsConn = tls.Client(conn, &tls.Config{
-				InsecureSkipVerify: true,
-				ServerName:         tools.GetServerName(reqData.host),
-				NextProtos:         []string{"http/1.1"},
-			})
-		} else {
-			tlsConn = tls.Client(conn, &tls.Config{
-				InsecureSkipVerify: true,
-				ServerName:         tools.GetServerName(reqData.host),
-				NextProtos:         []string{"h2", "http/1.1"},
-			})
-		}
-		err = tlsConn.HandshakeContext(ctx)
-	}
-	return tlsConn, err
+	return obj.AddTls(ctx, conn, reqData.host, reqData.ws)
 }
 func (obj *DialClient) requestHttp2DialTlsContext(ctx context.Context, network string, addr string, cfg *tls.Config) (net.Conn, error) { //验证tls 是否可以直接用
 	if cfg.ServerName != "" {

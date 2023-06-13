@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"net"
 	"net/http"
@@ -62,7 +63,7 @@ type erringRoundTripper interface {
 func (obj *Client) http12Copy(ctx context.Context, client *ProxyConn, server *ProxyConn) (err error) {
 	defer client.Close()
 	defer server.Close()
-	serverConn := http2.NewUpg(nil, http2.UpgOption{H2Ja3Spec: client.option.h2Ja3Spec}).UpgradeFn(server.option.host, server.conn.(*tls.Conn))
+	serverConn := http2.NewUpg(nil, http2.UpgOption{H2Ja3Spec: client.option.h2Ja3Spec}).UpgradeFn(server.option.host, server.conn)
 	if erringRoundTripper, ok := serverConn.(erringRoundTripper); ok && erringRoundTripper.RoundTripErr() != nil {
 		return erringRoundTripper.RoundTripErr()
 	}
@@ -209,14 +210,16 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 		} else {
 			nextProtos = []string{"h2", "http/1.1"}
 		}
-		tlsServer, err := obj.tlsServer(ctx, server, client.option.host, nextProtos, client.option.ja3, client.option.ja3Spec)
+		tlsServer, _, _, err := obj.tlsServer(ctx, server, client.option.host, nextProtos, client.option.ja3, client.option.ja3Spec)
 		if err != nil {
 			return err
 		}
 		return obj.copyHttpMain(ctx, client, newProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option, false))
 	}
 	var tlsClient *tls.Conn
-	var tlsServer *tls.Conn
+	var tlsServer net.Conn
+	var peerCertificates []*x509.Certificate
+	var negotiatedProtocol string
 	tlsClient = tls.Server(client, &tls.Config{
 		InsecureSkipVerify: true,
 		GetConfigForClient: func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
@@ -224,13 +227,13 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 			if serverName == "" {
 				serverName = tools.GetServerName(client.option.host)
 			}
-			tlsServer, err = obj.tlsServer(ctx, server, serverName, chi.SupportedProtos, client.option.ja3, client.option.ja3Spec)
+			tlsServer, peerCertificates, negotiatedProtocol, err = obj.tlsServer(ctx, server, serverName, chi.SupportedProtos, client.option.ja3, client.option.ja3Spec)
 			if err != nil {
 				return nil, err
 			}
 			var cert tls.Certificate
-			if len(tlsServer.ConnectionState().PeerCertificates) > 0 {
-				preCert := tlsServer.ConnectionState().PeerCertificates[0]
+			if len(peerCertificates) > 0 {
+				preCert := peerCertificates[0]
 				if chi.ServerName == "" && preCert.IPAddresses == nil && serverName != "" {
 					if ip, ipType := tools.ParseHost(serverName); ipType != 0 {
 						preCert.IPAddresses = []net.IP{ip}
@@ -243,7 +246,7 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 			if err != nil {
 				return nil, err
 			}
-			if tlsServer.ConnectionState().NegotiatedProtocol == "h2" {
+			if negotiatedProtocol == "h2" {
 				if obj.responseCallBack != nil ||
 					obj.requestCallBack != nil ||
 					obj.wsCallBack != nil ||
@@ -265,8 +268,7 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 	if err = tlsClient.HandshakeContext(ctx); err != nil {
 		return err
 	}
-
-	server.option.http2 = tlsServer.ConnectionState().NegotiatedProtocol == "h2"
+	server.option.http2 = negotiatedProtocol == "h2"
 	client.option.http2 = tlsClient.ConnectionState().NegotiatedProtocol == "h2"
 
 	//重新包装连接
@@ -274,28 +276,18 @@ func (obj *Client) copyHttpsMain(ctx context.Context, client *ProxyConn, server 
 	serverProxy := newProxyCon(ctx, tlsServer, bufio.NewReader(tlsServer), *server.option, false)
 	return obj.copyHttpMain(ctx, clientProxy, serverProxy)
 }
-func (obj *Client) tlsClient(ctx context.Context, conn net.Conn, disHttp2 bool, cert tls.Certificate) (tlsConn *tls.Conn, http2 bool, err error) {
-	var nextProtos []string
-	if disHttp2 {
-		nextProtos = []string{"http/1.1"}
-	} else {
-		nextProtos = []string{"h2", "http/1.1"}
-	}
-	tlsConn = tls.Server(conn, &tls.Config{
-		InsecureSkipVerify: true,
-		Certificates:       []tls.Certificate{cert},
-		NextProtos:         nextProtos,
-	})
-	if err = tlsConn.HandshakeContext(ctx); err != nil {
-		return nil, false, err
-	}
-	return tlsConn, tlsConn.ConnectionState().NegotiatedProtocol == "h2", err
-}
-func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, nextProtos []string, isJa3 bool, ja3Spec ja3.ClientHelloSpec) (*tls.Conn, error) {
+func (obj *Client) tlsServer(ctx context.Context, conn net.Conn, addr string, nextProtos []string, isJa3 bool, ja3Spec ja3.ClientHelloSpec) (net.Conn, []*x509.Certificate, string, error) {
 	if isJa3 {
-		return ja3.NewClient(ctx, conn, ja3Spec, !slices.Contains(nextProtos, "h2"), addr)
+		tlsConn, err := ja3.NewClient(ctx, conn, ja3Spec, !slices.Contains(nextProtos, "h2"), addr)
+		if err != nil {
+			return tlsConn, nil, "", err
+		}
+		return tlsConn, tlsConn.ConnectionState().PeerCertificates, tlsConn.ConnectionState().NegotiatedProtocol, nil
 	} else {
 		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: tools.GetServerName(addr), NextProtos: nextProtos})
-		return tlsConn, tlsConn.HandshakeContext(ctx)
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			return tlsConn, nil, "", err
+		}
+		return tlsConn, tlsConn.ConnectionState().PeerCertificates, tlsConn.ConnectionState().NegotiatedProtocol, nil
 	}
 }

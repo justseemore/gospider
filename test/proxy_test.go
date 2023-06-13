@@ -159,10 +159,7 @@ func TestProxyH2Ja3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// reqCli.TryNum = 2
-	// resp, err := reqCli.Request(nil, "get", "https://tools.scrapfly.io/api/fp/ja3?extended=1", requests.RequestOption{})
 	resp, err := reqCli.Request(nil, "get", "https://tools.scrapfly.io/api/fp/ja3?extended=1", requests.RequestOption{Proxy: "http://admin:password@" + proxyIp})
-	// resp, err := reqCli.Request(nil, "get", "https://myip.top", requests.RequestOption{Proxy: "http://admin:password@" + proxyIp})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +170,6 @@ func TestProxyH2Ja3(t *testing.T) {
 	resp, err = reqCli.Request(nil, "get", "https://tools.scrapfly.io/api/fp/ja3?extended=1", requests.RequestOption{Proxy: "https://admin:password@" + proxyIp})
 	// resp, err = reqCli.Request(nil, "get", "http://myip.top", requests.RequestOption{Proxy: "https://admin:password@" + proxyIp})
 	if err != nil {
-		time.Sleep(time.Second * 2)
 		t.Fatal(err)
 	}
 	if resp.Json().Get("digest").String() == "" || resp.Json().Get("digest").String() == "4e8e7b3f6585690ad91147bb2f5ad681" {

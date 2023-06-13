@@ -264,7 +264,7 @@ func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 func (obj *Upg) CloseIdleConnections() {
 	obj.t.CloseIdleConnections()
 }
-func (obj *Upg) UpgradeFn(authority string, c *tls.Conn) http.RoundTripper {
+func (obj *Upg) UpgradeFn(authority string, c net.Conn) http.RoundTripper {
 	addr := authorityAddr("https", authority)
 	if used, err := obj.connPool.addConnIfNeeded(addr, obj.t, c); err != nil {
 		defer c.Close()

@@ -149,17 +149,7 @@ var ClientHelloIDs = []ClientHelloId{
 	HelloQQ_11_1,
 }
 
-func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disHttp2 bool, addr string) (*tls.Conn, error) {
-	var utlsConn *utls.UConn
-	var err error
-	defer func() {
-		if err != nil {
-			conn.Close()
-			if utlsConn != nil {
-				utlsConn.Close()
-			}
-		}
-	}()
+func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disHttp2 bool, addr string) (utlsConn *utls.UConn, err error) {
 	var utlsSpec utls.ClientHelloSpec
 	if !ja3Spec.IsSet() {
 		if ja3Spec, err = CreateSpecWithId(HelloChrome_Auto); err != nil {
@@ -220,17 +210,18 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 	if err = utlsConn.ApplyPreset(&utlsSpec); err != nil {
 		return nil, err
 	}
-	err = utlsConn.HandshakeContext(ctx)
-	if err != nil {
-		return nil, err
-	}
+	return utlsConn, utlsConn.HandshakeContext(ctx)
+}
+
+func Utls2Tls(ctx context.Context, utlsConn *utls.UConn, host string) (*tls.Conn, error) {
 	//获取cert
+	var err error
 	certs := utlsConn.ConnectionState().PeerCertificates
 	var cert tls.Certificate
 	if len(certs) > 0 {
 		cert, err = tools.CreateProxyCertWithCert(nil, nil, certs[0])
 	} else {
-		cert, err = tools.CreateProxyCertWithName(tools.GetServerName(addr))
+		cert, err = tools.CreateProxyCertWithName(tools.GetServerName(host))
 	}
 	if err != nil {
 		return nil, err
@@ -239,7 +230,7 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 	//正常路径发送方
 	tlsConn := tls.Client(localConn, &tls.Config{
 		InsecureSkipVerify: true,
-		ServerName:         tools.GetServerName(addr),
+		ServerName:         tools.GetServerName(host),
 		NextProtos:         []string{"h2", "http/1.1"},
 	})
 	proto := utlsConn.ConnectionState().NegotiatedProtocol

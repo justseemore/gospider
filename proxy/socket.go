@@ -154,7 +154,7 @@ func (obj *Client) sockes5Handle(ctx context.Context, client *ProxyConn) error {
 		client.option.method = http.MethodConnect
 	}
 	netword := "tcp"
-	proxyServer, err := obj.dialer.DialContextForProxy(ctx, netword, client.option.schema, addr, host, proxyUrl)
+	proxyServer, err := obj.dialer.DialContextWithProxy(ctx, netword, client.option.schema, addr, host, proxyUrl)
 	if err != nil {
 		return err
 	}

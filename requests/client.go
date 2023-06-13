@@ -140,8 +140,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 		ForceAttemptHTTP2:     true,
 		Proxy: func(r *http.Request) (*url.URL, error) {
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
-			ctxData.url = r.URL
-			ctxData.host = r.Host
+			ctxData.url, ctxData.host = r.URL, r.Host
 			return nil, nil
 		},
 	}
@@ -149,7 +148,9 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	if option.H2Ja3 || option.H2Ja3Spec.IsSet() {
 		http2Upg = http2.NewUpg(baseTransport, http2.UpgOption{H2Ja3Spec: option.H2Ja3Spec, DialTLSContext: dialClient.requestHttp2DialTlsContext})
 		baseTransport.TLSNextProto = map[string]func(authority string, c *tls.Conn) http.RoundTripper{
-			"h2": http2Upg.UpgradeFn,
+			"h2": func(authority string, c *tls.Conn) http.RoundTripper {
+				return http2Upg.UpgradeFn(authority, c)
+			},
 		}
 	}
 	client.Transport = baseTransport
