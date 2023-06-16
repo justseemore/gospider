@@ -66,7 +66,8 @@ const (
 // A Transport internally caches connections to servers. It is safe
 // for concurrent use by multiple goroutines.
 type Transport struct {
-	H2Ja3Spec ja3.H2Ja3Spec
+	streamFlow uint32
+	h2Ja3Spec  ja3.H2Ja3Spec
 	// DialTLSContext specifies an optional dial function with context for
 	// creating TLS connections for requests.
 	//
@@ -202,6 +203,8 @@ func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 	}
 	var headerTableSize uint32 = 65536
 	var maxHeaderListSize uint32 = 262144
+	var streamFlow uint32 = 6291456
+
 	if option.H2Ja3Spec.InitialSetting != nil {
 		for _, setting := range option.H2Ja3Spec.InitialSetting {
 			switch setting.Id {
@@ -209,6 +212,8 @@ func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 				headerTableSize = setting.Val
 			case 6:
 				maxHeaderListSize = setting.Val
+			case 4:
+				streamFlow = setting.Val
 			}
 		}
 	} else {
@@ -218,6 +223,13 @@ func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 			{Id: 3, Val: 1000},
 			{Id: 4, Val: 6291456},
 			{Id: 6, Val: maxHeaderListSize},
+		}
+	}
+	if option.H2Ja3Spec.Priority.Exclusive == false && option.H2Ja3Spec.Priority.StreamDep == 0 && option.H2Ja3Spec.Priority.Weight == 0 {
+		option.H2Ja3Spec.Priority = ja3.Priority{
+			Exclusive: true,
+			StreamDep: 0,
+			Weight:    255,
 		}
 	}
 	if option.H2Ja3Spec.OrderHeaders == nil {
@@ -240,7 +252,8 @@ func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 	connPool := new(clientConnPool)
 	t2 := &Transport{
 		t1:                        t1,
-		H2Ja3Spec:                 option.H2Ja3Spec,
+		h2Ja3Spec:                 option.H2Ja3Spec,
+		streamFlow:                streamFlow,
 		MaxDecoderHeaderTableSize: headerTableSize,   //1:initialHeaderTableSize,65536
 		MaxEncoderHeaderTableSize: headerTableSize,   //1:initialHeaderTableSize,65536
 		MaxHeaderListSize:         maxHeaderListSize, //6:MaxHeaderListSize,262144
@@ -248,7 +261,6 @@ func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 
 		TLSClientConfig:  &tls.Config{InsecureSkipVerify: true},
 		DialTLSContext:   option.DialTLSContext,
-		AllowHTTP:        true,
 		ReadIdleTimeout:  time.Duration(option.IdleConnTimeout) * time.Second, //检测连接是否健康的间隔时间
 		PingTimeout:      time.Second * time.Duration(option.TLSHandshakeTimeout),
 		WriteByteTimeout: time.Second * time.Duration(option.ResponseHeaderTimeout),
@@ -274,6 +286,7 @@ func (obj *Upg) UpgradeFn(authority string, c net.Conn) http.RoundTripper {
 	}
 	return obj.t
 }
+
 func (t *Transport) maxHeaderListSize() uint32 {
 	if t.MaxHeaderListSize == 0 {
 		return 10 << 20
@@ -384,8 +397,6 @@ func (t *Transport) initConnPool() {
 // ClientConn is the state of a single HTTP/2 client connection to an
 // HTTP/2 server.
 type ClientConn struct {
-	orderHeaders  []string
-	streamFlow    uint32
 	t             *Transport
 	tconn         net.Conn // usually *tls.Conn, except specialized impls
 	tconnClosed   bool
@@ -830,15 +841,7 @@ func (t *Transport) NewClientConn(c net.Conn) (*ClientConn, error) {
 }
 
 func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, error) {
-	var streamFlow uint32 = 6291456
-	for _, setting := range t.H2Ja3Spec.InitialSetting {
-		if setting.Id == 4 {
-			streamFlow = setting.Val
-		}
-	}
 	cc := &ClientConn{
-		orderHeaders:          t.H2Ja3Spec.OrderHeaders,
-		streamFlow:            streamFlow,
 		t:                     t,
 		tconn:                 c,
 		readerDone:            make(chan struct{}),
@@ -860,7 +863,6 @@ func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, erro
 	if VerboseLogs {
 		t.vlogf("http2: Transport creating client conn %p to %v", cc, c.RemoteAddr())
 	}
-
 	cc.cond = sync.NewCond(&cc.mu)
 	cc.flow.add(int32(initialWindowSize))
 
@@ -898,20 +900,19 @@ func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, erro
 
 	cc.bw.Write(clientPreface)
 
-	initialSettings := make([]Setting, len(t.H2Ja3Spec.InitialSetting))
-	for i, setting := range t.H2Ja3Spec.InitialSetting {
+	initialSettings := make([]Setting, len(t.h2Ja3Spec.InitialSetting))
+	for i, setting := range t.h2Ja3Spec.InitialSetting {
 		initialSettings[i] = Setting{ID: SettingID(setting.Id), Val: setting.Val}
 	}
 	cc.fr.WriteSettings(initialSettings...)
-	cc.fr.WriteWindowUpdate(0, t.H2Ja3Spec.ConnFlow)
-	cc.inflow.init(int32(t.H2Ja3Spec.ConnFlow) + initialWindowSize)
+	cc.fr.WriteWindowUpdate(0, t.h2Ja3Spec.ConnFlow)
+	cc.inflow.init(int32(t.h2Ja3Spec.ConnFlow) + initialWindowSize)
 
 	cc.bw.Flush()
 	if cc.werr != nil {
 		cc.Close()
 		return nil, cc.werr
 	}
-
 	go cc.readLoop()
 	return cc, nil
 }
@@ -1724,6 +1725,11 @@ func (cc *ClientConn) writeHeaders(streamID uint32, endStream bool, maxFrameSize
 				BlockFragment: chunk,
 				EndStream:     endStream,
 				EndHeaders:    endHeaders,
+				Priority: PriorityParam{
+					StreamDep: cc.t.h2Ja3Spec.Priority.StreamDep,
+					Exclusive: cc.t.h2Ja3Spec.Priority.Exclusive,
+					Weight:    cc.t.h2Ja3Spec.Priority.Weight,
+				},
 			})
 			first = false
 		} else {
@@ -1992,7 +1998,11 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 		}
 	}
 
-	enumerateHeaders := func(f func(name, value string)) {
+	enumerateHeaders := func(f2 func(name, value string)) {
+		headers := http.Header{}
+		f := func(name, value string) {
+			headers.Add(name, value)
+		}
 		// 8.1.2.3 Request Pseudo-Header Fields
 		// The :path pseudo-header field includes the path and query parts of the
 		// target URI (the path-absolute production and optionally a '?' character
@@ -2002,69 +2012,13 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 		if m == "" {
 			m = http.MethodGet
 		}
-		// f(":method", m)
-		// f(":authority", host)
-		// if req.Method != "CONNECT" {
-		// 	f(":scheme", req.URL.Scheme)
-		// 	f(":path", path)
-		// }
+		f(":method", m)
+		f(":authority", host)
 		if req.Method != "CONNECT" {
-			ll := kinds.NewSet(":method", ":authority", ":scheme", ":path")
-			for _, h := range cc.orderHeaders {
-				switch h {
-				case ":method":
-					f(":method", m)
-					ll.Del(h)
-				case ":authority":
-					f(":authority", host)
-					ll.Del(h)
-				case ":scheme":
-					f(":scheme", req.URL.Scheme)
-					ll.Del(h)
-				case ":path":
-					f(":path", path)
-					ll.Del(h)
-				}
-			}
-			for _, h := range ll.Array() {
-				switch h {
-				case ":method":
-					f(":method", m)
-					ll.Del(h)
-				case ":authority":
-					f(":authority", host)
-					ll.Del(h)
-				case ":scheme":
-					f(":scheme", req.URL.Scheme)
-					ll.Del(h)
-				case ":path":
-					f(":path", path)
-					ll.Del(h)
-				}
-			}
-		} else {
-			ll := kinds.NewSet(":method", ":authority")
-			for _, h := range cc.orderHeaders {
-				switch h {
-				case ":method":
-					f(":method", m)
-					ll.Del(h)
-				case ":authority":
-					f(":authority", host)
-					ll.Del(h)
-				}
-			}
-			for _, h := range ll.Array() {
-				switch h {
-				case ":method":
-					f(":method", m)
-					ll.Del(h)
-				case ":authority":
-					f(":authority", host)
-					ll.Del(h)
-				}
-			}
+			f(":scheme", req.URL.Scheme)
+			f(":path", path)
 		}
+
 		if trailers != "" {
 			f("trailer", trailers)
 		}
@@ -2135,6 +2089,29 @@ func (cc *ClientConn) encodeHeaders(req *http.Request, addGzipHeader bool, trail
 		}
 		if !didUA {
 			f("user-agent", defaultUserAgent)
+		}
+
+		ll := kinds.NewSet[string]()
+		for _, kk := range cc.t.h2Ja3Spec.OrderHeaders {
+			for i := 0; i < 2; i++ {
+				if i == 1 {
+					kk = strings.Title(kk)
+				}
+				if vvs, ok := headers[kk]; ok {
+					ll.Add(kk)
+					for _, vv := range vvs {
+						f2(kk, vv)
+					}
+					break
+				}
+			}
+		}
+		for kk, vvs := range headers {
+			for _, vv := range vvs {
+				if !ll.Has(kk) {
+					f2(kk, vv)
+				}
+			}
 		}
 	}
 
@@ -2242,7 +2219,7 @@ type resAndError struct {
 func (cc *ClientConn) addStreamLocked(cs *clientStream) {
 	cs.flow.add(int32(cc.initialWindowSize))
 	cs.flow.setConnFlow(&cc.flow)
-	cs.inflow.init(int32(cc.streamFlow))
+	cs.inflow.init(int32(cc.t.streamFlow))
 	cs.ID = cc.nextStreamID
 	cc.nextStreamID += 2
 	cc.streams[cs.ID] = cs

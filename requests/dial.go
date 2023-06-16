@@ -127,6 +127,9 @@ func (obj *DialClient) GetProxy(ctx context.Context, href *url.URL) (*url.URL, e
 	}
 	return nil, nil
 }
+func (obj *DialClient) Dialer() *net.Dialer {
+	return obj.dialer
+}
 
 func (obj *DialClient) setIpData(addr string, msgData msgClient) {
 	obj.lock.Lock()

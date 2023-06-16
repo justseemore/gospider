@@ -21,7 +21,7 @@ type RequestOption struct {
 	Proxy         string   //代理,支持http,https,socks5协议代理,例如：http://127.0.0.1:7005
 	Timeout       int64    //请求超时时间
 	Headers       any      //请求头,支持：json,map，header
-	Cookies       any      // cookies,支持json,map,str
+	Cookies       any      // cookies,支持json,map,str，http.Header
 	Files         []File   //文件
 	Params        any      //url 中的参数，用以拼接url,支持json,map
 	Form          any      //发送multipart/form-data,适用于文件上传,支持json,map
@@ -39,11 +39,13 @@ type RequestOption struct {
 	TryNum        int64                                       //重试次数
 	BeforCallBack func(context.Context, *RequestOption) error //请求之前回调
 	AfterCallBack func(context.Context, *Response) error      //请求之后回调
-	ErrCallBack   func(context.Context, error) bool           //返回true 中断重试请求
-	RedirectNum   int                                         //重定向次数,小于零 关闭重定向
-	DisRead       bool                                        //关闭默认读取请求体,不会主动读取body里面的内容，需用你自己读取
-	DisUnZip      bool                                        //关闭自动解压
-	WsOption      websocket.Option                            //websocket option,使用websocket 请求的option
+	Jar           *Jar                                        //自定义临时cookies 管理
+
+	ErrCallBack func(context.Context, error) bool //返回true 中断重试请求
+	RedirectNum int                               //重定向次数,小于零 关闭重定向
+	DisRead     bool                              //关闭默认读取请求体,不会主动读取body里面的内容，需用你自己读取
+	DisUnZip    bool                              //关闭自动解压
+	WsOption    websocket.Option                  //websocket option,使用websocket 请求的option
 
 	converUrl   string
 	contentType string

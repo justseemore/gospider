@@ -295,6 +295,12 @@ func (obj *JyClient) Close() {
 }
 
 // 运行命令
+func (obj *Client) Output() ([]byte, error) {
+	defer obj.Close()
+	return obj.cmd.CombinedOutput()
+}
+
+// 运行命令
 func (obj *Client) Run() error {
 	defer obj.Close()
 	err := obj.cmd.Run()

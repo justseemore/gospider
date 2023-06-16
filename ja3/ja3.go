@@ -89,11 +89,9 @@ var ClientHelloIDs = []ClientHelloId{
 	// overwrite your changes to Hello(Config, Session are fine).
 	// You might want to call BuildHandshakeState() before applying any changes.
 	// UConn.Extensions will be completely ignored.
-	HelloGolang,
 
 	// HelloCustom will prepare ClientHello with empty uconn.Extensions so you can fill it with
 	// TLSExtensions manually or use ApplyPreset function
-	HelloCustom,
 
 	// HelloRandomized* randomly adds/reorders extensions, ciphersuites, etc.
 	HelloRandomized,
@@ -480,14 +478,38 @@ type Setting struct {
 	// Val is the value.
 	Val uint32
 }
+type Priority struct {
+	// StreamDep is a 31-bit stream identifier for the
+	// stream that this stream depends on. Zero means no
+	// dependency.
+	StreamDep uint32
+
+	// Exclusive is whether the dependency is exclusive.
+	Exclusive bool
+
+	// Weight is the stream's zero-indexed weight. It should be
+	// set together with StreamDep, or neither should be set. Per
+	// the spec, "Add one to the value to obtain a weight between
+	// 1 and 256."
+	Weight uint8
+}
+
+func (obj Priority) IsSet() bool {
+	if obj.StreamDep != 0 || obj.Exclusive || obj.Weight != 0 {
+		return true
+	}
+	return false
+}
+
 type H2Ja3Spec struct {
 	InitialSetting []Setting
 	ConnFlow       uint32   //WINDOW_UPDATE:15663105
 	OrderHeaders   []string //伪标头顺序,例如：[]string{":method",":authority",":scheme",":path"}
+	Priority       Priority
 }
 
 func (obj H2Ja3Spec) IsSet() bool { //是否设置了
-	if obj.InitialSetting != nil || obj.ConnFlow != 0 {
+	if obj.InitialSetting != nil || obj.ConnFlow != 0 || obj.OrderHeaders != nil || obj.Priority.IsSet() {
 		return true
 	}
 	return false

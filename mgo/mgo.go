@@ -10,6 +10,7 @@ import (
 
 	"gitee.com/baixudong/gospider/bar"
 	"gitee.com/baixudong/gospider/kinds"
+	"gitee.com/baixudong/gospider/requests"
 	"gitee.com/baixudong/gospider/thread"
 	"gitee.com/baixudong/gospider/tools"
 
@@ -90,7 +91,7 @@ func (obj *FindData) Decode(val any) error {
 }
 
 // 返回gjson
-func (obj FindData) Json() gjson.Result {
+func (obj *FindData) Json() gjson.Result {
 	if !obj.json.IsObject() {
 		obj.json = tools.Any2json(obj.Data())
 	}
@@ -98,12 +99,12 @@ func (obj FindData) Json() gjson.Result {
 }
 
 // 返回json
-func (obj FindData) String() string {
+func (obj *FindData) String() string {
 	return obj.Json().Raw
 }
 
 // 返回字节
-func (obj FindData) Bytes() []byte {
+func (obj *FindData) Bytes() []byte {
 	return tools.StringToBytes(obj.String())
 }
 
@@ -140,10 +141,10 @@ func (obj *FindsData) Len() int {
 
 // 返回gjson
 func (obj *FindsData) Json() gjson.Result {
-	return tools.Any2json(obj.Data())
+	return tools.Any2json(obj.Map())
 }
 
-func (obj *FindsData) Data() map[string]any {
+func (obj *FindsData) Map() map[string]any {
 	if !obj.rawOk {
 		return obj.raw
 	}
@@ -194,7 +195,11 @@ func NewClient(ctx context.Context, opt ClientOption) (*Client, error) {
 		})
 	}
 	mgoDialer := &mgoDialer{hostMap: opt.HostMap}
-	mgoDialer.dialer = &net.Dialer{}
+	dialer, err := requests.NewDail(requests.DialOption{})
+	if err != nil {
+		return nil, err
+	}
+	mgoDialer.dialer = dialer.Dialer()
 	client_option.SetDialer(mgoDialer)
 	client_option.SetDirect(opt.Direct)
 	client_option.SetDisableOCSPEndpointCheck(true)
@@ -205,11 +210,7 @@ func NewClient(ctx context.Context, opt ClientOption) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = client.Ping(ctx, readpref.Primary())
-	if err != nil {
-		return nil, err
-	}
-	return &Client{client}, err
+	return &Client{client}, client.Ping(ctx, readpref.Primary())
 }
 
 // 创建新的集合
@@ -583,7 +584,7 @@ func (obj *Client) ClearOplog(preCctx context.Context, Func func(context.Context
 	afterTime := time.NewTimer(time.Second)
 	defer afterTime.Stop()
 	for datas.Next(pre_ctx) {
-		data := ClearOplog(datas.Data())
+		data := ClearOplog(datas.Map())
 		if data.ObjectID.IsZero() {
 			continue
 		}
@@ -726,7 +727,7 @@ func (obj *Table) clearTable(preCtx context.Context, Func any, tag string, clear
 	if clearOption.ClearBatchSize > 0 {
 		tempDatas := []map[string]any{}
 		for datas.Next(pre_ctx) {
-			data := datas.Data()
+			data := datas.Map()
 			tmId = data["_id"].(ObjectID)
 			tempDatas = append(tempDatas, data)
 			if len(tempDatas) >= int(clearOption.ClearBatchSize) {
@@ -751,7 +752,7 @@ func (obj *Table) clearTable(preCtx context.Context, Func any, tag string, clear
 		}
 	} else {
 		for datas.Next(pre_ctx) {
-			data := datas.Data()
+			data := datas.Map()
 			tmId = data["_id"].(ObjectID)
 			_, err := pool.Write(&thread.Task{
 				Func: Func,

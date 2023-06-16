@@ -118,10 +118,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	//创建cookiesjar
 	var jar *cookiejar.Jar
 	if !option.DisCookie {
-		if jar, err = cookiejar.New(nil); err != nil {
-			cnl()
-			return nil, err
-		}
+		jar = newJar()
 	}
 	baseTransport := &http.Transport{
 		MaxIdleConns:        655350,
@@ -193,11 +190,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 // 重置客户端至初始状态
 func (obj *Client) Reset() error {
 	if obj.client.Jar != nil {
-		if jar, err := cookiejar.New(nil); err != nil {
-			return err
-		} else {
-			obj.client.Jar = jar
-		}
+		obj.client.Jar = newJar()
 	}
 	obj.CloseIdleConnections()
 	return nil
@@ -218,32 +211,64 @@ func (obj *Client) CloseIdleConnections() {
 }
 
 // 返回url 的cookies,也可以设置url 的cookies
-func (obj *Client) Cookies(href string, cookies ...*http.Cookie) Cookies {
-	if obj.client.Jar == nil {
-		return nil
+func (obj *Client) Cookies(href string, cookies ...any) (Cookies, error) {
+	return cookie(obj.client.Jar, href, cookies...)
+}
+
+type Jar struct {
+	jar *cookiejar.Jar
+}
+
+func newJar() *cookiejar.Jar {
+	jar, _ := cookiejar.New(nil)
+	return jar
+}
+
+func NewJar() *Jar {
+	return &Jar{
+		jar: newJar(),
+	}
+}
+func (obj *Jar) Cookies(href string, cookies ...any) (Cookies, error) {
+	return cookie(obj.jar, href, cookies...)
+}
+func (obj *Jar) ClearCookies() {
+	obj.jar = newJar()
+}
+
+func cookie(jar http.CookieJar, href string, cookies ...any) (Cookies, error) {
+	if jar == nil {
+		return nil, nil
 	}
 	u, err := url.Parse(href)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	obj.client.Jar.SetCookies(u, cookies)
-	return obj.client.Jar.Cookies(u)
+	for _, cookie := range cookies {
+		cooks, err := ReadCookies(cookie)
+		if err != nil {
+			return nil, err
+		}
+		jar.SetCookies(u, cooks)
+	}
+	return jar.Cookies(u), nil
 }
 
 // 清除cookies
-func (obj *Client) ClearCookies() error {
-	if obj.client.Jar == nil {
-		return nil
+func (obj *Client) ClearCookies() {
+	if obj.client.Jar != nil {
+		obj.client.Jar = newJar()
 	}
-	if jar, err := cookiejar.New(nil); err != nil {
-		return err
-	} else {
-		obj.client.Jar = jar
-	}
-	return nil
 }
-func (obj *Client) getClient(request_option RequestOption) *http.Client {
-	if !request_option.DisCookie || obj.client.Jar == nil {
+func (obj *Client) getClient(option RequestOption) *http.Client {
+	if option.Jar != nil {
+		return &http.Client{
+			Transport:     obj.client.Transport,
+			CheckRedirect: obj.client.CheckRedirect,
+			Jar:           option.Jar.jar,
+		}
+	}
+	if !option.DisCookie || obj.client.Jar == nil {
 		return obj.client
 	}
 	return &http.Client{

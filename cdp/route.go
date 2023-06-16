@@ -127,7 +127,7 @@ func (obj *Route) Headers() http.Header {
 	}
 	return head
 }
-func (obj *Route) Cookies() requests.Cookies {
+func (obj *Route) Cookies() (requests.Cookies, error) {
 	return requests.ReadCookies(obj.Headers())
 }
 func keyMd5(key RequestOption, resourceType string) [16]byte {
@@ -273,6 +273,6 @@ type FulData struct {
 	ResponsePhrase string      `json:"responsePhrase"`
 }
 
-func (obj FulData) Cookies() requests.Cookies {
+func (obj FulData) Cookies() (requests.Cookies, error) {
 	return requests.ReadSetCookies(obj.Headers)
 }

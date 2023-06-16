@@ -72,7 +72,7 @@ func (obj *Client) httpHandle(ctx context.Context, client *ProxyConn) error {
 			} else if obj.ja3 {
 				client.option.ja3 = true
 			}
-
+			
 			if obj.h2Ja3Spec.IsSet() {
 				client.option.h2Ja3 = true
 				client.option.h2Ja3Spec = obj.h2Ja3Spec
