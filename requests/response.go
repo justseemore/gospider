@@ -160,7 +160,7 @@ func (obj *Response) Location() (*url.URL, error) {
 	return obj.response.Location()
 }
 
-// 返回这个请求的cookies
+// 返回这个请求的setCookies
 func (obj *Response) Cookies() Cookies {
 	if obj.filePath != "" {
 		return nil
