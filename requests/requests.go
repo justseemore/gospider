@@ -237,7 +237,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 			}
 		}
 		rawAddr := net.JoinHostPort(reqs.URL.Hostname(), rawPort)
-		ctxData.rawAddr, reqs.URL.Host = rawAddr, tools.Hex(tools.Md5(fmt.Sprintf("%s:%s", ctxData.proxy.Hostname(), rawAddr)))
+		ctxData.rawAddr, reqs.URL.Host = rawAddr, tools.Hex(tools.Md5(fmt.Sprintf("%s::%s", ctxData.proxy.Hostname(), rawAddr)))
 	}
 	r, err = obj.getClient(request_option).Do(reqs)
 	if r != nil {
