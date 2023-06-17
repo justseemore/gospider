@@ -32,33 +32,46 @@ func ReadCookies(val any) (Cookies, error) {
 		if !cook.IsObject() {
 			return nil, errors.New("cookies不支持的类型")
 		}
-		head := http.Header{}
-		for k, vvs := range cook.Map() {
+		cookies := Cookies{}
+		for kk, vvs := range cook.Map() {
 			if vvs.IsArray() {
 				for _, vv := range vvs.Array() {
-					head.Add(k, vv.String())
+					cookies = append(cookies, &http.Cookie{
+						Name:  kk,
+						Value: vv.String(),
+					})
 				}
 			} else {
-				head.Add(k, vvs.String())
+				cookies = append(cookies, &http.Cookie{
+					Name:  kk,
+					Value: vvs.String(),
+				})
 			}
 		}
-		return readCookies(head, ""), nil
+		return cookies, nil
 	default:
 		jsonData := tools.Any2json(cook)
 		if !jsonData.IsObject() {
 			return nil, errors.New("cookies不支持的类型")
 		}
-		head := http.Header{}
-		for k, vvs := range jsonData.Map() {
+
+		cookies := Cookies{}
+		for kk, vvs := range jsonData.Map() {
 			if vvs.IsArray() {
 				for _, vv := range vvs.Array() {
-					head.Add(k, vv.String())
+					cookies = append(cookies, &http.Cookie{
+						Name:  kk,
+						Value: vv.String(),
+					})
 				}
 			} else {
-				head.Add(k, vvs.String())
+				cookies = append(cookies, &http.Cookie{
+					Name:  kk,
+					Value: vvs.String(),
+				})
 			}
 		}
-		return readCookies(head, ""), nil
+		return cookies, nil
 	}
 }
 
@@ -78,33 +91,45 @@ func ReadSetCookies(val any) (Cookies, error) {
 		if !cook.IsObject() {
 			return nil, errors.New("setCookies 不支持的类型")
 		}
-		head := http.Header{}
-		for k, vvs := range cook.Map() {
+		cookies := Cookies{}
+		for kk, vvs := range cook.Map() {
 			if vvs.IsArray() {
 				for _, vv := range vvs.Array() {
-					head.Add(k, vv.String())
+					cookies = append(cookies, &http.Cookie{
+						Name:  kk,
+						Value: vv.String(),
+					})
 				}
 			} else {
-				head.Add(k, vvs.String())
+				cookies = append(cookies, &http.Cookie{
+					Name:  kk,
+					Value: vvs.String(),
+				})
 			}
 		}
-		return readSetCookies(head), nil
+		return cookies, nil
 	default:
 		jsonData := tools.Any2json(cook)
 		if !jsonData.IsObject() {
 			return nil, errors.New("setCookies 不支持的类型")
 		}
-		head := http.Header{}
-		for k, vvs := range jsonData.Map() {
+		cookies := Cookies{}
+		for kk, vvs := range jsonData.Map() {
 			if vvs.IsArray() {
 				for _, vv := range vvs.Array() {
-					head.Add(k, vv.String())
+					cookies = append(cookies, &http.Cookie{
+						Name:  kk,
+						Value: vv.String(),
+					})
 				}
 			} else {
-				head.Add(k, vvs.String())
+				cookies = append(cookies, &http.Cookie{
+					Name:  kk,
+					Value: vvs.String(),
+				})
 			}
 		}
-		return readSetCookies(head), nil
+		return cookies, nil
 	}
 }
 func (obj *RequestOption) newCookies() (err error) {
