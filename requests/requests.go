@@ -65,11 +65,6 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	if optionBak, err = obj.newRequestOption(rawOption); err != nil {
 		return
 	}
-	if optionBak.BeforCallBack == nil {
-		if err = optionBak.optionInit(); err != nil {
-			return
-		}
-	}
 	//开始请求
 	var tryNum int64
 	for tryNum = 0; tryNum <= optionBak.TryNum; tryNum++ {
