@@ -4,7 +4,6 @@ package cmd
 
 import (
 	"os/exec"
-	"syscall"
 )
 
 // 普通的cmd 客户端
