@@ -6976,7 +6976,6 @@ func (sc *http2serverConn) startPush(msg *http2startPushRequest) {
 			// Should not happen, since we've already validated msg.url.
 			panic(fmt.Sprintf("newWriterAndRequestNoBody(%+v): %v", msg.url, err))
 		}
-
 		go sc.runHandler(rw, req, sc.handler.ServeHTTP)
 		return promisedID, nil
 	}
