@@ -186,3 +186,27 @@ func (obj *Upg) UpgradeFn(authority string, c net.Conn) http.RoundTripper {
 			cc.fr.WriteContinuation(streamID, endHeaders, chunk)
 		}
 ```
+# 添加ctx,cnl 以解决http2 代理转发无法及时同步导致的bug
+## 修改 http2serverConn 的  serve() 方法中的代码，将下面代码放到for 循环末尾
+```go
+	for {
+			//源代码
+			//下面代码放到末尾
+		if !sc.inFrameScheduleLoop && !sc.inGoAway && !sc.needToSendGoAway && !sc.needToSendSettingsAck && !sc.needsFrameFlush && !sc.writingFrame {
+			if tconn, ok := sc.conn.(interface{ Ctx() context.Context }); ok {
+				select {
+				case <-tconn.Ctx().Done():
+					return
+				default:
+				}
+			}
+		}
+	}
+```
+## 修改 http2ClientConn 的  readLoop() 方法中的代码,下面代码放到末尾
+```go
+	if tconn, ok := cc.tconn.(interface{ Cnl() }); ok {
+		tconn.Cnl()
+	}
+```
+

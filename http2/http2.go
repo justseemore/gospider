@@ -40,6 +40,7 @@ import (
 type Upg struct {
 	connPool *http2clientConnPool
 	t        *http2Transport
+	server   *http2Server
 }
 type UpgOption struct {
 	H2Ja3Spec             ja3.H2Ja3Spec
@@ -48,9 +49,11 @@ type UpgOption struct {
 	IdleConnTimeout       int64
 	TLSHandshakeTimeout   int64
 	ResponseHeaderTimeout int64
+	Server                bool //是否为服务端
 }
 
 func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
+	//初始化参数
 	var option UpgOption
 	if len(options) > 0 {
 		option = options[0]
@@ -102,7 +105,16 @@ func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 	if option.ResponseHeaderTimeout == 0 {
 		option.ResponseHeaderTimeout = 30
 	}
-
+	//开始创建服务端
+	if option.Server {
+		server := new(http2Server)
+		server.state = &http2serverInternalState{activeConns: make(map[*http2serverConn]struct{})}
+		server.IdleTimeout = time.Duration(option.IdleConnTimeout) * time.Second //检测连接是否健康的间隔时间
+		return &Upg{
+			server: server,
+		}
+	}
+	//开始创建客户端
 	connPool := new(http2clientConnPool)
 	t2 := &http2Transport{
 		ConnPool: http2noDialClientConnPool{connPool},
@@ -142,6 +154,12 @@ func (obj *Upg) UpgradeFn(authority string, c net.Conn) http.RoundTripper {
 		defer c.Close()
 	}
 	return obj.t
+}
+func (obj *Upg) ServerConn(ctx context.Context, c net.Conn, h http.Handler) {
+	obj.server.ServeConn(c, &http2ServeConnOpts{
+		Context: ctx,
+		Handler: h,
+	})
 }
 
 // The HTTP protocols are defined in terms of ASCII, not Unicode. This file
@@ -4820,7 +4838,6 @@ func (sc *http2serverConn) serve() {
 				panic(fmt.Sprintf("unexpected type %T", v))
 			}
 		}
-
 		// If the peer is causing us to generate a lot of control frames,
 		// but not reading them from us, assume they are trying to make us
 		// run out of memory.
@@ -4828,7 +4845,6 @@ func (sc *http2serverConn) serve() {
 			sc.vlogf("http2: too many control frames in send queue, closing connection")
 			return
 		}
-
 		// Start the shutdown timer after sending a GOAWAY. When sending GOAWAY
 		// with no error code (graceful shutdown), don't start the timer until
 		// all open streams have been completed.
@@ -4836,6 +4852,16 @@ func (sc *http2serverConn) serve() {
 		gracefulShutdownComplete := sc.goAwayCode == http2ErrCodeNo && sc.curOpenStreams() == 0
 		if sentGoAway && sc.shutdownTimer == nil && (sc.goAwayCode != http2ErrCodeNo || gracefulShutdownComplete) {
 			sc.shutDownIn(http2goAwayTimeout)
+		}
+
+		if !sc.inFrameScheduleLoop && !sc.inGoAway && !sc.needToSendGoAway && !sc.needToSendSettingsAck && !sc.needsFrameFlush && !sc.writingFrame {
+			if tconn, ok := sc.conn.(interface{ Ctx() context.Context }); ok {
+				select {
+				case <-tconn.Ctx().Done():
+					return
+				default:
+				}
+			}
 		}
 	}
 }
@@ -9196,6 +9222,9 @@ func (cc *http2ClientConn) readLoop() {
 		cc.wmu.Lock()
 		cc.fr.WriteGoAway(0, http2ErrCode(ce), nil)
 		cc.wmu.Unlock()
+	}
+	if tconn, ok := cc.tconn.(interface{ Cnl() }); ok {
+		tconn.Cnl()
 	}
 }
 
