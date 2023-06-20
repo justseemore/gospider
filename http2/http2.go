@@ -4858,6 +4858,7 @@ func (sc *http2serverConn) serve() {
 			if tconn, ok := sc.conn.(interface{ Ctx() context.Context }); ok {
 				select {
 				case <-tconn.Ctx().Done():
+					log.Print("借宿")
 					return
 				default:
 				}
@@ -9222,9 +9223,6 @@ func (cc *http2ClientConn) readLoop() {
 		cc.wmu.Lock()
 		cc.fr.WriteGoAway(0, http2ErrCode(ce), nil)
 		cc.wmu.Unlock()
-	}
-	if tconn, ok := cc.tconn.(interface{ Cnl() }); ok {
-		tconn.Cnl()
 	}
 }
 
