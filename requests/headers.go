@@ -12,7 +12,7 @@ var UserAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (K
 var AcceptLanguage = `"zh-CN,zh;q=0.9"`
 
 // 请求操作========================================================================= start
-var defaultHeaders = http.Header{
+var DefaultHeaders = http.Header{
 	"Accept-Encoding": []string{"gzip, deflate, br"},
 	"Accept":          []string{"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"},
 	"Accept-Language": []string{AcceptLanguage},
@@ -21,7 +21,7 @@ var defaultHeaders = http.Header{
 
 func (obj *RequestOption) newHeaders() error {
 	if obj.Headers == nil {
-		obj.Headers = defaultHeaders.Clone()
+		obj.Headers = DefaultHeaders.Clone()
 		return nil
 	}
 	switch headers := obj.Headers.(type) {

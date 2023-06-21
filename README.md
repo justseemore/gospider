@@ -18,6 +18,9 @@ go1.20 (不要低于这个版本)
 go get -u gitee.com/baixudong/gospider
 ```
 # 为了方便管理,提交bug请到github统一提交
+```
+https://github.com/baixudong007/gospider
+```
 
 # [测试用例](../../tree/master/test) 
 
