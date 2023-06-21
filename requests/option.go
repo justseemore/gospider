@@ -95,6 +95,31 @@ func (obj *RequestOption) optionInit() error {
 			obj.ContentType = writer.FormDataContentType()
 		}
 		obj.body = tempBody
+	} else if obj.Files != nil {
+		tempBody := bytes.NewBuffer(nil)
+		writer := multipart.NewWriter(tempBody)
+		escapeQuotes := strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
+		for _, file := range obj.Files {
+			h := make(textproto.MIMEHeader)
+			h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, escapeQuotes.Replace(file.Key), escapeQuotes.Replace(file.Name)))
+			if file.Type == "" {
+				h.Set("Content-Type", "application/octet-stream")
+			} else {
+				h.Set("Content-Type", file.Type)
+			}
+			if wp, err := writer.CreatePart(h); err != nil {
+				return err
+			} else if _, err = wp.Write(file.Content); err != nil {
+				return err
+			}
+		}
+		if err = writer.Close(); err != nil {
+			return err
+		}
+		if obj.ContentType == "" {
+			obj.ContentType = writer.FormDataContentType()
+		}
+		obj.body = tempBody
 	} else if obj.Data != nil {
 		if obj.body, err = newBody(obj.Data, "data", nil); err != nil {
 			return err
