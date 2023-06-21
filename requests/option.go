@@ -30,6 +30,7 @@ type RequestOption struct {
 	Body          io.Reader
 	Json          any                                         //发送application/json,支持：string,[]bytes,json,map
 	Text          any                                         //发送text/xml,支持string,[]bytes,json,map
+	ContentType   string                                      //headers 中Content-Type 的值
 	Raw           any                                         //不设置context-type,支持string,[]bytes,json,map
 	TempData      map[string]any                              //临时变量，用于回调存储或自由度更高的用法
 	DisCookie     bool                                        //关闭cookies管理,这个请求不用cookies池
@@ -47,8 +48,7 @@ type RequestOption struct {
 	DisUnZip    bool                              //关闭自动解压
 	WsOption    websocket.Option                  //websocket option,使用websocket 请求的option
 
-	converUrl   string
-	contentType string
+	converUrl string
 }
 
 func (obj *RequestOption) optionInit() error {
@@ -91,23 +91,31 @@ func (obj *RequestOption) optionInit() error {
 		if err = writer.Close(); err != nil {
 			return err
 		}
-		obj.contentType = writer.FormDataContentType()
+		if obj.ContentType == "" {
+			obj.ContentType = writer.FormDataContentType()
+		}
 		obj.body = tempBody
 	} else if obj.Data != nil {
 		if obj.body, err = newBody(obj.Data, "data", nil); err != nil {
 			return err
 		}
-		obj.contentType = "application/x-www-form-urlencoded"
+		if obj.ContentType == "" {
+			obj.ContentType = "application/x-www-form-urlencoded"
+		}
 	} else if obj.Json != nil {
 		if obj.body, err = newBody(obj.Json, "json", nil); err != nil {
 			return err
 		}
-		obj.contentType = "application/json"
+		if obj.ContentType == "" {
+			obj.ContentType = "application/json"
+		}
 	} else if obj.Text != nil {
 		if obj.body, err = newBody(obj.Text, "text", nil); err != nil {
 			return err
 		}
-		obj.contentType = "text/plain"
+		if obj.ContentType == "" {
+			obj.ContentType = "text/plain"
+		}
 	}
 	//构造params
 	if obj.Params != nil {

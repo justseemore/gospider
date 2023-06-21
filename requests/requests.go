@@ -196,8 +196,8 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		return response, tools.WrapError(ErrFatal, "headers 转换错误")
 	}
 
-	if reqs.Header.Get("Content-type") == "" && request_option.contentType != "" {
-		reqs.Header.Set("Content-Type", request_option.contentType)
+	if reqs.Header.Get("Content-Type") == "" && reqs.Header.Get("content-type") == "" && request_option.ContentType != "" {
+		reqs.Header.Set("Content-Type", request_option.ContentType)
 	}
 	//host构造
 	if request_option.Host != "" {
