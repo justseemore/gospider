@@ -125,28 +125,28 @@ func verifyProxy(proxyUrl string) (*url.URL, error) {
 		return nil, tools.WrapError(ErrFatal, "不支持的代理协议")
 	}
 }
-func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOption) (response *Response, err error) {
-	method := strings.ToUpper(request_option.Method)
-	href := request_option.converUrl
+func (obj *Client) tempRequest(preCtx context.Context, option RequestOption) (response *Response, err error) {
+	method := strings.ToUpper(option.Method)
+	href := option.converUrl
 	var reqs *http.Request
 	//构造ctxData
 	ctxData := new(reqCtxData)
-	ctxData.disProxy = request_option.DisProxy
-	if request_option.Proxy != "" { //代理相关构造
-		tempProxy, err := verifyProxy(request_option.Proxy)
+	ctxData.disProxy = option.DisProxy
+	if option.Proxy != "" { //代理相关构造
+		tempProxy, err := verifyProxy(option.Proxy)
 		if err != nil {
 			return response, tools.WrapError(ErrFatal, err)
 		}
 		ctxData.proxy = tempProxy
 	}
-	if request_option.RedirectNum != 0 { //重定向次数
-		ctxData.redirectNum = request_option.RedirectNum
+	if option.RedirectNum != 0 { //重定向次数
+		ctxData.redirectNum = option.RedirectNum
 	}
 	//构造ctx,cnl
 	var cancel context.CancelFunc
 	var reqCtx context.Context
-	if request_option.Timeout > 0 { //超时
-		reqCtx, cancel = context.WithTimeout(context.WithValue(preCtx, keyPrincipalID, ctxData), time.Duration(request_option.Timeout)*time.Second)
+	if option.Timeout > 0 { //超时
+		reqCtx, cancel = context.WithTimeout(context.WithValue(preCtx, keyPrincipalID, ctxData), time.Duration(option.Timeout)*time.Second)
 	} else {
 		reqCtx, cancel = context.WithCancel(context.WithValue(preCtx, keyPrincipalID, ctxData))
 	}
@@ -159,8 +159,8 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		}
 	}()
 	//创建request
-	if request_option.body != nil {
-		reqs, err = http.NewRequestWithContext(reqCtx, method, href, request_option.body)
+	if option.body != nil {
+		reqs, err = http.NewRequestWithContext(reqCtx, method, href, option.body)
 	} else {
 		reqs, err = http.NewRequestWithContext(reqCtx, method, href, nil)
 	}
@@ -192,22 +192,22 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	}
 	//添加headers
 	var headOk bool
-	if reqs.Header, headOk = request_option.Headers.(http.Header); !headOk {
+	if reqs.Header, headOk = option.Headers.(http.Header); !headOk {
 		return response, tools.WrapError(ErrFatal, "headers 转换错误")
 	}
 
-	if reqs.Header.Get("Content-Type") == "" && reqs.Header.Get("content-type") == "" && request_option.ContentType != "" {
-		reqs.Header.Set("Content-Type", request_option.ContentType)
+	if reqs.Header.Get("Content-Type") == "" && reqs.Header.Get("content-type") == "" && option.ContentType != "" {
+		reqs.Header.Set("Content-Type", option.ContentType)
 	}
 	//host构造
-	if request_option.Host != "" {
-		reqs.Host = request_option.Host
+	if option.Host != "" {
+		reqs.Host = option.Host
 	} else if reqs.Header.Get("Host") != "" {
 		reqs.Host = reqs.Header.Get("Host")
 	}
 	//添加cookies
-	if request_option.Cookies != nil {
-		cooks, cookOk := request_option.Cookies.(Cookies)
+	if option.Cookies != nil {
+		cooks, cookOk := option.Cookies.(Cookies)
 		if !cookOk {
 			return response, tools.WrapError(ErrFatal, "cookies 转换错误")
 		}
@@ -219,7 +219,7 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 	var r *http.Response
 	var err2 error
 	if ctxData.ws {
-		websocket.SetClientHeaders(reqs.Header, request_option.WsOption)
+		websocket.SetClientHeaders(reqs.Header, option.WsOption)
 	}
 	// ja3相关处理
 	if !ctxData.disProxy && ctxData.proxy != nil { //修改host,addr
@@ -234,18 +234,19 @@ func (obj *Client) tempRequest(preCtx context.Context, request_option RequestOpt
 		rawAddr := net.JoinHostPort(reqs.URL.Hostname(), rawPort)
 		ctxData.rawAddr, reqs.URL.Host = rawAddr, tools.Hex(tools.Md5(fmt.Sprintf("%s::%s", ctxData.proxy.Hostname(), rawAddr)))
 	}
-	r, err = obj.getClient(request_option).Do(reqs)
+
+	r, err = obj.getClient(option).Do(reqs)
 	if r != nil {
 		if ctxData.ws {
 			if r.StatusCode == 101 {
-				request_option.DisRead = true
+				option.DisRead = true
 			} else if err == nil {
 				err = errors.New("statusCode not 101")
 			}
 		} else if r.Header.Get("Content-Type") == "text/event-stream" {
-			request_option.DisRead = true
+			option.DisRead = true
 		}
-		if response, err2 = obj.newResponse(reqCtx, cancel, r, request_option); err2 != nil { //创建 response
+		if response, err2 = obj.newResponse(reqCtx, cancel, r, option); err2 != nil { //创建 response
 			return response, err2
 		}
 		if ctxData.ws && r.StatusCode == 101 {
