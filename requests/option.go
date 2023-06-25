@@ -22,7 +22,7 @@ type RequestOption struct {
 	Timeout       int64    //请求超时时间
 	Headers       any      //请求头,支持：json,map，header
 	Cookies       any      // cookies,支持json,map,str，http.Header
-	Files         []File   //文件
+	Files         []File   //发送multipart/form-data,文件上传
 	Params        any      //url 中的参数，用以拼接url,支持json,map
 	Form          any      //发送multipart/form-data,适用于文件上传,支持json,map
 	Data          any      //发送application/x-www-form-urlencoded,适用于key,val,支持string,[]bytes,json,map

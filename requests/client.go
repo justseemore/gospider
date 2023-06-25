@@ -67,12 +67,10 @@ type Client struct {
 
 // 新建一个请求客户端,发送请求必须创建哈
 func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error) {
-	var isG bool
 	if preCtx == nil {
 		preCtx = context.TODO()
-	} else {
-		isG = true
 	}
+
 	ctx, cnl := context.WithCancel(preCtx)
 	var option ClientOption
 	//初始化参数
@@ -177,12 +175,6 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 		timeout:       option.Timeout,
 		headers:       option.Headers,
 		bar:           option.Bar,
-	}
-	if isG {
-		go func() {
-			<-result.ctx.Done()
-			result.Close()
-		}()
 	}
 	return result, nil
 }
