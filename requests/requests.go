@@ -31,6 +31,8 @@ type reqCtxData struct {
 	url         *url.URL
 	host        string
 	rawAddr     string
+	rawHost     string
+	rawMd5      string
 	redirectNum int
 	disProxy    bool
 	ws          bool
@@ -232,9 +234,9 @@ func (obj *Client) tempRequest(preCtx context.Context, option RequestOption) (re
 			}
 		}
 		rawAddr := net.JoinHostPort(reqs.URL.Hostname(), rawPort)
-		ctxData.rawAddr, reqs.URL.Host = rawAddr, tools.Hex(tools.Md5(fmt.Sprintf("%s::%s", ctxData.proxy.Hostname(), rawAddr)))
+		ctxData.rawMd5 = tools.Hex(tools.Md5(fmt.Sprintf("%s::%s", ctxData.proxy.Hostname(), rawAddr)))
+		ctxData.rawAddr, ctxData.rawHost, reqs.URL.Host = rawAddr, reqs.URL.Host, ctxData.rawMd5
 	}
-
 	r, err = obj.getClient(option).Do(reqs)
 	if r != nil {
 		if ctxData.ws {
