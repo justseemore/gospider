@@ -21,8 +21,8 @@ type DialClient struct {
 	getProxy     func(ctx context.Context, url *url.URL) (string, error)
 	proxy        *url.URL
 	dialer       *net.Dialer
-	dnsIpData    map[string]msgClient
-	lock         sync.RWMutex
+	dnsIpData    sync.Map
+	proxyLock    sync.RWMutex
 	dnsTimeout   int64
 	addrType     AddrType //使用ipv4,ipv6 ,或自动选项
 	getAddrType  func(string) AddrType
@@ -79,7 +79,6 @@ func NewDail(option DialOption) (*DialClient, error) {
 	}
 	var err error
 	dialCli := &DialClient{
-		dnsIpData: make(map[string]msgClient),
 		dialer: &net.Dialer{
 			Timeout:   time.Second * time.Duration(option.TLSHandshakeTimeout),
 			KeepAlive: time.Second * time.Duration(option.KeepAlive),
@@ -115,6 +114,8 @@ func NewDail(option DialOption) (*DialClient, error) {
 }
 
 func (obj *DialClient) GetProxy(ctx context.Context, href *url.URL) (*url.URL, error) {
+	obj.proxyLock.RLock()
+	defer obj.proxyLock.RUnlock()
 	if obj.proxy != nil {
 		return obj.proxy, nil
 	}
@@ -127,25 +128,35 @@ func (obj *DialClient) GetProxy(ctx context.Context, href *url.URL) (*url.URL, e
 	}
 	return nil, nil
 }
+func (obj *DialClient) SetProxy(proxy string) error {
+	obj.proxyLock.Lock()
+	defer obj.proxyLock.Unlock()
+	if proxy == "" {
+		obj.proxy = nil
+		return nil
+	}
+	tmpProxy, err := verifyProxy(proxy)
+	if err != nil {
+		return err
+	}
+	obj.proxy = tmpProxy
+	return nil
+}
+func (obj *DialClient) SetGetProxy(getProxy func(ctx context.Context, url *url.URL) (string, error)) {
+	obj.proxyLock.Lock()
+	defer obj.proxyLock.Unlock()
+	obj.getProxy = getProxy
+}
 func (obj *DialClient) Dialer() *net.Dialer {
 	return obj.dialer
 }
-
-func (obj *DialClient) setIpData(addr string, msgData msgClient) {
-	obj.lock.Lock()
-	obj.dnsIpData[addr] = msgData
-	obj.lock.Unlock()
-}
-func (obj *DialClient) getIpData(addr string) (msgClient, bool) {
-	obj.lock.RLock()
-	msgData, ok := obj.dnsIpData[addr]
-	obj.lock.RUnlock()
-	return msgData, ok
-}
 func (obj *DialClient) loadHost(host string) (string, bool) {
-	msgdata, ok := obj.getIpData(host)
-	if ok && time.Now().Unix()-msgdata.time < obj.dnsTimeout {
-		return msgdata.host, true
+	msgDataAny, ok := obj.dnsIpData.Load(host)
+	if ok {
+		msgdata := msgDataAny.(msgClient)
+		if time.Now().Unix()-msgdata.time < obj.dnsTimeout {
+			return msgdata.host, true
+		}
 	}
 	return host, false
 }
@@ -165,7 +176,7 @@ func (obj *DialClient) AddrToIp(ctx context.Context, addr string) (string, error
 			return addr, err
 		}
 		host = ip.String()
-		obj.setIpData(addr, msgClient{time: time.Now().Unix(), host: host})
+		obj.dnsIpData.Store(addr, msgClient{time: time.Now().Unix(), host: host})
 	}
 	return net.JoinHostPort(host, port), nil
 }

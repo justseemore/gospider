@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -209,17 +208,11 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 	if err = utlsConn.ApplyPreset(&utlsSpec); err != nil {
 		return nil, err
 	}
-	log.Print("kai")
-	go func() {
-		<-ctx.Done()
-		log.Print("借宿")
-	}()
 	if err = utlsConn.HandshakeContext(ctx); err != nil {
 		if strings.HasSuffix(err.Error(), "bad record MAC") {
 			err = errors.Join(err, errors.New("检测到22扩展异常,请删除此扩展后重试"))
 		}
 	}
-	log.Print(err)
 	return utlsConn, err
 }
 
@@ -257,7 +250,7 @@ func Utls2Tls(ctx context.Context, utlsConn *utls.UConn, host string) (*tls.Conn
 		defer tlsConn.Close()
 		defer tlsClientConn.Close()
 		defer utlsConn.Close()
-		err = tlsClientConn.HandshakeContext(ctx)
+		err = tlsClientConn.Handshake()
 		if err != nil {
 			return
 		}

@@ -164,6 +164,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	result := &Client{
 		ctx:           ctx,
 		cnl:           cnl,
+		dialClient:    dialClient,
 		client:        &client,
 		http2Upg:      http2Upg,
 		disCookie:     option.DisCookie,
@@ -182,28 +183,11 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	return result, nil
 }
 
-// 重置客户端至初始状态
-func (obj *Client) Reset() error {
-	if obj.client.Jar != nil {
-		obj.client.Jar = newJar()
-	}
-	obj.CloseIdleConnections()
-	return nil
-}
-
 func (obj *Client) SetProxy(proxy string) error {
-	if proxy == "" {
-		obj.dialClient.proxy = nil
-	}
-	tmpProxy, err := verifyProxy(proxy)
-	if err != nil {
-		return err
-	}
-	obj.dialClient.proxy = tmpProxy
-	return nil
+	return obj.dialClient.SetProxy(proxy)
 }
 func (obj *Client) SetGetProxy(getProxy func(ctx context.Context, url *url.URL) (string, error)) {
-	obj.dialClient.getProxy = getProxy
+	obj.dialClient.SetGetProxy(getProxy)
 }
 
 // 关闭客户端

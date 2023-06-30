@@ -7,6 +7,122 @@
 - dns缓存
 - 类型自动转化
 - 尝试重试，请求回调
+# 设置代理
+## 代理设置的优先级
+```
+全局代理方法 < 全局代理字符串 < 局部代理字符串
+```
+## 设置并修改全局代理方法  (只会在新建连接的时候调用获取代理的方法,复用连接的时候不会调用)
+```golang
+package main
+
+import (
+    "log"
+
+    "gitee.com/baixudong/gospider/requests"
+)
+
+func main() {
+		//创建请求客户端
+	reqCli, err := requests.NewClient(nil, requests.ClientOption{
+		GetProxy: func(ctx context.Context, url *url.URL) (string, error) { //设置全局代理方法
+			return "http://127.0.0.1:7005", nil
+		}})
+	if err != nil {
+		log.Panic(err)
+	}
+	response, err := reqCli.Request(nil, "get", "http://myip.top") //发送get请求
+	if err != nil {
+		log.Panic(err)
+	}
+	reqCli.SetGetProxy(func(ctx context.Context, url *url.URL) (string, error) { //修改全局代理方法
+		return "http://127.0.0.1:7006", nil
+	})
+	log.Print(response.Text()) //获取内容,解析为字符串
+}
+```
+## 设置并修改全局代理
+```golang
+package main
+
+import (
+    "log"
+
+    "gitee.com/baixudong/gospider/requests"
+)
+
+func main() {
+	//创建请求客户端
+	reqCli, err := requests.NewClient(nil, requests.ClientOption{
+		Proxy: "http://127.0.0.1:7005", //设置全局代理
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	 //发送get请求
+	response, err := reqCli.Request(nil, "get", "http://myip.top") 
+	if err != nil {
+		log.Panic(err)
+	}
+	err = reqCli.SetProxy("http://127.0.0.1:7006") //修改全局代理
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Print(response.Text()) //获取内容,解析为字符串
+}
+```
+## 设置局部代理
+```golang
+package main
+
+import (
+    "log"
+
+    "gitee.com/baixudong/gospider/requests"
+)
+
+func main() {
+	//创建请求客户端
+	reqCli, err := requests.NewClient(nil)
+	if err != nil {
+		log.Panic(err)
+	}
+	 //发送get请求
+	response, err := reqCli.Request(nil, "get", "http://myip.top", requests.RequestOption{
+		Proxy: "http://127.0.0.1:7005",
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Print(response.Text()) //获取内容,解析为字符串
+}
+```
+## 强制关闭代理，走本地网络
+```golang
+package main
+
+import (
+    "log"
+
+    "gitee.com/baixudong/gospider/requests"
+)
+
+func main() {
+	//创建请求客户端
+	reqCli, err := requests.NewClient(nil)
+	if err != nil {
+		log.Panic(err)
+	}
+	 //发送get请求
+	response, err := reqCli.Request(nil, "get", "http://myip.top", requests.RequestOption{
+		DisProxy: true, //强制走本地代理
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Print(response.Text()) //获取内容,解析为字符串
+}
+```
 
 # 发送http请求
 
