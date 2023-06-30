@@ -178,9 +178,6 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	if option.ErrCallBack == nil {
 		option.ErrCallBack = obj.errCallBack
 	}
-	if option.Proxy == "" {
-		option.Proxy = obj.proxy
-	}
 	if option.Headers == nil {
 		if obj.headers == nil {
 			option.Headers = DefaultHeaders.Clone()

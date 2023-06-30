@@ -140,7 +140,10 @@ func (obj *Client) tempRequest(preCtx context.Context, option RequestOption) (re
 			return response, tools.WrapError(ErrFatal, err)
 		}
 		ctxData.proxy = tempProxy
+	} else if obj.dialClient.proxy != nil {
+		ctxData.proxy = cloneUrl(obj.dialClient.proxy)
 	}
+
 	if option.RedirectNum != 0 { //重定向次数
 		ctxData.redirectNum = option.RedirectNum
 	}

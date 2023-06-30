@@ -523,10 +523,12 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 	}
 	return obj.DialContext(ctx, network, addr)
 }
-func (obj *DialClient) requestHttpDialTlsContext(ctx context.Context, network string, addr string) (conn net.Conn, err error) {
-	if conn, err = obj.requestHttpDialContext(ctx, network, addr); err != nil {
-		return nil, err
+func (obj *DialClient) requestHttpDialTlsContext(preCtx context.Context, network string, addr string) (conn net.Conn, err error) {
+	if conn, err = obj.requestHttpDialContext(preCtx, network, addr); err != nil {
+		return conn, err
 	}
+	ctx, cnl := context.WithTimeout(preCtx, obj.dialer.Timeout)
+	defer cnl()
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
 	return obj.AddTls(ctx, conn, reqData.host, reqData.ws)
 }

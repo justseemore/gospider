@@ -44,7 +44,6 @@ type ClientOption struct {
 	Bar           bool                                        //是否开启bar
 }
 type Client struct {
-	proxy         string //全局代理
 	http2Upg      *http2.Upg
 	redirectNum   int                                         //重定向次数
 	disDecode     bool                                        //关闭自动编码
@@ -57,6 +56,7 @@ type Client struct {
 	timeout       int64                                       //请求超时时间
 	headers       any                                         //请求头
 	bar           bool                                        //是否开启bar
+	dialClient    *DialClient                                 //dialer
 
 	disCookie bool
 	client    *http.Client
@@ -118,7 +118,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	if !option.DisCookie {
 		jar = newJar()
 	}
-	baseTransport := &http.Transport{
+	transport := &http.Transport{
 		MaxIdleConns:        655350,
 		MaxConnsPerHost:     655350,
 		MaxIdleConnsPerHost: 655350,
@@ -145,14 +145,14 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	}
 	var http2Upg *http2.Upg
 	if option.H2Ja3 || option.H2Ja3Spec.IsSet() {
-		http2Upg = http2.NewUpg(baseTransport, http2.UpgOption{H2Ja3Spec: option.H2Ja3Spec, DialTLSContext: dialClient.requestHttp2DialTlsContext})
-		baseTransport.TLSNextProto = map[string]func(authority string, c *tls.Conn) http.RoundTripper{
+		http2Upg = http2.NewUpg(transport, http2.UpgOption{H2Ja3Spec: option.H2Ja3Spec, DialTLSContext: dialClient.requestHttp2DialTlsContext})
+		transport.TLSNextProto = map[string]func(authority string, c *tls.Conn) http.RoundTripper{
 			"h2": func(authority string, c *tls.Conn) http.RoundTripper {
 				return http2Upg.UpgradeFn(authority, c)
 			},
 		}
 	}
-	client.Transport = baseTransport
+	client.Transport = transport
 	client.Jar = jar
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
@@ -164,7 +164,6 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	result := &Client{
 		ctx:           ctx,
 		cnl:           cnl,
-		proxy:         option.Proxy,
 		client:        &client,
 		http2Upg:      http2Upg,
 		disCookie:     option.DisCookie,
@@ -190,6 +189,21 @@ func (obj *Client) Reset() error {
 	}
 	obj.CloseIdleConnections()
 	return nil
+}
+
+func (obj *Client) SetProxy(proxy string) error {
+	if proxy == "" {
+		obj.dialClient.proxy = nil
+	}
+	tmpProxy, err := verifyProxy(proxy)
+	if err != nil {
+		return err
+	}
+	obj.dialClient.proxy = tmpProxy
+	return nil
+}
+func (obj *Client) SetGetProxy(getProxy func(ctx context.Context, url *url.URL) (string, error)) {
+	obj.dialClient.getProxy = getProxy
 }
 
 // 关闭客户端
