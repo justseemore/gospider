@@ -128,6 +128,14 @@ func (obj *DialClient) GetProxy(ctx context.Context, href *url.URL) (*url.URL, e
 	}
 	return nil, nil
 }
+func (obj *DialClient) Proxy() *url.URL {
+	obj.proxyLock.RLock()
+	defer obj.proxyLock.RUnlock()
+	if obj.proxy == nil {
+		return nil
+	}
+	return cloneUrl(obj.proxy)
+}
 func (obj *DialClient) SetProxy(proxy string) error {
 	obj.proxyLock.Lock()
 	defer obj.proxyLock.Unlock()
@@ -139,7 +147,7 @@ func (obj *DialClient) SetProxy(proxy string) error {
 	if err != nil {
 		return err
 	}
-	obj.proxy = tmpProxy
+	*obj.proxy = *tmpProxy
 	return nil
 }
 func (obj *DialClient) SetGetProxy(getProxy func(ctx context.Context, url *url.URL) (string, error)) {

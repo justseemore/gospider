@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
+	"compress/zlib"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -456,31 +457,48 @@ func AesDecode(val string, key []byte) ([]byte, error) {
 }
 
 // 压缩解码
-func ZipDecode(ctx context.Context, r *bytes.Buffer, encoding string) (*bytes.Buffer, error) {
+func CompressionBrDecode(ctx context.Context, r *bytes.Buffer) (*bytes.Buffer, error) {
 	rs := bytes.NewBuffer(nil)
-	var err error
-	if encoding == "br" {
-		err = CopyWitchContext(ctx, rs, brotli.NewReader(r))
-		return rs, err
-	}
-	var reader io.ReadCloser
-	switch encoding {
-	case "deflate":
-		reader = flate.NewReader(r)
-	case "gzip":
-		if reader, err = gzip.NewReader(r); err != nil {
-			return r, err
-		}
-	default:
+	return rs, CopyWitchContext(ctx, rs, brotli.NewReader(r))
+}
+func CompressionDeflateDecode(ctx context.Context, r *bytes.Buffer) (*bytes.Buffer, error) {
+	rs, reader := bytes.NewBuffer(nil), flate.NewReader(r)
+	defer reader.Close()
+	return rs, CopyWitchContext(ctx, rs, reader)
+}
+func CompressionGzipDecode(ctx context.Context, r *bytes.Buffer) (*bytes.Buffer, error) {
+	reader, err := gzip.NewReader(r)
+	if err != nil {
 		return r, err
 	}
-	defer func() {
-		if reader != nil {
-			reader.Close()
-		}
-	}()
-	err = CopyWitchContext(ctx, rs, reader)
-	return rs, err
+	defer reader.Close()
+	rs := bytes.NewBuffer(nil)
+	return rs, CopyWitchContext(ctx, rs, reader)
+}
+func CompressionZlibDecode(ctx context.Context, r *bytes.Buffer) (*bytes.Buffer, error) {
+	reader, err := zlib.NewReader(r)
+	if err != nil {
+		return r, err
+	}
+	defer reader.Close()
+	rs := bytes.NewBuffer(nil)
+	return rs, CopyWitchContext(ctx, rs, reader)
+}
+
+// 压缩解码
+func CompressionDecode(ctx context.Context, r *bytes.Buffer, encoding string) (*bytes.Buffer, error) {
+	switch encoding {
+	case "br":
+		return CompressionBrDecode(ctx, r)
+	case "deflate":
+		return CompressionDeflateDecode(ctx, r)
+	case "gzip":
+		return CompressionGzipDecode(ctx, r)
+	case "zlib":
+		return CompressionZlibDecode(ctx, r)
+	default:
+		return r, nil
+	}
 }
 
 // 字节串转字符串
@@ -1001,14 +1019,4 @@ func Signal(preCtx context.Context, fun func()) {
 			}
 		}
 	}
-}
-
-func SetUnExportedField[T any](source T, fieldName string, newFieldVal any) T {
-	v := reflect.ValueOf(source)
-	vptr := reflect.New(v.Type()).Elem()
-	vptr.Set(v)
-	tv := vptr.FieldByName(fieldName)
-	tv = reflect.NewAt(tv.Type(), unsafe.Pointer(tv.UnsafeAddr())).Elem()
-	tv.Set(reflect.ValueOf(newFieldVal))
-	return vptr.Interface().(T)
 }

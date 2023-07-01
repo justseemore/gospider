@@ -56,7 +56,7 @@ type Client struct {
 	timeout       int64                                       //请求超时时间
 	headers       any                                         //请求头
 	bar           bool                                        //是否开启bar
-	dialClient    *DialClient                                 //dialer
+	dialer        *DialClient                                 //dialer
 
 	disCookie bool
 	client    *http.Client
@@ -164,7 +164,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	result := &Client{
 		ctx:           ctx,
 		cnl:           cnl,
-		dialClient:    dialClient,
+		dialer:        dialClient,
 		client:        &client,
 		http2Upg:      http2Upg,
 		disCookie:     option.DisCookie,
@@ -184,10 +184,10 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 }
 
 func (obj *Client) SetProxy(proxy string) error {
-	return obj.dialClient.SetProxy(proxy)
+	return obj.dialer.SetProxy(proxy)
 }
 func (obj *Client) SetGetProxy(getProxy func(ctx context.Context, url *url.URL) (string, error)) {
-	obj.dialClient.SetGetProxy(getProxy)
+	obj.dialer.SetGetProxy(getProxy)
 }
 
 // 关闭客户端
@@ -227,7 +227,7 @@ func (obj *Jar) Cookies(href string, cookies ...any) (Cookies, error) {
 	return cookie(obj.jar, href, cookies...)
 }
 func (obj *Jar) ClearCookies() {
-	obj.jar = newJar()
+	*obj.jar = *newJar()
 }
 
 func cookie(jar http.CookieJar, href string, cookies ...any) (Cookies, error) {
@@ -251,7 +251,7 @@ func cookie(jar http.CookieJar, href string, cookies ...any) (Cookies, error) {
 // 清除cookies
 func (obj *Client) ClearCookies() {
 	if obj.client.Jar != nil {
-		obj.client.Jar = newJar()
+		*obj.client.Jar.(*cookiejar.Jar) = *newJar()
 	}
 }
 func (obj *Client) getClient(option RequestOption) *http.Client {

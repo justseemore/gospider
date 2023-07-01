@@ -336,7 +336,7 @@ func (obj *Response) read() error { //读取body,对body 解压，解码操作
 		return errors.New("io.Copy error: " + err.Error())
 	}
 	if !obj.disUnzip {
-		if bBody, err = tools.ZipDecode(obj.ctx, bBody, obj.ContentEncoding()); err != nil {
+		if bBody, err = tools.CompressionDecode(obj.ctx, bBody, obj.ContentEncoding()); err != nil {
 			return errors.New("gzip NewReader error: " + err.Error())
 		}
 	}

@@ -311,7 +311,7 @@ func main() {
 	log.Print(resp.Text())
 }
 ```
-## 采集全国公共资源网和中国政府采购网的列表页的标题
+# 采集全国公共资源网和中国政府采购网的列表页的标题
 ```go
 package main
 import (
