@@ -187,7 +187,7 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 				if i := slices.Index(alpns.AlpnProtocols, "h2"); i != -1 {
 					alpns.AlpnProtocols = slices.Delete(alpns.AlpnProtocols, i, i+1)
 				}
-				if i := slices.Index(alpns.AlpnProtocols, "http/1.1"); i == -1 {
+				if !slices.Contains(alpns.AlpnProtocols, "http/1.1") {
 					alpns.AlpnProtocols = append([]string{"http/1.1"}, alpns.AlpnProtocols...)
 				}
 				break
@@ -582,7 +582,7 @@ func createCiphers(ciphers []string) ([]uint16, error) {
 	return cipherSuites, nil
 }
 func createCurves(curves []string, extensions []string) (curvesExtension utls.TLSExtension, err error) {
-	if slices.Index(extensions, "10") == -1 {
+	if !slices.Contains(extensions, "10") {
 		err = errors.New("Extensions 缺少ellipticCurves 扩展,检查ja3 字符串是否合法")
 	}
 	curveIds := []utls.CurveID{utls.GREASE_PLACEHOLDER}
@@ -596,7 +596,7 @@ func createCurves(curves []string, extensions []string) (curvesExtension utls.TL
 	return &utls.SupportedCurvesExtension{Curves: curveIds}, nil
 }
 func createPointFormats(points []string, extensions []string) (curvesExtension utls.TLSExtension, err error) {
-	if slices.Index(extensions, "11") == -1 {
+	if !slices.Contains(extensions, "11") {
 		err = errors.New("Extensions 缺少pointFormats 扩展,检查ja3 字符串是否合法")
 	}
 	supportedPoints := []uint8{}
@@ -726,7 +726,7 @@ func newClientHello(chi *tls.ClientHelloInfo) ClientHello {
 	}
 	var CipherSuites []uint16
 	for _, CipherSuite := range chi.CipherSuites {
-		if slices.Index(CipherSuites, CipherSuite) == -1 {
+		if !slices.Contains(CipherSuites, CipherSuite) {
 			CipherSuites = append(CipherSuites, CipherSuite)
 		}
 	}
