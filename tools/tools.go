@@ -732,6 +732,13 @@ func WrapError(err error, val ...any) error {
 }
 
 func CopyWitchContext(ctx context.Context, writer io.Writer, reader io.Reader) (err error) {
+	if ctx == nil {
+		_, err = io.Copy(writer, reader)
+		if err != nil && errors.Is(err, io.ErrUnexpectedEOF) {
+			err = nil
+		}
+		return
+	}
 	p := make(chan struct{})
 	go func() {
 		defer func() {
@@ -741,7 +748,7 @@ func CopyWitchContext(ctx context.Context, writer io.Writer, reader io.Reader) (
 			close(p)
 		}()
 		_, err = io.Copy(writer, reader)
-		if errors.Is(err, io.ErrUnexpectedEOF) {
+		if err != nil && errors.Is(err, io.ErrUnexpectedEOF) {
 			err = nil
 		}
 	}()
