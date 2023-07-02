@@ -1,12 +1,12 @@
 # 功能概述
-
-- 基于net/http 二次封装
 - cookies 开关，连接池开关，http2，ja3
 - 自实现socks五,http代理,https代理
 - 自动解压缩,解码
 - dns缓存
 - 类型自动转化
 - 尝试重试，请求回调
+- websocket 协议
+- sse协议
 # 设置代理
 ## 代理设置的优先级
 ```

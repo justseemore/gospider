@@ -5,10 +5,9 @@
 #### 模块文档在下面的链接里面!!!
 #### 模块文档在下面的链接里面!!!
 ---
-1. [请求库](../../tree/master/requests)：ja3指纹,http2 指纹,主流代理协议,类型自动转换
+1. [请求库](../../tree/master/requests)：ja3,http2 指纹。websocket,sse,http,https 协议
 2. [并发库](../../tree/master/thread)：自实现高性能并发库
 3. [执行js,py](../../tree/master/cmd): 通过管道调用js,python 中的方法
-4. [操控浏览器的库](https://github.com/chromedp/chromedp)：推荐库：基于cdp 协议操控浏览器，干净，快速
 # 依赖
 ```
 go1.20 (不要低于这个版本)
@@ -28,6 +27,18 @@ https://github.com/baixudong007/gospider
 1. [知乎](https://www.zhihu.com/people/xiao-bai-shu-87-3/posts)
 2. [掘金](https://juejin.cn/user/4098624347452359/posts)
 3. [csdn](https://blog.csdn.net/Mr_bai_404?type=blog)
+
+# 推荐库
+|库名|推荐原因|
+-|-
+[curl_cffi](https://github.com/yifeikong/curl_cffi)|python中修改ja3指纹最好的一个
+[操控浏览器的库](https://github.com/chromedp/chromedp)|golang中操控浏览器最好的一个
+
+
+
+
+
+
 
 # 如果二维码没有及时更新可以添加个人微信 gospider007 (备注gospider入群)
 ![](im.jpg)
