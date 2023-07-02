@@ -12,12 +12,17 @@ import (
 	"strconv"
 	"strings"
 
+	_ "unsafe"
+
 	"gitee.com/baixudong/gospider/tools"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/exp/slices"
 )
 
 type ClientHelloId = utls.ClientHelloID
+
+//go:linkname ShuffleExtensions github.com/refraction-networking/utls.shuffleExtensions
+func ShuffleExtensions(chs *ClientHelloSpec) error
 
 var (
 	// HelloGolang will use default "crypto/tls" handshake marshaling codepath, which WILL
