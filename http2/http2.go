@@ -4860,7 +4860,6 @@ func (sc *http2serverConn) serve() {
 			if tconn, ok := sc.conn.(interface{ Ctx() context.Context }); ok {
 				select {
 				case <-tconn.Ctx().Done():
-					log.Print("借宿")
 					return
 				default:
 				}
