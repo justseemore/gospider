@@ -32,6 +32,7 @@ type DialClient struct {
 	ja3Spec      ja3.ClientHelloSpec
 	dns          string //dns
 	resolver     *net.Resolver
+	ctx          context.Context
 }
 type msgClient struct {
 	time int64
@@ -61,7 +62,10 @@ type DialOption struct {
 	Dns                 string              //dns
 }
 
-func NewDail(option DialOption) (*DialClient, error) {
+func NewDail(ctx context.Context, option DialOption) (*DialClient, error) {
+	if ctx == nil {
+		ctx = context.TODO()
+	}
 	if option.KeepAlive == 0 {
 		option.KeepAlive = 30
 	}
@@ -79,6 +83,7 @@ func NewDail(option DialOption) (*DialClient, error) {
 	}
 	var err error
 	dialCli := &DialClient{
+		ctx: ctx,
 		dialer: &net.Dialer{
 			Timeout:   time.Second * time.Duration(option.TLSHandshakeTimeout),
 			KeepAlive: time.Second * time.Duration(option.KeepAlive),
@@ -371,7 +376,7 @@ func (obj *DialClient) AddTls(ctx context.Context, conn net.Conn, host string, d
 		if err != nil {
 			return nil, err
 		}
-		return ja3.Utls2Tls(ctx, utlsConn, host)
+		return ja3.Utls2Tls(obj.ctx, ctx, utlsConn, host)
 	}
 	var tlsConn *tls.Conn
 	if disHttp {

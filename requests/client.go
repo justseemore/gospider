@@ -70,7 +70,6 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	if preCtx == nil {
 		preCtx = context.TODO()
 	}
-
 	ctx, cnl := context.WithCancel(preCtx)
 	var option ClientOption
 	//初始化参数
@@ -95,7 +94,7 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	if option.Ja3Spec.IsSet() {
 		option.Ja3 = true
 	}
-	dialClient, err := NewDail(DialOption{
+	dialClient, err := NewDail(ctx, DialOption{
 		Ja3:                 option.Ja3,
 		Ja3Spec:             option.Ja3Spec,
 		TLSHandshakeTimeout: option.TLSHandshakeTimeout,

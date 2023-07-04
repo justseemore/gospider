@@ -180,7 +180,7 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	}
 	if option.Headers == nil {
 		if obj.headers == nil {
-			option.Headers = DefaultHeaders.Clone()
+			option.Headers = DefaultHeaders()
 		} else {
 			option.Headers = obj.headers
 		}

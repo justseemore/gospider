@@ -195,7 +195,7 @@ func NewClient(ctx context.Context, opt ClientOption) (*Client, error) {
 		})
 	}
 	mgoDialer := &mgoDialer{hostMap: opt.HostMap}
-	dialer, err := requests.NewDail(requests.DialOption{})
+	dialer, err := requests.NewDail(ctx, requests.DialOption{})
 	if err != nil {
 		return nil, err
 	}

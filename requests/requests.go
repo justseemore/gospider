@@ -38,6 +38,34 @@ type reqCtxData struct {
 	ws          bool
 }
 
+func (obj *Client) Get(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
+	return obj.Request(preCtx, http.MethodGet, href, options...)
+}
+func (obj *Client) Head(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
+	return obj.Request(preCtx, http.MethodHead, href, options...)
+}
+func (obj *Client) Post(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
+	return obj.Request(preCtx, http.MethodPost, href, options...)
+}
+func (obj *Client) Put(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
+	return obj.Request(preCtx, http.MethodPut, href, options...)
+}
+func (obj *Client) Patch(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
+	return obj.Request(preCtx, http.MethodPatch, href, options...)
+}
+func (obj *Client) Delete(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
+	return obj.Request(preCtx, http.MethodDelete, href, options...)
+}
+func (obj *Client) Connect(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
+	return obj.Request(preCtx, http.MethodConnect, href, options...)
+}
+func (obj *Client) Options(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
+	return obj.Request(preCtx, http.MethodOptions, href, options...)
+}
+func (obj *Client) Trace(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
+	return obj.Request(preCtx, http.MethodTrace, href, options...)
+}
+
 // 发送请求
 func (obj *Client) Request(preCtx context.Context, method string, href string, options ...RequestOption) (resp *Response, err error) {
 	if obj == nil {
@@ -114,22 +142,6 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 		return
 	}
 	return resp, errors.New("max try num")
-}
-
-// 发送请求
-func Request(preCtx context.Context, method string, href string, option *ClientOption, options ...RequestOption) (*Response, error) {
-	var client *Client
-	var err error
-	if option != nil {
-		client, err = NewClient(preCtx, *option)
-	} else {
-		client, err = NewClient(preCtx)
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-	return client.Request(preCtx, method, href, options...)
 }
 func verifyProxy(proxyUrl string) (*url.URL, error) {
 	proxy, err := url.Parse(proxyUrl)

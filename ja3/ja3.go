@@ -221,7 +221,7 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 	return utlsConn, err
 }
 
-func Utls2Tls(ctx context.Context, utlsConn *utls.UConn, host string) (*tls.Conn, error) {
+func Utls2Tls(preCtx, ctx context.Context, utlsConn *utls.UConn, host string) (*tls.Conn, error) {
 	//获取cert
 	var err error
 	certs := utlsConn.ConnectionState().PeerCertificates
@@ -234,7 +234,7 @@ func Utls2Tls(ctx context.Context, utlsConn *utls.UConn, host string) (*tls.Conn
 	if err != nil {
 		return nil, err
 	}
-	localConn, remoteConn := net.Pipe()
+	localConn, remoteConn := Pipe(preCtx)
 	//正常路径发送方
 	tlsConn := tls.Client(localConn, &tls.Config{
 		InsecureSkipVerify: true,
