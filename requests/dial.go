@@ -147,7 +147,11 @@ func (obj *DialClient) SetProxy(proxy string) error {
 	if err != nil {
 		return err
 	}
-	*obj.proxy = *tmpProxy
+	if obj.proxy == nil {
+		obj.proxy = tmpProxy
+	} else {
+		*obj.proxy = *tmpProxy
+	}
 	return nil
 }
 func (obj *DialClient) SetGetProxy(getProxy func(ctx context.Context, url *url.URL) (string, error)) {

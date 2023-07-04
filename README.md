@@ -32,7 +32,7 @@ https://github.com/baixudong007/gospider
 |库名|推荐原因|
 -|-
 [curl_cffi](https://github.com/yifeikong/curl_cffi)|python中修改ja3指纹最好的一个
-[操控浏览器的库](https://github.com/chromedp/chromedp)|golang中操控浏览器最好的一个
+[chromedp](https://github.com/chromedp/chromedp)|golang中操控浏览器最好的一个
 
 
 

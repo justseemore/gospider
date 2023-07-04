@@ -115,6 +115,22 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	}
 	return resp, errors.New("max try num")
 }
+
+// 发送请求
+func Request(preCtx context.Context, method string, href string, option *ClientOption, options ...RequestOption) (*Response, error) {
+	var client *Client
+	var err error
+	if option != nil {
+		client, err = NewClient(preCtx, *option)
+	} else {
+		client, err = NewClient(preCtx)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+	return client.Request(preCtx, method, href, options...)
+}
 func verifyProxy(proxyUrl string) (*url.URL, error) {
 	proxy, err := url.Parse(proxyUrl)
 	if err != nil {
