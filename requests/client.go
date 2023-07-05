@@ -135,6 +135,9 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 		Proxy: func(r *http.Request) (*url.URL, error) {
 			ctxData := r.Context().Value(keyPrincipalID).(*reqCtxData)
 			ctxData.url, ctxData.host = r.URL, r.Host
+			if ctxData.host == "" {
+				ctxData.host = ctxData.url.Host
+			}
 			if referer, err := url.Parse(r.Header.Get("Referer")); err == nil && referer.Host == ctxData.rawMd5 {
 				referer.Host = ctxData.rawHost
 				r.Header.Set("Referer", referer.String())

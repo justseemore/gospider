@@ -234,7 +234,8 @@ func Utls2Tls(preCtx, ctx context.Context, utlsConn *utls.UConn, host string) (*
 	if err != nil {
 		return nil, err
 	}
-	localConn, remoteConn := Pipe(preCtx)
+	localConn, remoteConn := net.Pipe()
+	// localConn, remoteConn := Pipe(preCtx)
 	//正常路径发送方
 	tlsConn := tls.Client(localConn, &tls.Config{
 		InsecureSkipVerify: true,
