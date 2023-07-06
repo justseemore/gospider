@@ -226,8 +226,9 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	log.Print(response.Json().Get("ja3").String())
-	log.Print(response.Json().Get("ja3").String() == ja3Str)
+	jsonData,_:=response.Json()
+	log.Print(jsonData.Get("ja3").String())
+	log.Print(jsonData.Get("ja3").String() == ja3Str)
 }
 ```
 ## 根据id 生成指纹
@@ -245,7 +246,8 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	log.Print(response.Json().Get("ja3").String())
+	jsonData,_:=response.Json()
+	log.Print(jsonData.Get("ja3").String())
 }
 ```
 ## ja3 开关
@@ -259,7 +261,8 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	log.Print(response.Json().Get("ja3").String())
+	jsonData,_:=response.Json()
+	log.Print(jsonData.Get("ja3").String())
 }
 ```
 ## h2 指纹开关
@@ -356,7 +359,7 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	jsonData := resp.Json()
+	jsonData,_ := resp.Json()
 	lls := jsonData.Get("data").Array()
 	for _, ll := range lls {
 		log.Print(ll.Get("title"))
