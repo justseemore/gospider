@@ -2,8 +2,10 @@ package ja3
 
 import (
 	"context"
-	"errors"
+	"io"
 	"net"
+	"os"
+	"sync"
 	"time"
 )
 
@@ -12,9 +14,9 @@ type Conn struct {
 	writer  chan<- []byte
 	readerI <-chan int
 	writerI chan<- int
-
-	ctx context.Context
-	cnl context.CancelFunc
+	lock    sync.Mutex
+	ctx     context.Context
+	cnl     context.CancelFunc
 
 	readTimer   time.Timer
 	writerTimer time.Timer
@@ -27,7 +29,6 @@ func (obj Addr) Network() string {
 func (obj Addr) String() string {
 	return "ja3Pip"
 }
-
 func (obj *Conn) Read(b []byte) (n int, err error) {
 	defer func() {
 		if err != nil {
@@ -36,17 +37,18 @@ func (obj *Conn) Read(b []byte) (n int, err error) {
 	}()
 	select {
 	case <-obj.readTimer.C:
-		return 0, errors.New("ja3Pip读取超时")
+		return n, os.ErrDeadlineExceeded
 	case <-obj.ctx.Done():
-		return 0, errors.New("ja3Pip closed")
-	case obj.writerI <- len(b):
+		return n, io.EOF
+	case con := <-obj.reader:
+		n = copy(b, con)
 		select {
 		case <-obj.readTimer.C:
-			return 0, errors.New("ja3Pip读取超时")
+			return n, os.ErrDeadlineExceeded
 		case <-obj.ctx.Done():
-			return 0, errors.New("ja3Pip closed")
-		case con := <-obj.reader:
-			return copy(b, con), nil
+			return n, io.EOF
+		case obj.writerI <- n:
+			return
 		}
 	}
 }
@@ -56,37 +58,27 @@ func (obj *Conn) Write(b []byte) (n int, err error) {
 			obj.Close()
 		}
 	}()
-	for {
+	obj.lock.Lock()
+	defer obj.lock.Unlock()
+	for once := true; once || len(b) > 0; once = false {
 		select {
 		case <-obj.writerTimer.C:
-			return 0, errors.New("ja3Pip写入超时")
+			return n, os.ErrDeadlineExceeded
 		case <-obj.ctx.Done():
-			return 0, errors.New("ja3Pip closed")
-		case i := <-obj.readerI:
-			if len(b) <= i {
-				select {
-				case <-obj.writerTimer.C:
-					return n, errors.New("ja3Pip写入超时")
-				case <-obj.ctx.Done():
-					return 0, errors.New("ja3Pip closed")
-				case obj.writer <- b:
-					n += len(b)
-					return
-				}
-			} else {
-				wb := b[:i]
+			return n, io.EOF
+		case obj.writer <- b:
+			select {
+			case <-obj.writerTimer.C:
+				return n, os.ErrDeadlineExceeded
+			case <-obj.ctx.Done():
+				return n, io.EOF
+			case i := <-obj.readerI:
 				b = b[i:]
-				select {
-				case <-obj.writerTimer.C:
-					return n, errors.New("ja3Pip写入超时")
-				case <-obj.ctx.Done():
-					return 0, errors.New("ja3Pip closed")
-				case obj.writer <- wb:
-					n += len(wb)
-				}
+				n += i
 			}
 		}
 	}
+	return
 }
 func (obj *Conn) Close() error {
 	obj.cnl()

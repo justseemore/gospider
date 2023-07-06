@@ -234,8 +234,7 @@ func Utls2Tls(preCtx, ctx context.Context, utlsConn *utls.UConn, host string) (*
 	if err != nil {
 		return nil, err
 	}
-	localConn, remoteConn := net.Pipe()
-	// localConn, remoteConn := Pipe(preCtx)
+	localConn, remoteConn := Pipe(preCtx)
 	//正常路径发送方
 	tlsConn := tls.Client(localConn, &tls.Config{
 		InsecureSkipVerify: true,
@@ -253,26 +252,25 @@ func Utls2Tls(preCtx, ctx context.Context, utlsConn *utls.UConn, host string) (*
 		NextProtos:         []string{proto},
 	})
 	go func() {
+		defer utlsConn.Close()
 		defer tlsConn.Close()
 		defer tlsClientConn.Close()
-		defer utlsConn.Close()
-		err = tlsClientConn.Handshake()
-		if err != nil {
+		if err = tlsClientConn.Handshake(); err != nil {
 			return
 		}
 		go func() {
+			defer utlsConn.Close()
 			defer tlsConn.Close()
 			defer tlsClientConn.Close()
-			defer utlsConn.Close()
 			_, err = io.Copy(utlsConn, tlsClientConn)
 		}()
 		_, err = io.Copy(tlsClientConn, utlsConn)
 	}()
-	err = tlsConn.HandshakeContext(ctx)
-	if err != nil {
-		defer tlsConn.Close()
-		defer tlsClientConn.Close()
-		defer utlsConn.Close()
+
+	if err = tlsConn.HandshakeContext(ctx); err != nil {
+		tlsClientConn.Close()
+		utlsConn.Close()
+		tlsConn.Close()
 	}
 	return tlsConn, err
 }

@@ -170,7 +170,7 @@ func (obj *Upg) UpgradeFn(authority string, c net.Conn) http.RoundTripper {
 ## 修改ClientConn 的 writeHeaders 函数 的 first==true 时候的WriteHeaders 参数增加 Priority 值
 ```go
 		if first {
-			cc.fr.WriteHeaders(HeadersFrameParam{
+			cc.fr.WriteHeaders(HeadersFrameParam{//这里是一个指纹检测点
 				StreamID:      streamID,
 				BlockFragment: chunk,
 				EndStream:     endStream,

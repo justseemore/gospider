@@ -78,14 +78,6 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	if len(options) > 0 {
 		rawOption = options[0]
 	}
-	if rawOption.Method == "" {
-		rawOption.Method = method
-	}
-	if rawOption.Url == nil {
-		if rawOption.Url, err = url.Parse(href); err != nil {
-			return
-		}
-	}
 	if rawOption.Body != nil {
 		if rawOption.Raw, err = io.ReadAll(rawOption.Body); err != nil {
 			return
@@ -106,6 +98,14 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 			return nil, preCtx.Err()
 		default:
 			option := optionBak
+			if option.Method == "" {
+				option.Method = method
+			}
+			if option.Url == nil {
+				if option.Url, err = url.Parse(href); err != nil {
+					return
+				}
+			}
 			if option.BeforCallBack != nil {
 				if err = option.BeforCallBack(preCtx, &option); err != nil {
 					if errors.Is(err, ErrFatal) {
