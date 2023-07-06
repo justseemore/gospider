@@ -15,7 +15,7 @@ func TestIp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jsonData := resp.Json()
+	jsonData, _ := resp.Json()
 	if jsonData.Get("ip").String() == "" {
 		t.Fatal("没有ip")
 	}
@@ -23,7 +23,7 @@ func TestIp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jsonData = resp.Json()
+	jsonData, _ = resp.Json()
 	if jsonData.Get("ip").String() == "" {
 		t.Fatal("没有ip")
 	}
@@ -38,7 +38,7 @@ func TestJa3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jsonData := resp.Json()
+	jsonData, _ := resp.Json()
 	chromeJa3Str := jsonData.Get("ja3").String()
 	if chromeJa3Str == "" {
 		t.Fatal("没有ja3")

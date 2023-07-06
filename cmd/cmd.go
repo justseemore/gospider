@@ -266,7 +266,7 @@ func (obj *JyClient) run(dataMap map[string]any) (gjson.Result, error) {
 	}
 	select {
 	case data := <-obj.pip:
-		return tools.Any2json(data), nil
+		return tools.Any2json(data)
 	case <-obj.client.Done():
 		if obj.client.err != nil {
 			return gjson.Result{}, obj.client.err

@@ -18,7 +18,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -66,7 +65,7 @@ var CrtFile []byte
 
 //go:embed gospider.key
 var KeyFile []byte
-var JsonConfig = jsoniter.Config{
+var jsonConfig = jsoniter.Config{
 	EscapeHTML:    true,
 	CaseSensitive: true,
 }.Froze()
@@ -151,39 +150,37 @@ func DecodeRead(txt io.Reader, code string) io.Reader {
 }
 
 // 转成json
-func Any2json(data any, path ...string) gjson.Result {
+func Any2json(data any) (gjson.Result, error) {
 	var result gjson.Result
 	switch value := data.(type) {
 	case []byte:
-		if len(path) == 0 {
-			result = gjson.ParseBytes(value)
-		} else {
-			result = gjson.GetBytes(value, path[0])
-		}
+		result = gjson.ParseBytes(value)
 	case string:
-		if len(path) == 0 {
-			result = gjson.Parse(value)
-		} else {
-			result = gjson.Get(value, path[0])
-		}
+		result = gjson.Parse(value)
 	default:
-		marstr, _ := JsonConfig.MarshalToString(value)
-		if len(path) == 0 {
-			result = gjson.Parse(marstr)
-		} else {
-			result = gjson.Get(marstr, path[0])
+		marstr, err := JsonMarshal(value)
+		if err != nil {
+			return result, err
 		}
+		result = gjson.ParseBytes(marstr)
 	}
-	return result
+	return result, nil
+}
+
+func JsonMarshal(data any) ([]byte, error) {
+	return jsonConfig.Marshal(data)
+}
+func JsonUnMarshal(data []byte, v any) error {
+	return jsonConfig.Unmarshal(data, v)
 }
 
 // 转成struct
 func Any2struct(data any, stru any) error {
-	con, err := json.Marshal(data)
+	con, err := JsonMarshal(data)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(con, stru)
+	return JsonUnMarshal(con, stru)
 }
 
 // 合并两个结构体 *ci c2

@@ -61,7 +61,6 @@ type FindsData struct {
 type FindData struct {
 	object *mongo.SingleResult
 	raw    map[string]any
-	json   gjson.Result
 }
 type UpateResult struct {
 	MatchedCount  int64 // 匹配的个数
@@ -87,25 +86,31 @@ func (obj *FindData) Data() map[string]any {
 
 // 使用json.Unmarshal 解码
 func (obj *FindData) Decode(val any) error {
-	return json.Unmarshal(obj.Bytes(), val)
+	con, err := obj.Bytes()
+	if err != nil {
+		return err
+	}
+	return tools.JsonUnMarshal(con, val)
 }
 
 // 返回gjson
-func (obj *FindData) Json() gjson.Result {
-	if !obj.json.IsObject() {
-		obj.json = tools.Any2json(obj.Data())
-	}
-	return obj.json
+func (obj *FindData) Json() (gjson.Result, error) {
+	return tools.Any2json(obj.Data())
 }
 
 // 返回json
-func (obj *FindData) String() string {
-	return obj.Json().Raw
+func (obj *FindData) String() (string, error) {
+	jsonData, err := obj.Json()
+	return jsonData.Raw, err
 }
 
 // 返回字节
-func (obj *FindData) Bytes() []byte {
-	return tools.StringToBytes(obj.String())
+func (obj *FindData) Bytes() ([]byte, error) {
+	con, err := obj.String()
+	if err != nil {
+		return nil, err
+	}
+	return tools.StringToBytes(con), nil
 }
 
 // 重试
@@ -140,7 +145,7 @@ func (obj *FindsData) Len() int {
 }
 
 // 返回gjson
-func (obj *FindsData) Json() gjson.Result {
+func (obj *FindsData) Json() (gjson.Result, error) {
 	return tools.Any2json(obj.Map())
 }
 
@@ -157,7 +162,11 @@ func (obj *FindsData) Map() map[string]any {
 
 // 使用json.Unmarshal 解码
 func (obj *FindsData) Decode(val any) error {
-	return json.Unmarshal([]byte(obj.Json().Raw), val)
+	jsonData, err := obj.Json()
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal([]byte(jsonData.Raw), val)
 }
 
 type mgoDialer struct {

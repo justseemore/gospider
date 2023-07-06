@@ -46,7 +46,11 @@ func (obj *RequestOption) newHeaders() error {
 		obj.Headers = head
 		return nil
 	default:
-		obj.Headers = tools.Any2json(headers)
+		jsonData, err := tools.Any2json(headers)
+		if err != nil {
+			return err
+		}
+		obj.Headers = jsonData
 		return obj.newHeaders()
 	}
 }

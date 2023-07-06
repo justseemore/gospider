@@ -80,11 +80,17 @@ type SearchResult struct {
 
 func (obj *Client) Count(ctx context.Context, index string, data any) (int64, error) {
 	url := obj.baseUrl + fmt.Sprintf("/%s/_count", index)
-	rs, err := obj.reqCli.Request(ctx, "post", url, requests.RequestOption{Json: tools.Any2json(data).Value()})
+	jsonData, err := tools.Any2json(data)
 	if err != nil {
 		return 0, err
 	}
-	jsonData := rs.Json()
+	rs, err := obj.reqCli.Request(ctx, "post", url, requests.RequestOption{Json: jsonData.Value()})
+	if err != nil {
+		return 0, err
+	}
+	if jsonData, err = rs.Json(); err != nil {
+		return 0, err
+	}
 	if jsonData.Get("error").Exists() {
 		return 0, fmt.Errorf("%s >>> %s",
 			jsonData.Get("error.type").String(),
@@ -99,11 +105,18 @@ func (obj *Client) Count(ctx context.Context, index string, data any) (int64, er
 func (obj *Client) Search(ctx context.Context, index string, data any) (SearchResult, error) {
 	var searchResult SearchResult
 	url := obj.baseUrl + fmt.Sprintf("/%s/_search", index)
-	rs, err := obj.reqCli.Request(ctx, "post", url, requests.RequestOption{Json: tools.Any2json(data).Value()})
+	jsonData, err := tools.Any2json(data)
 	if err != nil {
 		return searchResult, err
 	}
-	jsonData := rs.Json()
+	rs, err := obj.reqCli.Request(ctx, "post", url, requests.RequestOption{Json: jsonData.Value()})
+	if err != nil {
+		return searchResult, err
+	}
+	jsonData, err = rs.Json()
+	if err != nil {
+		return searchResult, err
+	}
 	if jsonData.Get("error").Exists() {
 		return searchResult, fmt.Errorf("%s >>> %s",
 			jsonData.Get("error.type").String(),
@@ -123,7 +136,10 @@ func (obj *Client) Exists(ctx context.Context, index, id string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	jsonData := rs.Json()
+	jsonData, err := rs.Json()
+	if err != nil {
+		return false, err
+	}
 	if jsonData.Get("error").Exists() {
 		return false, fmt.Errorf("%s >>> %s",
 			jsonData.Get("error.type").String(),
@@ -162,7 +178,10 @@ func (obj *Client) delete(ctx context.Context, deleteData DeleteData) error {
 	if err != nil {
 		return err
 	}
-	jsonData := rs.Json()
+	jsonData, err := rs.Json()
+	if err != nil {
+		return err
+	}
 	if jsonData.Get("error").Exists() {
 		return fmt.Errorf("%s >>> %s",
 			jsonData.Get("error.type").String(),
@@ -187,7 +206,10 @@ func (obj *Client) deletes(ctx context.Context, deleteDatas []DeleteData) error 
 	if err != nil {
 		return err
 	}
-	jsonData := rs.Json()
+	jsonData, err := rs.Json()
+	if err != nil {
+		return err
+	}
 	if jsonData.Get("error").Exists() {
 		return fmt.Errorf("%s >>> %s",
 			jsonData.Get("error.type").String(),
@@ -196,8 +218,12 @@ func (obj *Client) deletes(ctx context.Context, deleteDatas []DeleteData) error 
 	return nil
 }
 func (obj *Client) update(ctx context.Context, updateData UpdateData, upsert bool) error {
+	jsonData, err := tools.Any2json(updateData.Data)
+	if err != nil {
+		return err
+	}
 	body := map[string]any{
-		"doc": tools.Any2json(updateData.Data).Value(),
+		"doc": jsonData.Value(),
 	}
 	if upsert {
 		body["doc_as_upsert"] = true
@@ -207,7 +233,9 @@ func (obj *Client) update(ctx context.Context, updateData UpdateData, upsert boo
 	if err != nil {
 		return err
 	}
-	jsonData := rs.Json()
+	if jsonData, err = rs.Json(); err != nil {
+		return err
+	}
 	if jsonData.Get("error").Exists() {
 		return fmt.Errorf("%s >>> %s",
 			jsonData.Get("error.type").String(),
@@ -222,8 +250,12 @@ func (obj *Client) updates(ctx context.Context, updateDatas []UpdateData, upsert
 		if err != nil {
 			return err
 		}
+		jsonData, err := tools.Any2json(updateData.Data)
+		if err != nil {
+			return err
+		}
 		tempBody := map[string]any{
-			"doc": tools.Any2json(updateData.Data).Value(),
+			"doc": jsonData.Value(),
 		}
 		if upsert {
 			tempBody["doc_as_upsert"] = true
@@ -250,7 +282,10 @@ func (obj *Client) updates(ctx context.Context, updateDatas []UpdateData, upsert
 	if err != nil {
 		return err
 	}
-	jsonData := rs.Json()
+	jsonData, err := rs.Json()
+	if err != nil {
+		return err
+	}
 	if jsonData.Get("error").Exists() {
 		return fmt.Errorf("%s >>> %s",
 			jsonData.Get("error.type").String(),

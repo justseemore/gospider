@@ -93,9 +93,9 @@ func any2Cookies(val any) (Cookies, error) {
 		}
 		return cookies, nil
 	default:
-		jsonData := tools.Any2json(cooks)
-		if !jsonData.IsObject() {
-			return nil, errors.New("cookies不支持的类型")
+		jsonData, err := tools.Any2json(cooks)
+		if err != nil {
+			return nil, err
 		}
 		cookies := Cookies{}
 		for kk, vvs := range jsonData.Map() {

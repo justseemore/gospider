@@ -69,6 +69,10 @@ func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reade
 			return nil, errors.New("未知的content-type：" + valType)
 		}
 	default:
-		return newBody(tools.Any2json(value), valType, dataMap)
+		result, err := tools.Any2json(value)
+		if err != nil {
+			return nil, err
+		}
+		return newBody(result, valType, dataMap)
 	}
 }

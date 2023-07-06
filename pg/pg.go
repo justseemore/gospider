@@ -103,7 +103,7 @@ func (obj *Rows) Json() (gjson.Result, error) {
 	for k, v := range datas {
 		maprs[obj.names[k]] = v
 	}
-	return tools.Any2json(maprs), nil
+	return tools.Any2json(maprs)
 }
 
 // 关闭游标
@@ -119,7 +119,10 @@ func (obj *Client) Insert(ctx context.Context, table string, datas ...any) error
 	for _, data := range datas {
 		names := []string{}
 		values := []any{}
-		jsonData := tools.Any2json(data)
+		jsonData, err := tools.Any2json(data)
+		if err != nil {
+			return err
+		}
 		for k, v := range jsonData.Map() {
 			names = append(names, k)
 			values = append(values, v.Value())

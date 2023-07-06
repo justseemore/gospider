@@ -206,7 +206,7 @@ func (obj *Response) Headers() http.Header {
 func (obj *Response) Decode(encoding string) {
 	if obj.encoding != encoding {
 		obj.encoding = encoding
-		obj.Content(tools.Decode(obj.Content(), encoding))
+		obj.SetContent(tools.Decode(obj.Content(), encoding))
 	}
 }
 
@@ -219,25 +219,27 @@ func (obj *Response) Map() map[string]any {
 	return data
 }
 
-// 尝试将请求解析成json
-func (obj *Response) Json(path ...string) gjson.Result {
-	return tools.Any2json(obj.Content(), path...)
+// 尝试将请求解析成gjson, 如果传值,将会同时解析到val中
+func (obj *Response) Json(vals ...any) (gjson.Result, error) {
+	if len(vals) > 0 {
+		err := tools.JsonUnMarshal(obj.Content(), vals[0])
+		if err != nil {
+			return gjson.Result{}, err
+		}
+	}
+	return tools.Any2json(obj.Content())
 }
 
-// 返回内容的字符串形式，也可设置内容
-func (obj *Response) Text(val ...string) string {
-	if len(val) > 0 {
-		return tools.BytesToString(obj.Content(tools.StringToBytes(val[0])))
-	}
+// 返回内容的字符串形式
+func (obj *Response) Text() string {
 	return tools.BytesToString(obj.Content())
 }
 
 // 返回内容的二进制，也可设置内容
-func (obj *Response) Content(val ...[]byte) []byte {
-	if len(val) > 0 {
-		obj.content = val[0]
-		return obj.content
-	}
+func (obj *Response) SetContent(val []byte) {
+	obj.content = val
+}
+func (obj *Response) Content() []byte {
 	if obj.webSocket != nil {
 		return obj.content
 	}

@@ -358,12 +358,11 @@ func (obj *Conn) Send(ctx context.Context, typ MessageType, p any) error {
 	case string:
 		return obj.conn.Write(ctx, typ, tools.StringToBytes(val))
 	default:
-		jsonData := tools.Any2json(p)
-		if jsonData.IsObject() {
-			return obj.conn.Write(ctx, typ, tools.StringToBytes(jsonData.Raw))
-		} else {
-			return errors.New("类型错误")
+		jsonData, err := tools.Any2json(p)
+		if err != nil {
+			return err
 		}
+		return obj.conn.Write(ctx, typ, tools.StringToBytes(jsonData.Raw))
 	}
 }
 func (obj *Conn) Close(reasons ...string) error {

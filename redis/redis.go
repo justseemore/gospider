@@ -177,7 +177,10 @@ func (r *Client) GetProxyDatas(key string) ([]Proxy, error) {
 	}
 	proxys := []Proxy{}
 	for _, jsonStr := range vals {
-		val := tools.Any2json(jsonStr)
+		val, err := tools.Any2json(jsonStr)
+		if err != nil {
+			return nil, err
+		}
 		var proxy Proxy
 		proxy.Ip = val.Get("ip").String()
 		if proxy.Ip = val.Get("ip").String(); proxy.Ip == "" {
