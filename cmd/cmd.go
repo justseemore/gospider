@@ -20,11 +20,11 @@ import (
 )
 
 type ClientOption struct {
-	Name          string   //程序执行的名字
-	Args          []string //程序的执行参数
-	Dir           string   //程序执行的位置
-	TimeOut       int      //程序超时时间
-	CloseCallBack func()   //关闭时执行的函数
+	Name          string        //程序执行的名字
+	Args          []string      //程序的执行参数
+	Dir           string        //程序执行的位置
+	TimeOut       time.Duration //程序超时时间
+	CloseCallBack func()        //关闭时执行的函数
 }
 type Client struct {
 	err           error
@@ -43,7 +43,7 @@ func NewClient(pre_ctx context.Context, option ClientOption) (*Client, error) {
 		pre_ctx = context.TODO()
 	}
 	if option.TimeOut != 0 {
-		ctx, cnl = context.WithTimeout(pre_ctx, time.Duration(option.TimeOut)*time.Second)
+		ctx, cnl = context.WithTimeout(pre_ctx, option.TimeOut)
 	} else {
 		ctx, cnl = context.WithCancel(pre_ctx)
 	}

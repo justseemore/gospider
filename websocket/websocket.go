@@ -249,7 +249,7 @@ func NewClientConn(resp *http.Response, options ...Option) (*Conn, error) {
 
 	rwc, ok := resp.Body.(io.ReadWriteCloser)
 	if !ok {
-		return nil, fmt.Errorf("response body is not a io.ReadWriteCloser")
+		return nil, fmt.Errorf("websocket new client 错误：response body is not a io.ReadWriteCloser")
 	}
 	return NewConn(rwc, true, option), nil
 }

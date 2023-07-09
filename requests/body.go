@@ -3,6 +3,7 @@ package requests
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/url"
 
 	"gitee.com/baixudong/gospider/tools"
@@ -16,17 +17,27 @@ type File struct {
 	Content []byte //文件的内容
 	Type    string //文件类型
 }
+type bodyType = int
 
-func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reader, error) {
+const (
+	jsonType = iota
+	textType
+	rawType
+	dataType
+	formType
+	paramsType
+)
+
+func newBody(val any, valType bodyType, dataMap map[string][]string) (*bytes.Reader, error) {
 	switch value := val.(type) {
 	case gjson.Result:
 		if !value.IsObject() {
 			return nil, errors.New("body-type错误")
 		}
 		switch valType {
-		case "json", "text", "raw":
+		case jsonType, textType, rawType:
 			return bytes.NewReader(tools.StringToBytes(value.Raw)), nil
-		case "data":
+		case dataType:
 			tempVal := url.Values{}
 			for kk, vv := range value.Map() {
 				if vv.IsArray() {
@@ -38,7 +49,7 @@ func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reade
 				}
 			}
 			return bytes.NewReader(tools.StringToBytes(tempVal.Encode())), nil
-		case "form", "params":
+		case formType, paramsType:
 			for kk, vv := range value.Map() {
 				kkvv := []string{}
 				if vv.IsArray() {
@@ -52,21 +63,21 @@ func newBody(val any, valType string, dataMap map[string][]string) (*bytes.Reade
 			}
 			return nil, nil
 		default:
-			return nil, errors.New("未知的content-type：" + valType)
+			return nil, fmt.Errorf("未知的content-type：%d", valType)
 		}
 	case string:
 		switch valType {
-		case "json", "text", "data", "raw":
+		case jsonType, textType, dataType, rawType:
 			return bytes.NewReader(tools.StringToBytes(value)), nil
 		default:
-			return nil, errors.New("未知的content-type：" + valType)
+			return nil, fmt.Errorf("未知的content-type：%d", valType)
 		}
 	case []byte:
 		switch valType {
-		case "json", "text", "data", "raw":
+		case jsonType, textType, dataType, rawType:
 			return bytes.NewReader(value), nil
 		default:
-			return nil, errors.New("未知的content-type：" + valType)
+			return nil, fmt.Errorf("未知的content-type：%d", valType)
 		}
 	default:
 		result, err := tools.Any2json(value)

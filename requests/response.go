@@ -219,13 +219,10 @@ func (obj *Response) Map() map[string]any {
 	return data
 }
 
-// 尝试将请求解析成gjson, 如果传值,将会同时解析到val中
+// 尝试将请求解析成gjson, 如果传值将会解析到val中返回的gjson为空struct
 func (obj *Response) Json(vals ...any) (gjson.Result, error) {
 	if len(vals) > 0 {
-		err := tools.JsonUnMarshal(obj.Content(), vals[0])
-		if err != nil {
-			return gjson.Result{}, err
-		}
+		return gjson.Result{}, tools.JsonUnMarshal(obj.Content(), vals[0])
 	}
 	return tools.Any2json(obj.Content())
 }
@@ -335,11 +332,11 @@ func (obj *Response) read() error { //读取body,对body 解压，解码操作
 		err = tools.CopyWitchContext(obj.response.Request.Context(), bBody, obj.response.Body)
 	}
 	if err != nil {
-		return errors.New("io.Copy error: " + err.Error())
+		return errors.New("response 读取内容 错误: " + err.Error())
 	}
 	if !obj.disUnzip {
 		if bBody, err = tools.CompressionDecode(obj.ctx, bBody, obj.ContentEncoding()); err != nil {
-			return errors.New("gzip NewReader error: " + err.Error())
+			return errors.New("response 解压缩错误: " + err.Error())
 		}
 	}
 	if !obj.disDecode && obj.defaultDecode() {

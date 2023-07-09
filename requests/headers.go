@@ -20,7 +20,7 @@ func DefaultHeaders() http.Header {
 		"User-Agent":      []string{UserAgent},
 	}
 }
-func (obj *RequestOption) newHeaders() error {
+func (obj *RequestOption) initHeaders() error {
 	if obj.Headers == nil {
 		obj.Headers = DefaultHeaders()
 		return nil
@@ -51,6 +51,6 @@ func (obj *RequestOption) newHeaders() error {
 			return err
 		}
 		obj.Headers = jsonData
-		return obj.newHeaders()
+		return obj.initHeaders()
 	}
 }

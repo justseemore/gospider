@@ -35,7 +35,7 @@ type Table struct {
 type FindOption struct {
 	BatchSize       int32          // 服务器返回的每个批次中包含的最大文件数。
 	Limit           int64          //要返回的最大文档数
-	Timeout         int            //超时时间
+	Timeout         time.Duration  //超时时间
 	NoCursorTimeout bool           //操作所创建的游标在一段时间不活动后不会超时
 	Show            any            //描述哪些字段将被包含在操作返回的文件中的文件
 	Skip            int64          //在将文档添加到结果中之前要跳过的文档数量
@@ -264,7 +264,7 @@ func (obj *Table) Find(pre_ctx context.Context, filter any, opts ...FindOption) 
 		NoCursorTimeout: &opt.NoCursorTimeout,
 	}
 	if opt.Timeout != 0 {
-		tot := time.Duration(opt.Timeout) * time.Second
+		tot := opt.Timeout
 		mongo_op.MaxTime = &tot
 	}
 	rs := obj.object.FindOne(pre_ctx, filter, &mongo_op)
@@ -320,7 +320,7 @@ func (obj *Table) Finds(pre_ctx context.Context, filter any, opts ...FindOption)
 		mongo_op.BatchSize = &opt.BatchSize
 	}
 	if opt.Timeout != 0 {
-		tot := time.Duration(opt.Timeout) * time.Second
+		tot := opt.Timeout
 		mongo_op.MaxTime = &tot
 	}
 	rs, err := obj.object.Find(pre_ctx, filter, &mongo_op)
@@ -336,14 +336,14 @@ func (obj *Table) Count(pre_ctx context.Context, filter any, opts ...FindOption)
 	if filter == nil {
 		mongo_op := options.EstimatedDocumentCountOptions{}
 		if opt.Timeout != 0 {
-			tot := time.Duration(opt.Timeout) * time.Second
+			tot := opt.Timeout
 			mongo_op.MaxTime = &tot
 		}
 		return obj.object.EstimatedDocumentCount(pre_ctx, &mongo_op)
 	}
 	mongo_op := options.CountOptions{}
 	if opt.Timeout != 0 {
-		tot := time.Duration(opt.Timeout) * time.Second
+		tot := opt.Timeout
 		mongo_op.MaxTime = &tot
 	}
 	if opt.Limit != 0 {
@@ -590,7 +590,7 @@ func (obj *Client) ClearOplog(preCctx context.Context, Func func(context.Context
 		},
 	})
 	defer pool.Close()
-	afterTime := time.NewTimer(time.Second)
+	afterTime := time.NewTimer(0)
 	defer afterTime.Stop()
 	for datas.Next(pre_ctx) {
 		data := ClearOplog(datas.Map())

@@ -23,7 +23,7 @@ type ClientOption struct {
 	DbName      string            //数据库
 	Protocol    string            //协议
 	MaxConns    int               //最大连接数
-	MaxLifeTime int               //最大活跃数
+	MaxLifeTime time.Duration     //最大活跃数
 	Params      map[string]string //附加参数
 }
 type Client struct {
@@ -131,8 +131,8 @@ func NewClient(ctx context.Context, options ...ClientOption) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.SetConnMaxIdleTime(time.Duration(option.MaxLifeTime) * time.Second)
-	db.SetConnMaxLifetime(time.Duration(option.MaxLifeTime) * time.Second)
+	db.SetConnMaxIdleTime(option.MaxLifeTime)
+	db.SetConnMaxLifetime(option.MaxLifeTime)
 	db.SetMaxOpenConns(option.MaxConns)
 	db.SetMaxIdleConns(option.MaxConns)
 	return &Client{db: db}, nil

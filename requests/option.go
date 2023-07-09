@@ -9,59 +9,61 @@ import (
 	"net/textproto"
 	"net/url"
 	"strings"
+	"time"
 
 	"gitee.com/baixudong/gospider/websocket"
 )
 
 // 请求参数选项
 type RequestOption struct {
-	Method        string   //method
-	Url           *url.URL //请求的url
-	Host          string   //网站的host
-	Proxy         string   //代理,支持http,https,socks5协议代理,例如：http://127.0.0.1:7005
-	Timeout       int64    //请求超时时间
-	Headers       any      //请求头,支持：json,map，header
-	Cookies       any      // cookies,支持json,map,str，http.Header
-	Files         []File   //发送multipart/form-data,文件上传
-	Params        any      //url 中的参数，用以拼接url,支持json,map
-	Form          any      //发送multipart/form-data,适用于文件上传,支持json,map
-	Data          any      //发送application/x-www-form-urlencoded,适用于key,val,支持string,[]bytes,json,map
-	body          io.Reader
-	Body          io.Reader
-	Json          any                                         //发送application/json,支持：string,[]bytes,json,map
-	Text          any                                         //发送text/xml,支持string,[]bytes,json,map
-	ContentType   string                                      //headers 中Content-Type 的值
-	Raw           any                                         //不设置context-type,支持string,[]bytes,json,map
-	TempData      map[string]any                              //临时变量，用于回调存储或自由度更高的用法
-	DisCookie     bool                                        //关闭cookies管理,这个请求不用cookies池
-	DisDecode     bool                                        //关闭自动解码
-	Bar           bool                                        //是否开启bar
-	DisProxy      bool                                        //是否关闭代理,强制关闭代理
-	TryNum        int64                                       //重试次数
-	BeforCallBack func(context.Context, *RequestOption) error //请求之前回调
-	AfterCallBack func(context.Context, *Response) error      //请求之后回调
-	Jar           *Jar                                        //自定义临时cookies 管理
+	RequestDebugCallBack  func(*RequestDebug) error  //请求回调
+	ResponseDebugCallBack func(*ResponseDebug) error //请求回调
+	Method                string                     //method
+	Url                   *url.URL                   //请求的url
+	Host                  string                     //网站的host
+	Proxy                 string                     //代理,支持http,https,socks5协议代理,例如：http://127.0.0.1:7005
+	Timeout               time.Duration              //请求超时时间
+	Headers               any                        //请求头,支持：json,map，header
+	Cookies               any                        // cookies,支持json,map,str，http.Header
+	Files                 []File                     //发送multipart/form-data,文件上传
+	Params                any                        //url 中的参数，用以拼接url,支持json,map
+	Form                  any                        //发送multipart/form-data,适用于文件上传,支持json,map
+	Data                  any                        //发送application/x-www-form-urlencoded,适用于key,val,支持string,[]bytes,json,map
+	body                  io.Reader
+	Body                  io.Reader
+	Json                  any                                         //发送application/json,支持：string,[]bytes,json,map
+	Text                  any                                         //发送text/xml,支持string,[]bytes,json,map
+	ContentType           string                                      //headers 中Content-Type 的值
+	Raw                   any                                         //不设置context-type,支持string,[]bytes,json,map
+	TempData              map[string]any                              //临时变量，用于回调存储或自由度更高的用法
+	DisCookie             bool                                        //关闭cookies管理,这个请求不用cookies池
+	DisDecode             bool                                        //关闭自动解码
+	Bar                   bool                                        //是否开启bar
+	DisProxy              bool                                        //是否关闭代理,强制关闭代理
+	TryNum                int64                                       //重试次数
+	OptionCallBack        func(context.Context, *RequestOption) error //请求之前回调,返回error,中断重试请求,返回nil继续
+	ResponseCallBack      func(context.Context, *Response) error      //请求之后回调,返回nil，直接返回,返回err的话，如果有errCallBack 走errCallBack，没有继续try
+	ErrCallBack           func(context.Context, error) error          //错误回调,返回error,中断重试请求,返回nil继续
+	Jar                   *Jar                                        //自定义临时cookies 管理
 
-	ErrCallBack func(context.Context, error) bool //返回true 中断重试请求
-	RedirectNum int                               //重定向次数,小于零 关闭重定向
-	DisRead     bool                              //关闭默认读取请求体,不会主动读取body里面的内容，需用你自己读取
-	DisUnZip    bool                              //关闭自动解压
-	WsOption    websocket.Option                  //websocket option,使用websocket 请求的option
+	RedirectNum int              //重定向次数,小于零 关闭重定向
+	DisRead     bool             //关闭默认读取请求体,不会主动读取body里面的内容，需用你自己读取
+	DisUnZip    bool             //关闭自动解压
+	WsOption    websocket.Option //websocket option,使用websocket 请求的option
 
 	converUrl string
 }
 
-func (obj *RequestOption) optionInit() error {
-	obj.converUrl = obj.Url.String()
-	var err error
-	//构造body
-	if obj.Raw != nil {
-		if obj.body, err = newBody(obj.Raw, "raw", nil); err != nil {
+func (obj *RequestOption) initBody() (err error) {
+	if obj.Body != nil {
+		obj.body = obj.Body
+	} else if obj.Raw != nil {
+		if obj.body, err = newBody(obj.Raw, rawType, nil); err != nil {
 			return err
 		}
 	} else if obj.Form != nil {
 		dataMap := map[string][]string{}
-		if obj.body, err = newBody(obj.Form, "form", dataMap); err != nil {
+		if obj.body, err = newBody(obj.Form, formType, dataMap); err != nil {
 			return err
 		}
 		tempBody := bytes.NewBuffer(nil)
@@ -121,31 +123,40 @@ func (obj *RequestOption) optionInit() error {
 		}
 		obj.body = tempBody
 	} else if obj.Data != nil {
-		if obj.body, err = newBody(obj.Data, "data", nil); err != nil {
+		if obj.body, err = newBody(obj.Data, dataType, nil); err != nil {
 			return err
 		}
 		if obj.ContentType == "" {
 			obj.ContentType = "application/x-www-form-urlencoded"
 		}
 	} else if obj.Json != nil {
-		if obj.body, err = newBody(obj.Json, "json", nil); err != nil {
+		if obj.body, err = newBody(obj.Json, jsonType, nil); err != nil {
 			return err
 		}
 		if obj.ContentType == "" {
 			obj.ContentType = "application/json"
 		}
 	} else if obj.Text != nil {
-		if obj.body, err = newBody(obj.Text, "text", nil); err != nil {
+		if obj.body, err = newBody(obj.Text, textType, nil); err != nil {
 			return err
 		}
 		if obj.ContentType == "" {
 			obj.ContentType = "text/plain"
 		}
 	}
+	return nil
+}
+func (obj *RequestOption) optionInit() error {
+	obj.converUrl = obj.Url.String()
+	var err error
+	//构造body
+	if err = obj.initBody(); err != nil {
+		return err
+	}
 	//构造params
 	if obj.Params != nil {
 		dataMap := map[string][]string{}
-		if _, err = newBody(obj.Params, "params", dataMap); err != nil {
+		if _, err = newBody(obj.Params, paramsType, dataMap); err != nil {
 			return err
 		}
 		pu := cloneUrl(obj.Url)
@@ -159,21 +170,21 @@ func (obj *RequestOption) optionInit() error {
 		obj.converUrl = pu.String()
 	}
 	//构造headers
-	if err = obj.newHeaders(); err != nil {
+	if err = obj.initHeaders(); err != nil {
 		return err
 	}
 	//构造cookies
-	return obj.newCookies()
+	return obj.initCookies()
 }
-func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error) {
+func (obj *Client) newRequestOption(option RequestOption) RequestOption {
 	if option.TryNum == 0 {
 		option.TryNum = obj.tryNum
 	}
-	if option.BeforCallBack == nil {
-		option.BeforCallBack = obj.beforCallBack
+	if option.OptionCallBack == nil {
+		option.OptionCallBack = obj.optionCallBack
 	}
-	if option.AfterCallBack == nil {
-		option.AfterCallBack = obj.afterCallBack
+	if option.ResponseCallBack == nil {
+		option.ResponseCallBack = obj.responseCallBack
 	}
 	if option.ErrCallBack == nil {
 		option.ErrCallBack = obj.errCallBack
@@ -206,21 +217,5 @@ func (obj *Client) newRequestOption(option RequestOption) (RequestOption, error)
 	if !option.DisUnZip {
 		option.DisUnZip = obj.disUnZip
 	}
-	var err error
-	if con, ok := option.Json.(io.Reader); ok {
-		if option.Json, err = io.ReadAll(con); err != nil {
-			return option, err
-		}
-	}
-	if con, ok := option.Text.(io.Reader); ok {
-		if option.Text, err = io.ReadAll(con); err != nil {
-			return option, err
-		}
-	}
-	if con, ok := option.Data.(io.Reader); ok {
-		if option.Data, err = io.ReadAll(con); err != nil {
-			return option, err
-		}
-	}
-	return option, err
+	return option
 }

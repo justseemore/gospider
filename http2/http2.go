@@ -46,9 +46,9 @@ type UpgOption struct {
 	H2Ja3Spec             ja3.H2Ja3Spec
 	DisableCompression    bool
 	DialTLSContext        func(ctx context.Context, network string, addr string, cfg *tls.Config) (net.Conn, error)
-	IdleConnTimeout       int64
-	TLSHandshakeTimeout   int64
-	ResponseHeaderTimeout int64
+	IdleConnTimeout       time.Duration
+	TLSHandshakeTimeout   time.Duration
+	ResponseHeaderTimeout time.Duration
 	Server                bool //是否为服务端
 }
 
@@ -109,7 +109,7 @@ func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 	if option.Server {
 		server := new(http2Server)
 		server.state = &http2serverInternalState{activeConns: make(map[*http2serverConn]struct{})}
-		server.IdleTimeout = time.Duration(option.IdleConnTimeout) * time.Second //检测连接是否健康的间隔时间
+		server.IdleTimeout = option.IdleConnTimeout //检测连接是否健康的间隔时间
 		return &Upg{
 			server: server,
 		}
@@ -129,9 +129,9 @@ func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 
 		TLSClientConfig:  &tls.Config{InsecureSkipVerify: true},
 		DialTLSContext:   option.DialTLSContext,
-		ReadIdleTimeout:  time.Duration(option.IdleConnTimeout) * time.Second, //检测连接是否健康的间隔时间
-		PingTimeout:      time.Second * time.Duration(option.TLSHandshakeTimeout),
-		WriteByteTimeout: time.Second * time.Duration(option.ResponseHeaderTimeout),
+		ReadIdleTimeout:  option.IdleConnTimeout, //检测连接是否健康的间隔时间
+		PingTimeout:      option.TLSHandshakeTimeout,
+		WriteByteTimeout: option.ResponseHeaderTimeout,
 	}
 	connPool.t = t2
 	if t1 != nil {

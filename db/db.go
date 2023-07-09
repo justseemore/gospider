@@ -13,18 +13,18 @@ type Client[T any] struct {
 	orderKey  *chanx.Client[dbKey]
 	mapKey    map[[16]byte]dbData[T]
 	lock      sync.RWMutex
-	timeOut   int64
+	timeOut   time.Duration
 	ctx       context.Context
 	cnl       context.CancelFunc
 	afterTime *time.Timer
 }
 type dbKey struct {
 	key [16]byte
-	ttl int64
+	ttl time.Time
 }
 type dbData[T any] struct {
 	data T
-	ttl  int64
+	ttl  time.Time
 }
 
 func NewClient[T any](ctx context.Context, cnl context.CancelFunc) *Client[T] {
@@ -49,8 +49,8 @@ func (obj *Client[T]) run() {
 		case <-obj.orderKey.Done():
 			return
 		case orderVal := <-obj.orderKey.Chan():
-			if awaitTime := obj.timeOut - (time.Now().Unix() - orderVal.ttl); awaitTime > 0 { //判断睡眠时间
-				obj.afterTime.Reset(time.Second * time.Duration(awaitTime))
+			if awaitTime := obj.timeOut - (time.Now().Sub(orderVal.ttl)); awaitTime > 0 { //判断睡眠时间
+				obj.afterTime.Reset(awaitTime)
 				select {
 				case <-obj.ctx.Done():
 					return
@@ -62,7 +62,7 @@ func (obj *Client[T]) run() {
 			obj.lock.RLock()
 			mapVal, ok := obj.mapKey[orderVal.key]
 			obj.lock.RUnlock()
-			if ok && (orderVal.ttl == mapVal.ttl || time.Now().Unix()-mapVal.ttl >= obj.timeOut) { //删除mapkey，删除db 数据,数据过期开始删除
+			if ok && (orderVal.ttl == mapVal.ttl || time.Now().Sub(mapVal.ttl) >= obj.timeOut) { //删除mapkey，删除db 数据,数据过期开始删除
 				obj.lock.Lock()
 				delete(obj.mapKey, orderVal.key)
 				obj.lock.Unlock()
@@ -75,7 +75,7 @@ func (obj *Client[T]) Close() {
 	obj.afterTime.Stop()
 }
 func (obj *Client[T]) Put(key [16]byte, value T) error {
-	nowTime := time.Now().Unix()
+	nowTime := time.Now()
 	obj.orderKey.Add(dbKey{key: key, ttl: nowTime})
 	obj.lock.Lock()
 	obj.mapKey[key] = dbData[T]{data: value, ttl: nowTime}

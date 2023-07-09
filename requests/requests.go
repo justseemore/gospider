@@ -1,6 +1,8 @@
 package requests
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,13 +13,137 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 	_ "unsafe"
 
 	"gitee.com/baixudong/gospider/re"
 	"gitee.com/baixudong/gospider/tools"
 	"gitee.com/baixudong/gospider/websocket"
 )
+
+//go:linkname ReadRequest net/http.readRequest
+func ReadRequest(b *bufio.Reader) (*http.Request, error)
+
+type RequestDebug struct {
+	Url    *url.URL
+	Method string
+	Header http.Header
+	Proto  string
+	con    *bytes.Buffer
+}
+
+func (obj *RequestDebug) request() (*http.Request, error) {
+	return ReadRequest(bufio.NewReader(bytes.NewBuffer(obj.con.Bytes())))
+}
+func (obj *RequestDebug) String() string {
+	return obj.con.String()
+}
+func (obj *RequestDebug) Bytes() []byte {
+	return obj.con.Bytes()
+}
+func (obj *RequestDebug) body() (io.ReadCloser, error) {
+	r, err := obj.request()
+	if err != nil {
+		return nil, err
+	}
+	return r.Body, err
+}
+func (obj *RequestDebug) Body() (*bytes.Buffer, error) {
+	body, err := obj.body()
+	if err != nil {
+		return nil, err
+	}
+	con := bytes.NewBuffer(nil)
+	_, err = io.Copy(con, body)
+	return con, err
+}
+func cloneRequest(r *http.Request, disBody bool) (*RequestDebug, error) {
+	request := new(RequestDebug)
+	request.Proto = r.Proto
+	request.Method = r.Method
+	request.Url = r.URL
+	request.Header = r.Header
+	var err error
+	request.con = bytes.NewBuffer(nil)
+	if !disBody {
+		if err = r.Write(request.con); err != nil {
+			return request, err
+		}
+		r.Body, err = request.body()
+	} else {
+		if _, err = request.con.WriteString(fmt.Sprintf("%s %s %s\r\n", r.Method, r.URL, r.Proto)); err != nil {
+			return request, err
+		}
+		if err = r.Header.Write(request.con); err != nil {
+			return request, err
+		}
+		if _, err = request.con.WriteString("\r\n"); err != nil {
+			return request, err
+		}
+	}
+	return request, err
+}
+
+type ResponseDebug struct {
+	Proto   string
+	Status  string
+	Header  http.Header
+	con     *bytes.Buffer
+	request *http.Request
+}
+
+func (obj *ResponseDebug) response() (*http.Response, error) {
+	return http.ReadResponse(bufio.NewReader(bytes.NewBuffer(obj.con.Bytes())), obj.request)
+}
+func (obj *ResponseDebug) String() string {
+	return obj.con.String()
+}
+func (obj *ResponseDebug) Bytes() []byte {
+	return obj.con.Bytes()
+}
+func (obj *ResponseDebug) body() (io.ReadCloser, error) {
+	r, err := obj.response()
+	if err != nil {
+		return nil, err
+	}
+	return r.Body, err
+}
+func (obj *ResponseDebug) Body() (*bytes.Buffer, error) {
+	body, err := obj.body()
+	if err != nil {
+		return nil, err
+	}
+	con := bytes.NewBuffer(nil)
+	_, err = io.Copy(con, body)
+	return con, err
+}
+func cloneResponse(r *http.Response, disBody bool) (*ResponseDebug, error) {
+	response := new(ResponseDebug)
+	response.con = bytes.NewBuffer(nil)
+	response.Proto = r.Proto
+	response.Status = r.Status
+	response.Header = r.Header
+	response.request = r.Request
+
+	var err error
+	response.con = bytes.NewBuffer(nil)
+	if !disBody {
+		if err = r.Write(response.con); err != nil {
+			return response, err
+		}
+		r.Body, err = response.body()
+	} else {
+		if _, err = response.con.WriteString(fmt.Sprintf("%s %s\r\n", r.Proto, r.Status)); err != nil {
+			return response, err
+		}
+		if err = r.Header.Write(response.con); err != nil {
+			return response, err
+		}
+		if _, err = response.con.WriteString("\r\n"); err != nil {
+			return response, err
+		}
+	}
+	return response, err
+}
 
 const keyPrincipalID = "gospiderContextData"
 
@@ -26,16 +152,19 @@ var (
 )
 
 type reqCtxData struct {
-	isCallback  bool
-	proxy       *url.URL
-	url         *url.URL
-	host        string
-	rawAddr     string
-	rawHost     string
-	rawMd5      string
-	redirectNum int
-	disProxy    bool
-	ws          bool
+	isCallback            bool
+	proxy                 *url.URL
+	url                   *url.URL
+	host                  string
+	rawAddr               string
+	rawHost               string
+	rawMd5                string
+	redirectNum           int
+	disProxy              bool
+	ws                    bool
+	requestDebugCallBack  func(*RequestDebug) error
+	disBody               bool
+	responseDebugCallBack func(*ResponseDebug) error
 }
 
 func (obj *Client) Get(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
@@ -69,7 +198,7 @@ func (obj *Client) Trace(preCtx context.Context, href string, options ...Request
 // 发送请求
 func (obj *Client) Request(preCtx context.Context, method string, href string, options ...RequestOption) (resp *Response, err error) {
 	if obj == nil {
-		return nil, errors.New("初始化client失败")
+		return nil, errors.New("client is nil")
 	}
 	if preCtx == nil {
 		preCtx = obj.ctx
@@ -78,14 +207,9 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 	if len(options) > 0 {
 		rawOption = options[0]
 	}
-	if rawOption.Body != nil {
-		if rawOption.Raw, err = io.ReadAll(rawOption.Body); err != nil {
-			return
-		}
-	}
-	var optionBak RequestOption
-	if optionBak, err = obj.newRequestOption(rawOption); err != nil {
-		return
+	optionBak := obj.newRequestOption(rawOption)
+	if rawOption.Body != nil && optionBak.TryNum > 0 {
+		optionBak.TryNum = 0
 	}
 	//开始请求
 	var tryNum int64
@@ -93,9 +217,10 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 		select {
 		case <-obj.ctx.Done():
 			obj.Close()
-			return nil, errors.New("http client closed")
+
+			return nil, tools.WrapError(obj.ctx.Err(), "client ctx 错误")
 		case <-preCtx.Done():
-			return nil, preCtx.Err()
+			return nil, tools.WrapError(preCtx.Err(), "request ctx 错误")
 		default:
 			option := optionBak
 			if option.Method == "" {
@@ -103,34 +228,26 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 			}
 			if option.Url == nil {
 				if option.Url, err = url.Parse(href); err != nil {
+					err = tools.WrapError(err, "url 解析错误")
 					return
 				}
 			}
-			if option.BeforCallBack != nil {
-				if err = option.BeforCallBack(preCtx, &option); err != nil {
-					if errors.Is(err, ErrFatal) {
-						return
-					} else {
-						continue
-					}
+			if option.OptionCallBack != nil {
+				if err = option.OptionCallBack(preCtx, &option); err != nil {
+					return
 				}
 			}
-			if err = option.optionInit(); err != nil {
-				return
-			}
-			resp, err = obj.tempRequest(preCtx, option)
+			resp, err = obj.request(preCtx, option)
 			if err != nil { //有错误
 				if errors.Is(err, ErrFatal) { //致命错误直接返回
 					return
-				} else if option.ErrCallBack != nil && option.ErrCallBack(preCtx, err) { //不是致命错误，有错误回调,错误回调true,直接返回
+				} else if option.ErrCallBack != nil && option.ErrCallBack(preCtx, err) != nil { //不是致命错误，有错误回调,有错误,直接返回
 					return
 				}
-			} else if option.AfterCallBack == nil { //没有错误，且没有回调，直接返回
+			} else if option.ResponseCallBack == nil { //没有错误，且没有回调，直接返回
 				return
-			} else if err = option.AfterCallBack(preCtx, resp); err != nil { //没有错误，有回调，回调错误
-				if errors.Is(err, ErrFatal) { //致命错误直接返回
-					return
-				} else if option.ErrCallBack != nil && option.ErrCallBack(preCtx, err) { //不是致命错误，有错误回调,错误回调true,直接返回
+			} else if err = option.ResponseCallBack(preCtx, resp); err != nil { //没有错误，有回调，回调错误
+				if option.ErrCallBack != nil && option.ErrCallBack(preCtx, err) != nil { //有错误回调,有错误直接返回
 					return
 				}
 			} else { //没有错误，有回调，没有回调错误，直接返回
@@ -155,17 +272,26 @@ func verifyProxy(proxyUrl string) (*url.URL, error) {
 		return nil, tools.WrapError(ErrFatal, "不支持的代理协议")
 	}
 }
-func (obj *Client) tempRequest(preCtx context.Context, option RequestOption) (response *Response, err error) {
+func (obj *Client) request(preCtx context.Context, option RequestOption) (response *Response, err error) {
+	if err = option.optionInit(); err != nil {
+		err = tools.WrapError(err, "option 初始化错误")
+		return
+	}
 	method := strings.ToUpper(option.Method)
 	href := option.converUrl
 	var reqs *http.Request
 	//构造ctxData
 	ctxData := new(reqCtxData)
+	ctxData.requestDebugCallBack = option.RequestDebugCallBack
+	ctxData.responseDebugCallBack = option.ResponseDebugCallBack
+	if option.Body != nil {
+		ctxData.disBody = true
+	}
 	ctxData.disProxy = option.DisProxy
 	if option.Proxy != "" { //代理相关构造
 		tempProxy, err := verifyProxy(option.Proxy)
 		if err != nil {
-			return response, tools.WrapError(ErrFatal, err)
+			return response, tools.WrapError(ErrFatal, errors.New("tempRequest 构造代理失败"), err)
 		}
 		ctxData.proxy = tempProxy
 	} else if tempProxy := obj.dialer.Proxy(); tempProxy != nil {
@@ -178,7 +304,7 @@ func (obj *Client) tempRequest(preCtx context.Context, option RequestOption) (re
 	var cancel context.CancelFunc
 	var reqCtx context.Context
 	if option.Timeout > 0 { //超时
-		reqCtx, cancel = context.WithTimeout(context.WithValue(preCtx, keyPrincipalID, ctxData), time.Duration(option.Timeout)*time.Second)
+		reqCtx, cancel = context.WithTimeout(context.WithValue(preCtx, keyPrincipalID, ctxData), option.Timeout)
 	} else {
 		reqCtx, cancel = context.WithCancel(context.WithValue(preCtx, keyPrincipalID, ctxData))
 	}
@@ -197,7 +323,7 @@ func (obj *Client) tempRequest(preCtx context.Context, option RequestOption) (re
 		reqs, err = http.NewRequestWithContext(reqCtx, method, href, nil)
 	}
 	if err != nil {
-		return response, tools.WrapError(ErrFatal, err)
+		return response, tools.WrapError(ErrFatal, errors.New("tempRequest 构造request失败"), err)
 	}
 	ctxData.url = reqs.URL
 	ctxData.host = reqs.Host
@@ -205,7 +331,7 @@ func (obj *Client) tempRequest(preCtx context.Context, option RequestOption) (re
 		filePath := re.Sub(`^/+`, "", reqs.URL.Path)
 		fileContent, err := os.ReadFile(filePath)
 		if err != nil {
-			return nil, err
+			return response, tools.WrapError(ErrFatal, errors.New("read filePath data error"), err)
 		}
 		cancel()
 		return &Response{
@@ -225,7 +351,7 @@ func (obj *Client) tempRequest(preCtx context.Context, option RequestOption) (re
 	//添加headers
 	var headOk bool
 	if reqs.Header, headOk = option.Headers.(http.Header); !headOk {
-		return response, tools.WrapError(ErrFatal, "headers 转换错误")
+		return response, tools.WrapError(ErrFatal, "request headers 转换错误")
 	}
 
 	if reqs.Header.Get("Content-Type") == "" && reqs.Header.Get("content-type") == "" && option.ContentType != "" {
@@ -241,7 +367,7 @@ func (obj *Client) tempRequest(preCtx context.Context, option RequestOption) (re
 	if option.Cookies != nil {
 		cooks, cookOk := option.Cookies.(Cookies)
 		if !cookOk {
-			return response, tools.WrapError(ErrFatal, "cookies 转换错误")
+			return response, tools.WrapError(ErrFatal, "request cookies 转换错误")
 		}
 		for _, vv := range cooks {
 			reqs.AddCookie(vv)
@@ -269,13 +395,24 @@ func (obj *Client) tempRequest(preCtx context.Context, option RequestOption) (re
 	}
 	r, err = obj.getClient(option).Do(reqs)
 	if r != nil {
+		isSse := r.Header.Get("Content-Type") == "text/event-stream"
+
+		if ctxData.responseDebugCallBack != nil {
+			var resp *ResponseDebug
+			if resp, err = cloneResponse(r, isSse || ctxData.ws); err != nil {
+				return
+			}
+			if err = ctxData.responseDebugCallBack(resp); err != nil {
+				return response, tools.WrapError(ErrFatal, "request requestCallBack 回调错误")
+			}
+		}
 		if ctxData.ws {
 			if r.StatusCode == 101 {
 				option.DisRead = true
 			} else if err == nil {
 				err = errors.New("statusCode not 101")
 			}
-		} else if r.Header.Get("Content-Type") == "text/event-stream" {
+		} else if isSse {
 			option.DisRead = true
 		}
 		if response, err2 = obj.newResponse(reqCtx, cancel, r, option); err2 != nil { //创建 response

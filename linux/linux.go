@@ -22,13 +22,13 @@ import (
 )
 
 type ClientOption struct {
-	Timeout int    //连接超时时间
-	Host    string //远程host
-	Port    int    //远程port
-	Usr     string //用户名
-	Pwd     string //密码
-	KeyPath string //key文件的路径,当使用key登陆时使用
-	KeyData []byte //key文件的内容,当使用key登陆时使用
+	Timeout time.Duration //连接超时时间
+	Host    string        //远程host
+	Port    int           //远程port
+	Usr     string        //用户名
+	Pwd     string        //密码
+	KeyPath string        //key文件的路径,当使用key登陆时使用
+	KeyData []byte        //key文件的内容,当使用key登陆时使用
 }
 type Client struct {
 	client *ssh.Client
@@ -45,7 +45,7 @@ type Screen struct {
 	IsRun    bool
 	client   *Ssh
 	pip      *ScreenPip
-	waitTime int64
+	waitTime time.Duration
 	pwd      string
 	ctx      context.Context
 	cnl      context.CancelFunc
@@ -53,7 +53,7 @@ type Screen struct {
 type ScreenPip struct {
 	inData   chan []byte
 	outData  chan []byte
-	waitTime int64
+	waitTime time.Duration
 	ctx      context.Context
 	cnl      context.CancelFunc
 }
@@ -67,7 +67,7 @@ func (obj *ScreenPip) Read(con []byte) (int, error) {
 	}
 }
 func (obj *ScreenPip) Write(con []byte) (int, error) {
-	afterTime := time.NewTimer(time.Second * time.Duration(obj.waitTime))
+	afterTime := time.NewTimer(obj.waitTime)
 	defer afterTime.Stop()
 	select {
 	case obj.outData <- con:
@@ -98,9 +98,9 @@ func NewClient(option ClientOption) (*Client, error) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 	if option.Timeout == 0 {
-		option.Timeout = 30
+		option.Timeout = time.Second * 30
 	}
-	config.Timeout = time.Second * time.Duration(option.Timeout)
+	config.Timeout = option.Timeout
 	if option.Pwd != "" {
 		config.Auth = []ssh.AuthMethod{ssh.Password(option.Pwd)}
 	} else if option.KeyData != nil {
@@ -150,7 +150,7 @@ func (obj *Client) NewSsh() (*Ssh, error) {
 	}
 	return &Ssh{client: client}, err
 }
-func (obj *Client) NewScreen(preCtx context.Context, name string, waitTimes ...int64) (*Screen, error) {
+func (obj *Client) NewScreen(preCtx context.Context, name string, waitTimes ...time.Duration) (*Screen, error) {
 	if preCtx == nil {
 		preCtx = context.TODO()
 	}
@@ -158,7 +158,7 @@ func (obj *Client) NewScreen(preCtx context.Context, name string, waitTimes ...i
 	if err != nil {
 		return nil, err
 	}
-	var waitTime int64
+	var waitTime time.Duration
 	if len(waitTimes) > 0 {
 		waitTime = waitTimes[0]
 	} else {
@@ -203,15 +203,15 @@ func (obj *Screen) hasPrefix(txt string) bool { //是否匹配到命令行前缀
 }
 func (obj *Screen) bytes() []byte {
 	var allCon []byte
-	lastTime := time.Now().Unix() + obj.waitTime
-	afterTime := time.NewTimer(time.Second * time.Duration(obj.waitTime))
+	lastTime := time.Now().Add(obj.waitTime)
+	afterTime := time.NewTimer(obj.waitTime)
 	defer afterTime.Stop()
 	for {
-		afterTime.Reset(time.Second * time.Duration(obj.waitTime))
+		afterTime.Reset(obj.waitTime)
 		select {
 		case con := <-obj.pip.outData:
 			allCon = append(allCon, con...)
-			if time.Now().Unix() > lastTime {
+			if time.Now().Sub(lastTime) > 0 {
 				obj.IsRun = true
 				return allCon
 			}
@@ -227,7 +227,7 @@ func (obj *Screen) bytes() []byte {
 	}
 }
 func (obj *Screen) Run(cmd []byte) ([]byte, error) {
-	afterTime := time.NewTimer(time.Second * time.Duration(obj.waitTime))
+	afterTime := time.NewTimer(obj.waitTime)
 	defer afterTime.Stop()
 	select {
 	case obj.pip.inData <- cmd:

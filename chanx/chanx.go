@@ -8,14 +8,16 @@ import (
 )
 
 type Client[T any] struct {
-	pip  chan T
-	buf  *list.List
-	ctx  context.Context
-	cnl  context.CancelFunc
-	ctx2 context.Context
-	cnl2 context.CancelFunc
-	lock sync.RWMutex
-	len  int64
+	pip   chan T
+	buf   *list.List
+	ctx   context.Context
+	cnl   context.CancelFunc
+	ctx2  context.Context
+	cnl2  context.CancelFunc
+	lock  sync.RWMutex
+	note  chan struct{}
+	timer time.Timer
+	len   int64
 }
 
 func NewClient[T any](preCtx context.Context) *Client[T] {
@@ -25,12 +27,14 @@ func NewClient[T any](preCtx context.Context) *Client[T] {
 	ctx, cnl := context.WithCancel(preCtx)
 	ctx2, cnl2 := context.WithCancel(preCtx)
 	client := &Client[T]{
-		pip:  make(chan T),
-		buf:  list.New(),
-		ctx:  ctx,
-		cnl:  cnl,
-		ctx2: ctx2,
-		cnl2: cnl2,
+		pip:   make(chan T),
+		buf:   list.New(),
+		ctx:   ctx,
+		cnl:   cnl,
+		ctx2:  ctx2,
+		cnl2:  cnl2,
+		note:  make(chan struct{}),
+		timer: *time.NewTimer(0),
 	}
 	go client.run()
 	return client
@@ -52,6 +56,10 @@ func (obj *Client[T]) Chan() <-chan T {
 func (obj *Client[T]) push(val T) {
 	obj.lock.Lock()
 	obj.buf.PushBack(val)
+	select {
+	case obj.note <- struct{}{}:
+	default:
+	}
 	obj.len++
 	obj.lock.Unlock()
 }
@@ -64,24 +72,21 @@ func (obj *Client[T]) get() any {
 }
 
 func (obj *Client[T]) send() error {
-	if obj.Len() <= 0 {
-		time.Sleep(time.Second)
-		return nil
-	}
-	if remVal := obj.get(); remVal != nil {
-		select {
-		case <-obj.ctx2.Done():
-			return obj.ctx2.Err()
-		case obj.pip <- remVal.(T):
-			return nil
+	for obj.buf.Len() > 0 {
+		if remVal := obj.get(); remVal != nil {
+			select {
+			case <-obj.ctx2.Done():
+				return obj.ctx2.Err()
+			case obj.pip <- remVal.(T):
+			}
 		}
 	}
 	return nil
 }
 func (obj *Client[T]) run() {
-	defer close(obj.pip)
-	defer obj.cnl2()
+	defer obj.Close()
 	for {
+		obj.timer.Reset(time.Second * 5)
 		select {
 		case <-obj.ctx.Done():
 			if err := obj.send(); err != nil {
@@ -89,7 +94,11 @@ func (obj *Client[T]) run() {
 			}
 		case <-obj.ctx2.Done():
 			return
-		default:
+		case <-obj.note:
+			if err := obj.send(); err != nil {
+				return
+			}
+		case <-obj.timer.C:
 			if err := obj.send(); err != nil {
 				return
 			}
@@ -103,10 +112,13 @@ func (obj *Client[T]) Join() { //等待消费完毕后，关闭
 func (obj *Client[T]) Close() { //立刻关闭
 	obj.cnl()
 	obj.cnl2()
+	obj.timer.Stop()
 }
 func (obj *Client[T]) Done() <-chan struct{} {
 	return obj.ctx2.Done()
 }
 func (obj *Client[T]) Len() int64 {
+	obj.lock.RLock()
+	defer obj.lock.RUnlock()
 	return obj.len
 }

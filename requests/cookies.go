@@ -18,6 +18,14 @@ func readSetCookies(h http.Header) []*http.Cookie
 // 支持json,map,[]string,http.Header,string
 func ReadCookies(val any) (Cookies, error) {
 	switch cook := val.(type) {
+	case *http.Cookie:
+		return Cookies{
+			cook,
+		}, nil
+	case http.Cookie:
+		return Cookies{
+			&cook,
+		}, nil
 	case Cookies:
 		return cook, nil
 	case []*http.Cookie:
@@ -116,7 +124,7 @@ func any2Cookies(val any) (Cookies, error) {
 		return cookies, nil
 	}
 }
-func (obj *RequestOption) newCookies() (err error) {
+func (obj *RequestOption) initCookies() (err error) {
 	if obj.Cookies == nil {
 		return nil
 	}

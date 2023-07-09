@@ -215,7 +215,7 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 	}
 	if err = utlsConn.HandshakeContext(ctx); err != nil {
 		if strings.HasSuffix(err.Error(), "bad record MAC") {
-			err = errors.Join(err, errors.New("检测到22扩展异常,请删除此扩展后重试"))
+			err = tools.WrapError(err, "检测到22扩展异常,请删除此扩展后重试")
 		}
 	}
 	return utlsConn, err

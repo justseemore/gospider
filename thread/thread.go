@@ -42,7 +42,7 @@ type Task struct {
 	Func     any                                //运行的函数
 	Args     []any                              //传入的参数
 	CallBack func(context.Context, []any) error //回调函数
-	Timeout  int                                //超时时间
+	Timeout  time.Duration                      //超时时间
 	Result   []any                              //函数执行的结果
 	Error    error                              //函数错误信息
 	ctx      context.Context
@@ -316,7 +316,7 @@ func (obj *Client[T]) run(task *Task, option T, threadId int64) {
 	}()
 	timeOut := task.Timeout
 	if timeOut > 0 {
-		task.ctx, task.cnl = context.WithTimeout(task.ctx, time.Second*time.Duration(timeOut))
+		task.ctx, task.cnl = context.WithTimeout(task.ctx, timeOut)
 	}
 	defer task.cnl()                                       //函数结束，任务完成
 	ctx := context.WithValue(task.ctx, ThreadId, threadId) //线程id 值写入ctx

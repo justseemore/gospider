@@ -15,14 +15,14 @@ import (
 type ClientOption struct {
 	GetProxy              func(ctx context.Context, url *url.URL) (string, error) //根据url 返回代理，支持https,http,socks5 代理协议
 	Proxy                 string                                                  //设置代理,支持https,http,socks5 代理协议
-	TLSHandshakeTimeout   int64                                                   //tls 超时时间,default:15
-	ResponseHeaderTimeout int64                                                   //第一个response headers 接收超时时间,default:30
+	TLSHandshakeTimeout   time.Duration                                           //tls 超时时间,default:15
+	ResponseHeaderTimeout time.Duration                                           //第一个response headers 接收超时时间,default:30
 	DisCookie             bool                                                    //关闭cookies管理
 	DisCompression        bool                                                    //关闭请求头中的压缩功能
 	LocalAddr             string                                                  //本地网卡出口ip
-	IdleConnTimeout       int64                                                   //空闲连接在连接池中的超时时间,default:90
-	KeepAlive             int64                                                   //keepalive保活检测定时,default:30
-	DnsCacheTime          int64                                                   //dns解析缓存时间60*30
+	IdleConnTimeout       time.Duration                                           //空闲连接在连接池中的超时时间,default:90
+	KeepAlive             time.Duration                                           //keepalive保活检测定时,default:30
+	DnsCacheTime          time.Duration                                           //dns解析缓存时间60*30
 	AddrType              AddrType                                                //优先使用的addr 类型
 	GetAddrType           func(string) AddrType
 	Dns                   string              //dns
@@ -31,32 +31,34 @@ type ClientOption struct {
 	H2Ja3                 bool                //开启h2指纹
 	H2Ja3Spec             ja3.H2Ja3Spec       //h2指纹
 
-	RedirectNum   int                                         //重定向次数,小于0为禁用,0:不限制
-	DisDecode     bool                                        //关闭自动编码
-	DisRead       bool                                        //关闭默认读取请求体
-	DisUnZip      bool                                        //变比自动解压
-	TryNum        int64                                       //重试次数
-	BeforCallBack func(context.Context, *RequestOption) error //请求前回调的方法
-	AfterCallBack func(context.Context, *Response) error      //请求后回调的方法
-	ErrCallBack   func(context.Context, error) bool           //请求error回调
-	Timeout       int64                                       //请求超时时间
-	Headers       any                                         //请求头
-	Bar           bool                                        //是否开启bar
+	RedirectNum      int                                         //重定向次数,小于0为禁用,0:不限制
+	DisDecode        bool                                        //关闭自动编码
+	DisRead          bool                                        //关闭默认读取请求体
+	DisUnZip         bool                                        //变比自动解压
+	TryNum           int64                                       //重试次数
+	OptionCallBack   func(context.Context, *RequestOption) error //请求之前回调,返回error,中断重试请求,返回nil继续
+	ResponseCallBack func(context.Context, *Response) error      //请求之后回调,返回nil，直接返回,返回err的话，如果有errCallBack 走errCallBack，没有继续try
+	ErrCallBack      func(context.Context, error) error          //错误回调,返回error,中断重试请求,返回nil继续
+	Timeout          time.Duration                               //请求超时时间
+	Headers          any                                         //请求头
+	Bar              bool                                        //是否开启bar
 }
 type Client struct {
-	http2Upg      *http2.Upg
-	redirectNum   int                                         //重定向次数
-	disDecode     bool                                        //关闭自动编码
-	disRead       bool                                        //关闭默认读取请求体
-	disUnZip      bool                                        //变比自动解压
-	tryNum        int64                                       //重试次数
-	beforCallBack func(context.Context, *RequestOption) error //请求前回调的方法
-	afterCallBack func(context.Context, *Response) error      //请求后回调的方法
-	errCallBack   func(context.Context, error) bool           //请求error回调
-	timeout       int64                                       //请求超时时间
-	headers       any                                         //请求头
-	bar           bool                                        //是否开启bar
-	dialer        *DialClient                                 //dialer
+	http2Upg    *http2.Upg
+	redirectNum int   //重定向次数
+	disDecode   bool  //关闭自动编码
+	disRead     bool  //关闭默认读取请求体
+	disUnZip    bool  //变比自动解压
+	tryNum      int64 //重试次数
+
+	optionCallBack   func(context.Context, *RequestOption) error //请求之前回调,返回error,中断重试请求,返回nil继续
+	responseCallBack func(context.Context, *Response) error      //请求之后回调,返回nil，直接返回,返回err的话，如果有errCallBack 走errCallBack，没有继续try
+	errCallBack      func(context.Context, error) error          //错误回调,返回error,中断重试请求,返回nil继续
+
+	timeout time.Duration //请求超时时间
+	headers any           //请求头
+	bar     bool          //是否开启bar
+	dialer  *DialClient   //dialer
 
 	disCookie bool
 	client    *http.Client
@@ -77,19 +79,19 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 		option = options[0]
 	}
 	if option.IdleConnTimeout == 0 {
-		option.IdleConnTimeout = 90
+		option.IdleConnTimeout = time.Second * 90
 	}
 	if option.KeepAlive == 0 {
-		option.KeepAlive = 30
+		option.KeepAlive = time.Second * 30
 	}
 	if option.TLSHandshakeTimeout == 0 {
-		option.TLSHandshakeTimeout = 15
+		option.TLSHandshakeTimeout = time.Second * 15
 	}
 	if option.ResponseHeaderTimeout == 0 {
-		option.ResponseHeaderTimeout = 30
+		option.ResponseHeaderTimeout = time.Second * 30
 	}
 	if option.DnsCacheTime == 0 {
-		option.DnsCacheTime = 60 * 30
+		option.DnsCacheTime = time.Second * 60 * 30
 	}
 	if option.Ja3Spec.IsSet() {
 		option.Ja3 = true
@@ -124,11 +126,11 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 		ProxyConnectHeader: http.Header{
 			"User-Agent": []string{UserAgent},
 		},
-		TLSHandshakeTimeout:   time.Second * time.Duration(option.TLSHandshakeTimeout),
-		ResponseHeaderTimeout: time.Second * time.Duration(option.ResponseHeaderTimeout),
+		TLSHandshakeTimeout:   option.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: option.ResponseHeaderTimeout,
 		DisableCompression:    option.DisCompression,
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-		IdleConnTimeout:       time.Duration(option.IdleConnTimeout) * time.Second, //空闲连接在连接池中的超时时间
+		IdleConnTimeout:       option.IdleConnTimeout, //空闲连接在连接池中的超时时间
 		DialContext:           dialClient.requestHttpDialContext,
 		DialTLSContext:        dialClient.requestHttpDialTlsContext,
 		ForceAttemptHTTP2:     true,
@@ -138,9 +140,22 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 			if ctxData.host == "" {
 				ctxData.host = ctxData.url.Host
 			}
+			if r.URL.Host == ctxData.rawMd5 {
+				r.URL.Host = ctxData.rawHost
+			}
 			if referer, err := url.Parse(r.Header.Get("Referer")); err == nil && referer.Host == ctxData.rawMd5 {
 				referer.Host = ctxData.rawHost
 				r.Header.Set("Referer", referer.String())
+			}
+
+			if ctxData.requestDebugCallBack != nil {
+				req, err := cloneRequest(r, ctxData.disBody)
+				if err != nil {
+					return nil, err
+				}
+				if err = ctxData.requestDebugCallBack(req); err != nil {
+					return nil, err
+				}
 			}
 			return nil, nil
 		},
@@ -158,29 +173,38 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	client.Jar = jar
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
+		if ctxData.responseDebugCallBack != nil {
+			resp, err := cloneResponse(req.Response, false)
+			if err != nil {
+				return err
+			}
+			if err = ctxData.responseDebugCallBack(resp); err != nil {
+				return err
+			}
+		}
 		if ctxData.redirectNum == 0 || ctxData.redirectNum >= len(via) {
 			return nil
 		}
 		return http.ErrUseLastResponse
 	}
 	result := &Client{
-		ctx:           ctx,
-		cnl:           cnl,
-		dialer:        dialClient,
-		client:        &client,
-		http2Upg:      http2Upg,
-		disCookie:     option.DisCookie,
-		redirectNum:   option.RedirectNum,
-		disDecode:     option.DisDecode,
-		disRead:       option.DisRead,
-		disUnZip:      option.DisUnZip,
-		tryNum:        option.TryNum,
-		beforCallBack: option.BeforCallBack,
-		afterCallBack: option.AfterCallBack,
-		errCallBack:   option.ErrCallBack,
-		timeout:       option.Timeout,
-		headers:       option.Headers,
-		bar:           option.Bar,
+		ctx:              ctx,
+		cnl:              cnl,
+		dialer:           dialClient,
+		client:           &client,
+		http2Upg:         http2Upg,
+		disCookie:        option.DisCookie,
+		redirectNum:      option.RedirectNum,
+		disDecode:        option.DisDecode,
+		disRead:          option.DisRead,
+		disUnZip:         option.DisUnZip,
+		tryNum:           option.TryNum,
+		optionCallBack:   option.OptionCallBack,
+		responseCallBack: option.ResponseCallBack,
+		errCallBack:      option.ErrCallBack,
+		timeout:          option.Timeout,
+		headers:          option.Headers,
+		bar:              option.Bar,
 	}
 	return result, nil
 }
