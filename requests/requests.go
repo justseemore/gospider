@@ -152,19 +152,19 @@ var (
 )
 
 type reqCtxData struct {
-	isCallback            bool
-	proxy                 *url.URL
-	url                   *url.URL
-	host                  string
-	rawAddr               string
-	rawHost               string
-	rawMd5                string
-	redirectNum           int
-	disProxy              bool
-	ws                    bool
-	requestDebugCallBack  func(*RequestDebug) error
-	disBody               bool
-	responseDebugCallBack func(*ResponseDebug) error
+	isCallback       bool
+	proxy            *url.URL
+	url              *url.URL
+	host             string
+	rawAddr          string
+	rawHost          string
+	rawMd5           string
+	redirectNum      int
+	disProxy         bool
+	ws               bool
+	requestCallBack  func(context.Context, *RequestDebug) error
+	disBody          bool
+	responseCallBack func(context.Context, *ResponseDebug) error
 }
 
 func (obj *Client) Get(preCtx context.Context, href string, options ...RequestOption) (*Response, error) {
@@ -244,9 +244,9 @@ func (obj *Client) Request(preCtx context.Context, method string, href string, o
 				} else if option.ErrCallBack != nil && option.ErrCallBack(preCtx, err) != nil { //不是致命错误，有错误回调,有错误,直接返回
 					return
 				}
-			} else if option.ResponseCallBack == nil { //没有错误，且没有回调，直接返回
+			} else if option.ResultCallBack == nil { //没有错误，且没有回调，直接返回
 				return
-			} else if err = option.ResponseCallBack(preCtx, resp); err != nil { //没有错误，有回调，回调错误
+			} else if err = option.ResultCallBack(preCtx, resp); err != nil { //没有错误，有回调，回调错误
 				if option.ErrCallBack != nil && option.ErrCallBack(preCtx, err) != nil { //有错误回调,有错误直接返回
 					return
 				}
@@ -282,8 +282,8 @@ func (obj *Client) request(preCtx context.Context, option RequestOption) (respon
 	var reqs *http.Request
 	//构造ctxData
 	ctxData := new(reqCtxData)
-	ctxData.requestDebugCallBack = option.RequestDebugCallBack
-	ctxData.responseDebugCallBack = option.ResponseDebugCallBack
+	ctxData.requestCallBack = option.RequestCallBack
+	ctxData.responseCallBack = option.ResponseCallBack
 	if option.Body != nil {
 		ctxData.disBody = true
 	}
@@ -397,12 +397,12 @@ func (obj *Client) request(preCtx context.Context, option RequestOption) (respon
 	if r != nil {
 		isSse := r.Header.Get("Content-Type") == "text/event-stream"
 
-		if ctxData.responseDebugCallBack != nil {
+		if ctxData.responseCallBack != nil {
 			var resp *ResponseDebug
 			if resp, err = cloneResponse(r, isSse || ctxData.ws); err != nil {
 				return
 			}
-			if err = ctxData.responseDebugCallBack(resp); err != nil {
+			if err = ctxData.responseCallBack(reqCtx, resp); err != nil {
 				return response, tools.WrapError(ErrFatal, "request requestCallBack 回调错误")
 			}
 		}

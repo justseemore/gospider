@@ -31,17 +31,19 @@ type ClientOption struct {
 	H2Ja3                 bool                //开启h2指纹
 	H2Ja3Spec             ja3.H2Ja3Spec       //h2指纹
 
-	RedirectNum      int                                         //重定向次数,小于0为禁用,0:不限制
-	DisDecode        bool                                        //关闭自动编码
-	DisRead          bool                                        //关闭默认读取请求体
-	DisUnZip         bool                                        //变比自动解压
-	TryNum           int64                                       //重试次数
-	OptionCallBack   func(context.Context, *RequestOption) error //请求之前回调,返回error,中断重试请求,返回nil继续
-	ResponseCallBack func(context.Context, *Response) error      //请求之后回调,返回nil，直接返回,返回err的话，如果有errCallBack 走errCallBack，没有继续try
-	ErrCallBack      func(context.Context, error) error          //错误回调,返回error,中断重试请求,返回nil继续
-	Timeout          time.Duration                               //请求超时时间
-	Headers          any                                         //请求头
-	Bar              bool                                        //是否开启bar
+	RedirectNum int   //重定向次数,小于0为禁用,0:不限制
+	DisDecode   bool  //关闭自动编码
+	DisRead     bool  //关闭默认读取请求体
+	DisUnZip    bool  //变比自动解压
+	TryNum      int64 //重试次数
+
+	OptionCallBack func(context.Context, *RequestOption) error //请求参数回调,用于对请求参数进行修改。返回error,中断重试请求,返回nil继续
+	ResultCallBack func(context.Context, *Response) error      //结果回调,用于对结果进行校验。返回nil，直接返回,返回err的话，如果有errCallBack 走errCallBack，没有继续try
+	ErrCallBack    func(context.Context, error) error          //错误回调,返回error,中断重试请求,返回nil继续
+
+	Timeout time.Duration //请求超时时间
+	Headers any           //请求头
+	Bar     bool          //是否开启bar
 }
 type Client struct {
 	http2Upg    *http2.Upg
@@ -51,9 +53,9 @@ type Client struct {
 	disUnZip    bool  //变比自动解压
 	tryNum      int64 //重试次数
 
-	optionCallBack   func(context.Context, *RequestOption) error //请求之前回调,返回error,中断重试请求,返回nil继续
-	responseCallBack func(context.Context, *Response) error      //请求之后回调,返回nil，直接返回,返回err的话，如果有errCallBack 走errCallBack，没有继续try
-	errCallBack      func(context.Context, error) error          //错误回调,返回error,中断重试请求,返回nil继续
+	optionCallBack func(context.Context, *RequestOption) error //请求参数回调,用于对请求参数进行修改。返回error,中断重试请求,返回nil继续
+	resultCallBack func(context.Context, *Response) error      //结果回调,用于对结果进行校验。返回nil，直接返回,返回err的话，如果有errCallBack 走errCallBack，没有继续try
+	errCallBack    func(context.Context, error) error          //错误回调,返回error,中断重试请求,返回nil继续
 
 	timeout time.Duration //请求超时时间
 	headers any           //请求头
@@ -148,12 +150,12 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 				r.Header.Set("Referer", referer.String())
 			}
 
-			if ctxData.requestDebugCallBack != nil {
+			if ctxData.requestCallBack != nil {
 				req, err := cloneRequest(r, ctxData.disBody)
 				if err != nil {
 					return nil, err
 				}
-				if err = ctxData.requestDebugCallBack(req); err != nil {
+				if err = ctxData.requestCallBack(r.Context(), req); err != nil {
 					return nil, err
 				}
 			}
@@ -173,12 +175,12 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 	client.Jar = jar
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		ctxData := req.Context().Value(keyPrincipalID).(*reqCtxData)
-		if ctxData.responseDebugCallBack != nil {
+		if ctxData.responseCallBack != nil {
 			resp, err := cloneResponse(req.Response, false)
 			if err != nil {
 				return err
 			}
-			if err = ctxData.responseDebugCallBack(resp); err != nil {
+			if err = ctxData.responseCallBack(req.Context(), resp); err != nil {
 				return err
 			}
 		}
@@ -188,23 +190,23 @@ func NewClient(preCtx context.Context, options ...ClientOption) (*Client, error)
 		return http.ErrUseLastResponse
 	}
 	result := &Client{
-		ctx:              ctx,
-		cnl:              cnl,
-		dialer:           dialClient,
-		client:           &client,
-		http2Upg:         http2Upg,
-		disCookie:        option.DisCookie,
-		redirectNum:      option.RedirectNum,
-		disDecode:        option.DisDecode,
-		disRead:          option.DisRead,
-		disUnZip:         option.DisUnZip,
-		tryNum:           option.TryNum,
-		optionCallBack:   option.OptionCallBack,
-		responseCallBack: option.ResponseCallBack,
-		errCallBack:      option.ErrCallBack,
-		timeout:          option.Timeout,
-		headers:          option.Headers,
-		bar:              option.Bar,
+		ctx:            ctx,
+		cnl:            cnl,
+		dialer:         dialClient,
+		client:         &client,
+		http2Upg:       http2Upg,
+		disCookie:      option.DisCookie,
+		redirectNum:    option.RedirectNum,
+		disDecode:      option.DisDecode,
+		disRead:        option.DisRead,
+		disUnZip:       option.DisUnZip,
+		tryNum:         option.TryNum,
+		optionCallBack: option.OptionCallBack,
+		resultCallBack: option.ResultCallBack,
+		errCallBack:    option.ErrCallBack,
+		timeout:        option.Timeout,
+		headers:        option.Headers,
+		bar:            option.Bar,
 	}
 	return result, nil
 }
