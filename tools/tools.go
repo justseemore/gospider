@@ -453,10 +453,24 @@ func AesDecode(val string, key []byte) ([]byte, error) {
 	return src, nil
 }
 
+type gospiderReader struct {
+	r *brotli.Reader
+}
+
+func (obj *gospiderReader) Read(b []byte) (int, error) {
+	return obj.r.Read(b)
+}
+func (obj *gospiderReader) Close() error {
+	return obj.r.Reset(nil)
+}
+
 // 压缩解码
 func CompressionBrDecode(ctx context.Context, r *bytes.Buffer) (*bytes.Buffer, error) {
 	rs := bytes.NewBuffer(nil)
-	return rs, CopyWitchContext(ctx, rs, brotli.NewReader(r))
+	rr := &gospiderReader{
+		r: brotli.NewReader(r),
+	}
+	return rs, CopyWitchContext(ctx, rs, rr)
 }
 func CompressionDeflateDecode(ctx context.Context, r *bytes.Buffer) (*bytes.Buffer, error) {
 	rs, reader := bytes.NewBuffer(nil), flate.NewReader(r)
@@ -728,7 +742,7 @@ func WrapError(err error, val ...any) error {
 	return fmt.Errorf("%w,%s", err, fmt.Sprint(val...))
 }
 
-func CopyWitchContext(ctx context.Context, writer io.Writer, reader io.Reader) (err error) {
+func CopyWitchContext(ctx context.Context, writer io.Writer, reader io.ReadCloser) (err error) {
 	if ctx == nil {
 		_, err = io.Copy(writer, reader)
 		if err != nil && errors.Is(err, io.ErrUnexpectedEOF) {
@@ -751,6 +765,7 @@ func CopyWitchContext(ctx context.Context, writer io.Writer, reader io.Reader) (
 	}()
 	select {
 	case <-ctx.Done():
+		reader.Close()
 		err = ctx.Err()
 	case <-p:
 	}

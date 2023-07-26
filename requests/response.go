@@ -302,7 +302,7 @@ func (obj *Response) barRead() (*bytes.Buffer, error) {
 		bar:  bar.NewClient(obj.response.ContentLength),
 		body: bytes.NewBuffer(nil),
 	}
-	err := tools.CopyWitchContext(obj.response.Request.Context(), barData, obj.response.Body)
+	err := tools.CopyWitchContext(obj.response.Request.Context(), barData, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +329,7 @@ func (obj *Response) read() error { //读取body,对body 解压，解码操作
 		bBody, err = obj.barRead()
 	} else {
 		bBody = bytes.NewBuffer(nil)
-		err = tools.CopyWitchContext(obj.response.Request.Context(), bBody, obj.response.Body)
+		err = tools.CopyWitchContext(obj.response.Request.Context(), bBody, obj)
 	}
 	if err != nil {
 		return errors.New("response 读取内容 错误: " + err.Error())
@@ -360,7 +360,7 @@ func (obj *Response) Close() error {
 		obj.webSocket.Close("close")
 	}
 	if obj.response != nil && obj.response.Body != nil {
-		tools.CopyWitchContext(obj.ctx, io.Discard, obj.response.Body)
+		tools.CopyWitchContext(obj.ctx, io.Discard, obj)
 		return obj.response.Body.Close()
 	}
 	return nil
