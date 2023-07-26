@@ -97,13 +97,13 @@ func NewUpg(t1 *http.Transport, options ...UpgOption) *Upg {
 	}
 
 	if option.IdleConnTimeout == 0 {
-		option.IdleConnTimeout = 30
+		option.IdleConnTimeout = time.Second * 30
 	}
 	if option.TLSHandshakeTimeout == 0 {
-		option.TLSHandshakeTimeout = 15
+		option.TLSHandshakeTimeout = time.Second * 15
 	}
 	if option.ResponseHeaderTimeout == 0 {
-		option.ResponseHeaderTimeout = 30
+		option.ResponseHeaderTimeout = time.Second * 30
 	}
 	//开始创建服务端
 	if option.Server {
