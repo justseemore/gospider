@@ -179,6 +179,7 @@ func main() {
 	}
 	defer response.Close()
 	wsCli := response.WebSocket()
+	wsCli.SetReadLimit(1024 * 1024 * 1024)//设置读取最大限制
 	if err = wsCli.Send(context.TODO(), websocket.MessageText, "测试"); err != nil { //发送txt 消息
 		log.Panic(err)
 	}
