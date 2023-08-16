@@ -27,8 +27,6 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
-	"os/signal"
-	"syscall"
 
 	"net"
 	"net/http"
@@ -1011,31 +1009,4 @@ func ImgDiffer(c, c2 []byte) (float64, error) {
 	}
 	score /= math.Pow(2, 16) * math.Pow(float64(bounds.Dx()), 2) * math.Pow(float64(bounds.Dy()), 2)
 	return score, nil
-}
-func Signal(preCtx context.Context, fun func()) {
-	ch := make(chan os.Signal)
-	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGILL, syscall.SIGTRAP,
-		syscall.SIGABRT, syscall.SIGBUS, syscall.SIGFPE, syscall.SIGKILL, syscall.SIGSEGV, syscall.SIGPIPE,
-		syscall.SIGALRM, syscall.SIGTERM)
-	select {
-	case <-preCtx.Done():
-		if fun != nil {
-			fun()
-		}
-		signal.Stop(ch)
-	case s := <-ch:
-		if fun != nil {
-			fun()
-		}
-		signal.Stop(ch)
-		signal.Reset(s)
-		if p, err := os.FindProcess(os.Getpid()); err == nil && p != nil {
-			sg, ok := s.(syscall.Signal)
-			if ok && sg == syscall.SIGINT {
-				p.Signal(syscall.SIGKILL)
-			} else {
-				p.Signal(s)
-			}
-		}
-	}
 }

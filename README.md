@@ -20,13 +20,7 @@ go get -u gitee.com/baixudong/gospider
 ```
 https://github.com/baixudong007/gospider
 ```
-
 # [测试用例](../../tree/master/test) 
-
-# 博客
-1. [知乎](https://www.zhihu.com/people/xiao-bai-shu-87-3/posts)
-2. [掘金](https://juejin.cn/user/4098624347452359/posts)
-3. [csdn](https://blog.csdn.net/Mr_bai_404?type=blog)
 
 # 推荐库
 |库名|推荐原因|
@@ -34,11 +28,3 @@ https://github.com/baixudong007/gospider
 [curl_cffi](https://github.com/yifeikong/curl_cffi)|python中修改ja3指纹最好的一个
 [chromedp](https://github.com/chromedp/chromedp)|golang中操控浏览器最好的一个
 
-
-
-
-
-
-
-# 如果二维码没有及时更新可以添加个人微信 gospider007 (备注gospider入群)
-![](im.jpg)
