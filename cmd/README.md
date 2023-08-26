@@ -1,11 +1,11 @@
-# 功能概要
-* 执行命令行命令
-* 没有内存泄露的执行cmd 命令
-* js 解析器，配合node ,调用js代码，使用管道
-* python 解析器，配合python ,调用python代码，使用管道
+# Function Overview
+* Execute command-line commands
+* Execute cmd commands without memory leaks
+* JavaScript interpreter, used with Node.js, execute JavaScript code using pipes
+* Python interpreter, used with Python, execute Python code using pipes
 
-## 执行js 代码示例
-~~~go
+## Execute JavaScript Code Example
+```go
 package main
 
 import (
@@ -13,6 +13,7 @@ import (
 
 	"gitee.com/baixudong/gospider/cmd"
 )
+
 func TestJs() {
 	script := `
 	function sign(val,val2){
@@ -44,9 +45,9 @@ func TestJs() {
 		log.Fatal("sign error")
 	}
 }
-~~~
-## 执行python代码示例
-~~~go
+```
+## Execute Python Code Example
+```go
 func TestPy() {
 	script := `def sign(val,val2):
 	return {"val":val,"val2":val2}`
@@ -65,4 +66,4 @@ func TestPy() {
 		log.Fatal("sign error")
 	}
 }
-~~~
+```

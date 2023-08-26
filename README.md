@@ -1,30 +1,29 @@
-# 简介
-### gospider 是一个golang 爬虫神器，拥有python到golang爬虫过渡的所有必需库。用于python爬虫从业者快速且无坑的过渡到golang
+# Introduction
+### Gospider is a powerful Golang web crawler that includes all the necessary libraries for transitioning from Python to Golang. It provides a fast and seamless transition for Python web crawlers to Golang.
 ---
-#### 模块文档在下面的链接里面!!!
-#### 模块文档在下面的链接里面!!!
-#### 模块文档在下面的链接里面!!!
+#### Module documentation can be found at the following link!!!
+#### Module documentation can be found at the following link!!!
+#### Module documentation can be found at the following link!!!
 ---
-1. [请求库](../../tree/master/requests)：ja3,http2 指纹。websocket,sse,http,https 协议
-2. [并发库](../../tree/master/thread)：自实现高性能并发库
-3. [执行js,py](../../tree/master/cmd): 通过管道调用js,python 中的方法
-# 依赖
+1. [Request Library](../../tree/master/requests): JA3 and HTTP/2 fingerprinting. Websocket, SSE, HTTP, and HTTPS protocols.
+2. [Concurrency Library](../../tree/master/thread): Self-implemented high-performance concurrency library.
+3. [Execute JavaScript and Python](../../tree/master/cmd): Invoke methods in JavaScript and Python through pipes.
+# Dependencies
 ```
-go1.20 (不要低于这个版本)
+go1.20 (Do not use a version lower than this)
 ```
-# 安装 (不要拉github的包,go包路径只能在gitee和github选一个,拉github包会出现路径问题)
+# Installation (Do not fetch the package from GitHub, choose either Gitee or GitHub for the go package path. Fetching from GitHub will cause path issues.)
 ```
 go get -u gitee.com/baixudong/gospider
 ```
-# 为了方便管理,提交bug请到github统一提交
+# For easy management, please submit bugs on GitHub
 ```
 https://github.com/baixudong007/gospider
 ```
-# [测试用例](../../tree/master/test) 
+# [Test Cases](../../tree/master/test)
 
-# 推荐库
-|库名|推荐原因|
+# Recommended Libraries
+|Library Name|Reason for Recommendation|
 -|-
-[curl_cffi](https://github.com/yifeikong/curl_cffi)|python中修改ja3指纹最好的一个
-[chromedp](https://github.com/chromedp/chromedp)|golang中操控浏览器最好的一个
-
+[curl_cffi](https://github.com/yifeikong/curl_cffi)|The best library for modifying JA3 fingerprints in Python.
+[chromedp](https://github.com/chromedp/chromedp)|The best library for browser manipulation in Golang.

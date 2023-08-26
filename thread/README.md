@@ -1,51 +1,53 @@
-# 功能概述
-* 快如闪电的线程池
-## 多线程示例
+# Function Overview
+- Lightning-fast thread pool
+## Multi-threading Example
 ```go
 func main() {
-	pool := thread.NewClient(nil, 3)
-	for i := 0; i < 20; i++ {
-		_, err := pool.Write(&thread.Task{
-			Func: func(ctx context.Context, i int) {
-				log.Print(i, "start")
-				time.Sleep(time.Second)
-				log.Print(i, "end")
-			},
-			Args: []any{i},
-		})
-		if err != nil {
-			log.Panic(err)
-		}
-	}
-	pool.Join()
-	log.Print("结束了")
+    pool := thread.NewClient(nil, 3)
+    for i := 0; i < 20; i++ {
+        _, err := pool.Write(&thread.Task{
+            Func: func(ctx context.Context, i int) {
+                log.Print(i, "start")
+                time.Sleep(time.Second)
+                log.Print(i, "end")
+            },
+            Args: []any{i},
+        })
+        if err != nil {
+            log.Panic(err)
+        }
+    }
+    pool.Join()
+    log.Print("Finished")
 }
 ```
-## 获取线程id
+## Get Thread ID
 ```go
 package main
 
 import (
-	"context"
-	"log"
-	"time"
+    "context"
+    "log"
+    "time"
 
-	"gitee.com/baixudong/gospider/thread"
+    "gitee.com/baixudong/gospider/thread"
 )
+
 func test(ctx context.Context, num int) {
-	log.Printf("第%d个线程池中的第%d个请求开始", thread.GetThreadId(ctx), num)
-	time.Sleep(time.Second)
-	log.Printf("第%d个线程池中的第%d个请求结束", thread.GetThreadId(ctx), num)
+    log.Printf("Thread %d in thread pool %d starts", thread.GetThreadId(ctx), thread.GetThreadPoolId(ctx))
+    time.Sleep(time.Second)
+    log.Printf("Thread %d in thread pool %d ends", thread.GetThreadId(ctx), thread.GetThreadPoolId(ctx))
 }
+
 func main() {
-	threadCli := thread.NewClient(nil, 3) //限制并发为3
-	for i := 0; i < 10; i++ {
-		//读取任务
-		threadCli.Write(&thread.Task{
-			Func: test,
-			Args: []any{i},
-		})
-	}
-	threadCli.Join()
+    threadCli := thread.NewClient(nil, 3) // Limit concurrency to 3
+    for i := 0; i < 10; i++ {
+        // Write tasks
+        threadCli.Write(&thread.Task{
+            Func: test,
+            Args: []any{i},
+        })
+    }
+    threadCli.Join()
 }
 ```
