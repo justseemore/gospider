@@ -6,23 +6,73 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"net"
-	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
-	_ "unsafe"
+	"net/http"
 
-	"gitee.com/baixudong/gospider/tools"
+	"gitee.com/baixudong/tools"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/exp/slices"
 )
 
+func NewOneSessionCache(session *utls.ClientSessionState) *OneSessionCache {
+	return &OneSessionCache{session: session}
+}
+
+type OneSessionCache struct {
+	session    *utls.ClientSessionState
+	newSession *utls.ClientSessionState
+}
+
+func (obj *OneSessionCache) Get(sessionKey string) (*utls.ClientSessionState, bool) {
+	return obj.session, obj.session != nil
+}
+func (obj *OneSessionCache) Put(sessionKey string, cs *utls.ClientSessionState) {
+	if cs != nil {
+		obj.newSession = cs
+	}
+}
+func (obj *OneSessionCache) Session() *utls.ClientSessionState {
+	return obj.newSession
+}
+
+type ClientSessionCache struct {
+	sessionKeyMap map[string]*utls.ClientSessionState
+	newSession    *utls.ClientSessionState
+	lock          sync.RWMutex
+}
+
+func NewClientSessionCache() *ClientSessionCache {
+	return &ClientSessionCache{
+		sessionKeyMap: make(map[string]*utls.ClientSessionState),
+	}
+}
+func (obj *ClientSessionCache) Get(sessionKey string) (session *utls.ClientSessionState, ok bool) {
+	obj.lock.RLock()
+	defer obj.lock.RUnlock()
+	session, ok = obj.sessionKeyMap[sessionKey]
+	return
+}
+
+func (obj *ClientSessionCache) Put(sessionKey string, cs *utls.ClientSessionState) {
+	obj.lock.Lock()
+	defer obj.lock.Unlock()
+	obj.sessionKeyMap[sessionKey] = cs
+	obj.newSession = cs
+}
+
+func (obj *ClientSessionCache) Session() *utls.ClientSessionState {
+	return obj.newSession
+}
+
 type ClientHelloId = utls.ClientHelloID
 
-//go:linkname ShuffleExtensions github.com/refraction-networking/utls.shuffleExtensions
-func ShuffleExtensions(chs *ClientHelloSpec) error
+func ShuffleExtensions(chs *Ja3Spec) {
+	chs.Extensions = utls.ShuffleChromeTLSExtensions(chs.Extensions)
+}
 
 var (
 	// HelloGolang will use default "crypto/tls" handshake marshaling codepath, which WILL
@@ -62,9 +112,17 @@ var (
 	HelloChrome_102         = utls.HelloChrome_102
 	HelloChrome_106_Shuffle = utls.HelloChrome_106_Shuffle
 
-	// Chrome with PSK: Chrome start sending this ClientHello after doing TLS 1.3 handshake with the same server.
-	HelloChrome_100_PSK      = utls.HelloChrome_100_PSK
-	HelloChrome_112_PSK_Shuf = utls.HelloChrome_112_PSK_Shuf
+	// Chrome w/ PSK: Chrome start sending this ClientHello after doing TLS 1.3 handshake with the same server.
+	// Beta: PSK extension added. However, uTLS doesn't ship with full PSK support.
+	// Use at your own discretion.
+	HelloChrome_100_PSK              = utls.HelloChrome_100_PSK
+	HelloChrome_112_PSK_Shuf         = utls.HelloChrome_112_PSK_Shuf
+	HelloChrome_114_Padding_PSK_Shuf = utls.HelloChrome_114_Padding_PSK_Shuf
+
+	// Chrome w/ Post-Quantum Key Agreement
+	// Beta: PQ extension added. However, uTLS doesn't ship with full PQ support. Use at your own discretion.
+	HelloChrome_115_PQ     = utls.HelloChrome_115_PQ
+	HelloChrome_115_PQ_PSK = utls.HelloChrome_115_PQ_PSK
 
 	HelloIOS_Auto = utls.HelloIOS_Auto
 	HelloIOS_11_1 = utls.HelloIOS_11_1
@@ -89,76 +147,10 @@ var (
 	HelloQQ_11_1 = utls.HelloQQ_11_1
 )
 
-var ClientHelloIDs = []ClientHelloId{
-	// HelloGolang will use default "crypto/tls" handshake marshaling codepath, which WILL
-	// overwrite your changes to Hello(Config, Session are fine).
-	// You might want to call BuildHandshakeState() before applying any changes.
-	// UConn.Extensions will be completely ignored.
-
-	// HelloCustom will prepare ClientHello with empty uconn.Extensions so you can fill it with
-	// TLSExtensions manually or use ApplyPreset function
-
-	// HelloRandomized* randomly adds/reorders extensions, ciphersuites, etc.
-	HelloRandomized,
-	HelloRandomizedALPN,
-	HelloRandomizedNoALPN,
-
-	// The rest will will parrot given browser.
-	HelloFirefox_Auto,
-	HelloFirefox_55,
-	HelloFirefox_56,
-	HelloFirefox_63,
-	HelloFirefox_65,
-	HelloFirefox_99,
-	HelloFirefox_102,
-	HelloFirefox_105,
-
-	HelloChrome_Auto,
-	HelloChrome_58,
-	HelloChrome_62,
-	HelloChrome_70,
-	HelloChrome_72,
-	HelloChrome_83,
-	HelloChrome_87,
-	HelloChrome_96,
-	HelloChrome_100,
-	HelloChrome_102,
-	HelloChrome_106_Shuffle,
-
-	// Chrome with PSK: Chrome start sending this ClientHello after doing TLS 1.3 handshake with the same server.
-	HelloChrome_100_PSK,
-	HelloChrome_112_PSK_Shuf,
-
-	HelloIOS_Auto,
-	HelloIOS_11_1,
-	HelloIOS_12_1,
-	HelloIOS_13,
-	HelloIOS_14,
-
-	HelloAndroid_11_OkHttp,
-
-	HelloEdge_Auto,
-	HelloEdge_85,
-	HelloEdge_106,
-
-	HelloSafari_Auto,
-	HelloSafari_16_0,
-
-	Hello360_Auto,
-	Hello360_7_5,
-	Hello360_11_0,
-
-	HelloQQ_Auto,
-	HelloQQ_11_1,
-}
-
-func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disHttp2 bool, addr string) (utlsConn *utls.UConn, err error) {
+func NewClient(ctx context.Context, conn net.Conn, ja3Spec Ja3Spec, disHttp2 bool, utlsConfig *utls.Config) (utlsConn *utls.UConn, err error) {
 	var utlsSpec utls.ClientHelloSpec
 	if !ja3Spec.IsSet() {
-		if ja3Spec, err = CreateSpecWithId(HelloChrome_Auto); err != nil {
-			return nil, err
-		}
-		utlsSpec = utls.ClientHelloSpec(ja3Spec)
+		utlsSpec = utls.ClientHelloSpec(DefaultJa3Spec())
 	} else {
 		utlsSpec = utls.ClientHelloSpec{
 			CipherSuites:       ja3Spec.CipherSuites,
@@ -178,14 +170,6 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 		}
 	}
 	if disHttp2 {
-		utlsConn = utls.UClient(conn, &utls.Config{
-			InsecureSkipVerify: true,
-			ServerName:         tools.GetServerName(addr),
-			NextProtos:         []string{"http/1.1"},
-			SessionTicketKey:   [32]byte{},
-			ClientSessionCache: utls.NewLRUClientSessionCache(0),
-		},
-			utls.HelloCustom)
 		for _, Extension := range utlsSpec.Extensions {
 			alpns, ok := Extension.(*utls.ALPNExtension)
 			if ok {
@@ -198,18 +182,8 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 				break
 			}
 		}
-	} else {
-		utlsConn = utls.UClient(conn, &utls.Config{
-			InsecureSkipVerify:     true,
-			InsecureSkipTimeVerify: true,
-			ServerName:             tools.GetServerName(addr),
-			NextProtos:             []string{"h2", "http/1.1"},
-			SessionTicketKey:       [32]byte{},
-			ClientSessionCache:     utls.NewLRUClientSessionCache(0),
-		},
-			utls.HelloCustom,
-		)
 	}
+	utlsConn = utls.UClient(conn, utlsConfig, utls.HelloCustom)
 	if err = utlsConn.ApplyPreset(&utlsSpec); err != nil {
 		return nil, err
 	}
@@ -219,60 +193,6 @@ func NewClient(ctx context.Context, conn net.Conn, ja3Spec ClientHelloSpec, disH
 		}
 	}
 	return utlsConn, err
-}
-
-func Utls2Tls(preCtx, ctx context.Context, utlsConn *utls.UConn, host string) (*tls.Conn, error) {
-	//获取cert
-	var err error
-	certs := utlsConn.ConnectionState().PeerCertificates
-	var cert tls.Certificate
-	if len(certs) > 0 {
-		cert, err = tools.CreateProxyCertWithCert(nil, nil, certs[0])
-	} else {
-		cert, err = tools.CreateProxyCertWithName(tools.GetServerName(host))
-	}
-	if err != nil {
-		return nil, err
-	}
-	localConn, remoteConn := Pipe(preCtx)
-	//正常路径发送方
-	tlsConn := tls.Client(localConn, &tls.Config{
-		InsecureSkipVerify: true,
-		ServerName:         tools.GetServerName(host),
-		NextProtos:         []string{"h2", "http/1.1"},
-	})
-	proto := utlsConn.ConnectionState().NegotiatedProtocol
-	if proto == "" {
-		proto = "http/1.1"
-	}
-	//代理接收方
-	tlsClientConn := tls.Server(remoteConn, &tls.Config{
-		InsecureSkipVerify: true,
-		Certificates:       []tls.Certificate{cert},
-		NextProtos:         []string{proto},
-	})
-	go func() {
-		defer utlsConn.Close()
-		defer tlsConn.Close()
-		defer tlsClientConn.Close()
-		if err = tlsClientConn.Handshake(); err != nil {
-			return
-		}
-		go func() {
-			defer utlsConn.Close()
-			defer tlsConn.Close()
-			defer tlsClientConn.Close()
-			_, err = io.Copy(utlsConn, tlsClientConn)
-		}()
-		_, err = io.Copy(tlsClientConn, utlsConn)
-	}()
-
-	if err = tlsConn.HandshakeContext(ctx); err != nil {
-		tlsClientConn.Close()
-		utlsConn.Close()
-		tlsConn.Close()
-	}
-	return tlsConn, err
 }
 
 // https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
@@ -309,36 +229,19 @@ func getExtensionWithId(extensionId uint16) utls.TLSExtension {
 	case 21:
 		return &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle}
 	case 23:
-		return &utls.UtlsExtendedMasterSecretExtension{}
+		return &utls.ExtendedMasterSecretExtension{}
 	case 24:
 		return &utls.FakeTokenBindingExtension{}
 	case 27:
 		return &utls.UtlsCompressCertExtension{
 			Algorithms: []utls.CertCompressionAlgo{utls.CertCompressionBrotli},
 		}
-	case 28:
-		return &utls.FakeRecordSizeLimitExtension{} //Limit: 0x4001
 	case 34:
 		return &utls.FakeDelegatedCredentialsExtension{}
 	case 35:
 		return &utls.SessionTicketExtension{}
 	case 41:
-		return &utls.FakePreSharedKeyExtension{
-			PskIdentities: []utls.PskIdentity{ // must set identity
-				{
-					Label:               []byte("gospider"), // change this
-					ObfuscatedTicketAge: 0,                  // change this
-				},
-			},
-			PskBinders: [][]byte{ // must set psk binders
-				{
-					0, 0, 0, 0, 0, 0, 0, 0,
-					0, 0, 0, 0, 0, 0, 0, 0,
-					0, 0, 0, 0, 0, 0, 0, 0,
-					0, 0, 0, 0, 0, 0, 0, 0,
-				},
-			},
-		}
+		return &utls.UtlsPreSharedKeyExtension{}
 	case 43:
 		return &utls.SupportedVersionsExtension{}
 	case 44:
@@ -368,6 +271,8 @@ func getExtensionWithId(extensionId uint16) utls.TLSExtension {
 				{Group: utls.X25519},
 			},
 		}
+	case 57:
+		return &utls.QUICTransportParametersExtension{}
 	case 13172:
 		return &utls.NPNExtension{}
 	case 17513:
@@ -376,7 +281,9 @@ func getExtensionWithId(extensionId uint16) utls.TLSExtension {
 		return &utls.FakeChannelIDExtension{OldExtensionID: true} //FIXME
 	case 30032:
 		return &utls.FakeChannelIDExtension{} //FIXME
-	case 65281:
+	case 0x001c:
+		return &utls.FakeRecordSizeLimitExtension{} //Limit: 0x4001
+	case 0xff01:
 		return &utls.RenegotiationInfoExtension{Renegotiation: utls.RenegotiateOnceAsClient}
 	default:
 		return nil
@@ -426,18 +333,15 @@ func cloneExtension(extension utls.TLSExtension) (utls.TLSExtension, bool) {
 			SupportedSignatureAlgorithms: tools.CopySlices(ext.SupportedSignatureAlgorithms),
 		}, true
 	case *utls.SessionTicketExtension:
-		var session *utls.ClientSessionState
+		var session *utls.SessionState
 		if ext.Session != nil {
-			session = &utls.ClientSessionState{}
+			session = &utls.SessionState{}
 		}
 		return &utls.SessionTicketExtension{
 			Session: session,
 		}, true
-	case *utls.FakePreSharedKeyExtension:
-		return &utls.FakePreSharedKeyExtension{
-			PskIdentities: tools.CopySlices(ext.PskIdentities),
-			PskBinders:    tools.CopySlicess(ext.PskBinders),
-		}, true
+	case *utls.UtlsPreSharedKeyExtension:
+		return &utls.UtlsPreSharedKeyExtension{}, true
 	case *utls.CookieExtension:
 		return &utls.CookieExtension{
 			Cookie: tools.CopySlices(ext.Cookie),
@@ -476,14 +380,35 @@ func isGREASEUint16(v uint16) bool {
 	return ((v >> 8) == v&0xff) && v&0xf == 0xa
 }
 
-type ClientHelloSpec utls.ClientHelloSpec
+type Ja3Spec utls.ClientHelloSpec
 
-func (obj ClientHelloSpec) IsSet() bool { //是否设置了
+func (obj Ja3Spec) IsSet() bool { //是否设置了
 	if obj.CipherSuites != nil || obj.Extensions != nil || obj.CompressionMethods != nil ||
 		obj.TLSVersMax != 0 || obj.TLSVersMin != 0 {
 		return true
 	}
 	return false
+}
+func (obj Ja3Spec) HasPsk() bool { //是否存在psk
+	for _, extension := range obj.Extensions {
+		if _, ok := extension.(*utls.UtlsPreSharedKeyExtension); ok {
+			return ok
+		}
+	}
+	return false
+}
+func AddPsk(obj *Ja3Spec) { //添加psk
+	obj.Extensions = append(obj.Extensions, &utls.UtlsPreSharedKeyExtension{})
+}
+
+func DelPsk(obj *Ja3Spec) { //删除psk
+	extensions := []utls.TLSExtension{}
+	for _, extension := range obj.Extensions {
+		if _, ok := extension.(*utls.UtlsPreSharedKeyExtension); !ok {
+			extensions = append(extensions, extension)
+		}
+	}
+	obj.Extensions = extensions
 }
 
 type Setting struct {
@@ -516,6 +441,29 @@ func (obj Priority) IsSet() bool {
 	return false
 }
 
+func DefaultJa3Spec() Ja3Spec {
+	spec, _ := CreateSpecWithId(HelloChrome_114_Padding_PSK_Shuf)
+	return spec
+}
+func DefaultH2Ja3Spec() H2Ja3Spec {
+	var h2Ja3Spec H2Ja3Spec
+	h2Ja3Spec.InitialSetting = []Setting{
+		{Id: 1, Val: 65536},
+		{Id: 2, Val: 0},
+		{Id: 3, Val: 1000},
+		{Id: 4, Val: 6291456},
+		{Id: 6, Val: 262144},
+	}
+	h2Ja3Spec.Priority = Priority{
+		Exclusive: true,
+		StreamDep: 0,
+		Weight:    255,
+	}
+	h2Ja3Spec.OrderHeaders = []string{":method", ":authority", ":scheme", ":path"}
+	h2Ja3Spec.ConnFlow = 15663105
+	return h2Ja3Spec
+}
+
 type H2Ja3Spec struct {
 	InitialSetting []Setting
 	ConnFlow       uint32   //WINDOW_UPDATE:15663105
@@ -523,7 +471,8 @@ type H2Ja3Spec struct {
 	Priority       Priority
 }
 
-func (obj H2Ja3Spec) IsSet() bool { //是否设置了
+// 是否设置了
+func (obj H2Ja3Spec) IsSet() bool {
 	if obj.InitialSetting != nil || obj.ConnFlow != 0 || obj.OrderHeaders != nil || obj.Priority.IsSet() {
 		return true
 	}
@@ -531,19 +480,20 @@ func (obj H2Ja3Spec) IsSet() bool { //是否设置了
 }
 
 // ja3 clientHelloId 生成 clientHello
-func CreateSpecWithId(ja3Id ClientHelloId) (clientHelloSpec ClientHelloSpec, err error) {
+func CreateSpecWithId(ja3Id ClientHelloId) (clientHelloSpec Ja3Spec, err error) {
 	spec, err := utls.UTLSIdToSpec(ja3Id)
 	if err != nil {
 		return clientHelloSpec, err
 	}
-	return ClientHelloSpec(spec), nil
+	return Ja3Spec(spec), nil
 }
 
 // TLSVersion，Ciphers，Extensions，EllipticCurves，EllipticCurvePointFormats
-func createTlsVersion(ver uint16, extensions []string) (tlsVersion uint16, tlsSuppor utls.TLSExtension, err error) {
+func createTlsVersion(ver uint16, extensions []string) (tlsMaxVersion uint16, tlsMinVersion uint16, tlsSuppor utls.TLSExtension, err error) {
 	switch ver {
 	case utls.VersionTLS13:
-		tlsVersion = utls.VersionTLS13
+		tlsMaxVersion = utls.VersionTLS13
+		tlsMinVersion = utls.VersionTLS12
 		tlsSuppor = &utls.SupportedVersionsExtension{
 			Versions: []uint16{
 				utls.GREASE_PLACEHOLDER,
@@ -552,7 +502,8 @@ func createTlsVersion(ver uint16, extensions []string) (tlsVersion uint16, tlsSu
 			},
 		}
 	case utls.VersionTLS12:
-		tlsVersion = utls.VersionTLS12
+		tlsMaxVersion = utls.VersionTLS12
+		tlsMinVersion = utls.VersionTLS11
 		tlsSuppor = &utls.SupportedVersionsExtension{
 			Versions: []uint16{
 				utls.GREASE_PLACEHOLDER,
@@ -561,7 +512,8 @@ func createTlsVersion(ver uint16, extensions []string) (tlsVersion uint16, tlsSu
 			},
 		}
 	case utls.VersionTLS11:
-		tlsVersion = utls.VersionTLS11
+		tlsMaxVersion = utls.VersionTLS11
+		tlsMinVersion = utls.VersionTLS10
 		tlsSuppor = &utls.SupportedVersionsExtension{
 			Versions: []uint16{
 				utls.GREASE_PLACEHOLDER,
@@ -587,7 +539,7 @@ func createCiphers(ciphers []string) ([]uint16, error) {
 }
 func createCurves(curves []string, extensions []string) (curvesExtension utls.TLSExtension, err error) {
 	if !slices.Contains(extensions, "10") {
-		err = errors.New("Extensions 缺少ellipticCurves 扩展,检查ja3 字符串是否合法")
+		return curvesExtension, errors.New("extensions 缺少ellipticCurves 扩展,检查ja3 字符串是否合法")
 	}
 	curveIds := []utls.CurveID{utls.GREASE_PLACEHOLDER}
 	for _, val := range curves {
@@ -601,7 +553,7 @@ func createCurves(curves []string, extensions []string) (curvesExtension utls.TL
 }
 func createPointFormats(points []string, extensions []string) (curvesExtension utls.TLSExtension, err error) {
 	if !slices.Contains(extensions, "11") {
-		err = errors.New("Extensions 缺少pointFormats 扩展,检查ja3 字符串是否合法")
+		return curvesExtension, errors.New("extensions 缺少pointFormats 扩展,检查ja3 字符串是否合法")
 	}
 	supportedPoints := []uint8{}
 	for _, val := range points {
@@ -635,7 +587,6 @@ func createExtensions(extensions []string, tlsExtension, curvesExtension, pointE
 			if ext == nil {
 				if isGREASEUint16(extensionId) {
 					allExtensions = append(allExtensions, &utls.UtlsGREASEExtension{})
-				} else {
 				}
 				allExtensions = append(allExtensions, &utls.GenericExtension{Id: extensionId})
 			} else {
@@ -653,7 +604,7 @@ func createExtensions(extensions []string, tlsExtension, curvesExtension, pointE
 }
 
 // ja3 字符串中生成 clientHello
-func CreateSpecWithStr(ja3Str string) (clientHelloSpec ClientHelloSpec, err error) {
+func CreateSpecWithStr(ja3Str string) (clientHelloSpec Ja3Spec, err error) {
 	tokens := strings.Split(ja3Str, ",")
 	if len(tokens) != 5 {
 		return clientHelloSpec, errors.New("ja3Str 字符串格式不正确")
@@ -666,12 +617,12 @@ func CreateSpecWithStr(ja3Str string) (clientHelloSpec ClientHelloSpec, err erro
 	extensions := strings.Split(tokens[2], "-")
 	curves := strings.Split(tokens[3], "-")
 	pointFormats := strings.Split(tokens[4], "-")
-	tlsVersion, tlsExtension, err := createTlsVersion(uint16(ver), extensions)
+	tlsMaxVersion, tlsMinVersion, tlsExtension, err := createTlsVersion(uint16(ver), extensions)
 	if err != nil {
 		return clientHelloSpec, err
 	}
-	clientHelloSpec.TLSVersMin = utls.VersionTLS10
-	clientHelloSpec.TLSVersMax = tlsVersion
+	clientHelloSpec.TLSVersMax = tlsMaxVersion
+	clientHelloSpec.TLSVersMin = tlsMinVersion
 	if clientHelloSpec.CipherSuites, err = createCiphers(ciphers); err != nil {
 		return
 	}
@@ -779,7 +730,9 @@ func (obj Ja3ContextData) Verify() (string, bool) {
 	return VerifyWithMd5(obj.Md5())
 }
 
-const keyPrincipalID = "Ja3ContextData"
+type keyPrincipal string
+
+const keyPrincipalID keyPrincipal = "Ja3ContextData"
 
 func ConnContext(ctx context.Context, c net.Conn) context.Context {
 	return context.WithValue(ctx, keyPrincipalID, &Ja3ContextData{})

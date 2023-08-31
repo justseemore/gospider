@@ -2,11 +2,15 @@ package ja3
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"os"
 	"sync"
 	"time"
+
+	"gitee.com/baixudong/gospider/tools"
+	utls "github.com/refraction-networking/utls"
 )
 
 type Conn struct {
@@ -134,4 +138,58 @@ func Pipe(preCtx context.Context) (net.Conn, net.Conn) {
 		writerTimer: *time.NewTimer(time.Hour * 24 * 365 * 100),
 	}
 	return localConn, remoteConn
+}
+
+func Utls2Tls(preCtx, ctx context.Context, utlsConn *utls.UConn, host string) (*tls.Conn, error) {
+	//获取cert
+	var err error
+	certs := utlsConn.ConnectionState().PeerCertificates
+	var cert tls.Certificate
+	if len(certs) > 0 {
+		cert, err = tools.CreateProxyCertWithCert(nil, nil, certs[0])
+	} else {
+		cert, err = tools.CreateProxyCertWithName(tools.GetServerName(host))
+	}
+	if err != nil {
+		return nil, err
+	}
+	localConn, remoteConn := Pipe(preCtx)
+	//正常路径发送方
+	tlsConn := tls.Client(localConn, &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         tools.GetServerName(host),
+		NextProtos:         []string{"h2", "http/1.1"},
+	})
+	proto := utlsConn.ConnectionState().NegotiatedProtocol
+	if proto == "" {
+		proto = "http/1.1"
+	}
+	//代理接收方
+	tlsClientConn := tls.Server(remoteConn, &tls.Config{
+		InsecureSkipVerify: true,
+		Certificates:       []tls.Certificate{cert},
+		NextProtos:         []string{proto},
+	})
+	go func() {
+		defer utlsConn.Close()
+		defer tlsConn.Close()
+		defer tlsClientConn.Close()
+		if err = tlsClientConn.Handshake(); err != nil {
+			return
+		}
+		go func() {
+			defer utlsConn.Close()
+			defer tlsConn.Close()
+			defer tlsClientConn.Close()
+			_, err = io.Copy(utlsConn, tlsClientConn)
+		}()
+		_, err = io.Copy(tlsClientConn, utlsConn)
+	}()
+
+	if err = tlsConn.HandshakeContext(ctx); err != nil {
+		tlsClientConn.Close()
+		utlsConn.Close()
+		tlsConn.Close()
+	}
+	return tlsConn, err
 }

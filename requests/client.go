@@ -25,11 +25,11 @@ type ClientOption struct {
 	DnsCacheTime          time.Duration                                           //dns解析缓存时间60*30
 	AddrType              AddrType                                                //优先使用的addr 类型
 	GetAddrType           func(string) AddrType
-	Dns                   string              //dns
-	Ja3                   bool                //开启ja3
-	Ja3Spec               ja3.ClientHelloSpec //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
-	H2Ja3                 bool                //开启h2指纹
-	H2Ja3Spec             ja3.H2Ja3Spec       //h2指纹
+	Dns                   string        //dns
+	Ja3                   bool          //开启ja3
+	Ja3Spec               ja3.Ja3Spec   //指定ja3Spec,使用ja3.CreateSpecWithStr 或者ja3.CreateSpecWithId 生成
+	H2Ja3                 bool          //开启h2指纹
+	H2Ja3Spec             ja3.H2Ja3Spec //h2指纹
 
 	RedirectNum int   //重定向次数,小于0为禁用,0:不限制
 	DisDecode   bool  //关闭自动编码
