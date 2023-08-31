@@ -148,25 +148,14 @@ var (
 )
 
 func NewClient(ctx context.Context, conn net.Conn, ja3Spec Ja3Spec, disHttp2 bool, utlsConfig *utls.Config) (utlsConn *utls.UConn, err error) {
-	var utlsSpec utls.ClientHelloSpec
-	if !ja3Spec.IsSet() {
-		utlsSpec = utls.ClientHelloSpec(DefaultJa3Spec())
-	} else {
-		utlsSpec = utls.ClientHelloSpec{
-			CipherSuites:       ja3Spec.CipherSuites,
-			CompressionMethods: ja3Spec.CompressionMethods,
-			TLSVersMin:         ja3Spec.TLSVersMin,
-			TLSVersMax:         ja3Spec.TLSVersMax,
-			GetSessionID:       ja3Spec.GetSessionID,
-		}
-		utlsSpec.Extensions = make([]utls.TLSExtension, len(ja3Spec.Extensions))
-		for i := 0; i < len(ja3Spec.Extensions); i++ {
-			ext, ok := cloneExtension(ja3Spec.Extensions[i])
-			if ok {
-				utlsSpec.Extensions[i] = ext
-			} else {
-				utlsSpec.Extensions[i] = ja3Spec.Extensions[i]
-			}
+	utlsSpec := utls.ClientHelloSpec(ja3Spec)
+	utlsSpec.Extensions = make([]utls.TLSExtension, len(ja3Spec.Extensions))
+	for i := 0; i < len(ja3Spec.Extensions); i++ {
+		ext, ok := cloneExtension(ja3Spec.Extensions[i])
+		if ok {
+			utlsSpec.Extensions[i] = ext
+		} else {
+			utlsSpec.Extensions[i] = ja3Spec.Extensions[i]
 		}
 	}
 	if disHttp2 {

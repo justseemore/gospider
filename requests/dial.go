@@ -382,6 +382,9 @@ func (obj *DialClient) AddProxyTls(ctx context.Context, conn net.Conn, host stri
 	if obj.proxyJa3 {
 		config := obj.utlsConfig.Clone()
 		config.ServerName = tools.GetServerName(host)
+		if !obj.proxyJa3Spec.IsSet() {
+			obj.proxyJa3Spec = ja3.DefaultJa3Spec()
+		}
 		if !obj.proxyJa3Spec.HasPsk() {
 			ja3.AddPsk(&obj.proxyJa3Spec)
 		}
@@ -395,6 +398,9 @@ func (obj *DialClient) AddTls(ctx context.Context, conn net.Conn, host string, d
 		var utlsConn *utls.UConn
 		config := obj.utlsConfig.Clone()
 		config.ServerName = tools.GetServerName(host)
+		if !obj.ja3Spec.IsSet() {
+			obj.ja3Spec = ja3.DefaultJa3Spec()
+		}
 		if !obj.ja3Spec.HasPsk() {
 			ja3.AddPsk(&obj.ja3Spec)
 		}
