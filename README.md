@@ -10,7 +10,7 @@
 3. [Execute JavaScript and Python](../../tree/master/cmd): Invoke methods in JavaScript and Python through pipes.
 # Dependencies
 ```
-go1.20 (Do not use a version lower than this)
+go1.21 (Do not use a version lower than this)
 ```
 # Installation (Do not fetch the package from GitHub, choose either Gitee or GitHub for the go package path. Fetching from GitHub will cause path issues.)
 ```
