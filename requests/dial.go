@@ -130,6 +130,7 @@ func NewDail(ctx context.Context, option DialOption) (*DialClient, error) {
 			return dialCli, err
 		}
 	}
+	dialCli.dialer.SetMultipathTCP(true)
 	return dialCli, err
 }
 
