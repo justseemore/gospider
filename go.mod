@@ -11,7 +11,6 @@ exclude (
 )
 
 require (
-	gitee.com/baixudong/tools v0.0.0-20230821075140-7422c51fd918
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/andybalholm/brotli v1.0.5
 	github.com/gin-gonic/gin v1.9.1
@@ -34,8 +33,6 @@ require (
 )
 
 require (
-	gitee.com/baixudong/kinds v0.0.0-20230809033013-c3d6d3479f8c // indirect
-	gitee.com/baixudong/re v0.0.0-20230809033040-360c1d945e59 // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
 	github.com/bytedance/sonic v1.10.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
