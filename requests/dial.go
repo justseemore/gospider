@@ -573,9 +573,6 @@ func (obj *DialClient) requestHttpDialContext(ctx context.Context, network strin
 	if reqData.url == nil {
 		return nil, tools.WrapError(ErrFatal, "not found reqData.url")
 	}
-	if reqData.rawAddr != "" { //还原addr
-		addr, reqData.rawAddr = reqData.rawAddr, ""
-	}
 	var nowProxy *url.URL
 	if reqData.disProxy || reqData.isCallback { //走正常连接
 		if conn, err = obj.DialContext(ctx, network, addr); err != nil {
@@ -606,7 +603,8 @@ func (obj *DialClient) requestHttpDialTlsContext(preCtx context.Context, network
 	ctx, cnl := context.WithTimeout(preCtx, obj.dialer.Timeout)
 	defer cnl()
 	reqData := ctx.Value(keyPrincipalID).(*reqCtxData)
-	return obj.AddTls(ctx, conn, reqData.host, reqData.ws)
+	conn, err = obj.AddTls(ctx, conn, reqData.host, reqData.ws)
+	return
 }
 func (obj *DialClient) requestHttp2DialTlsContext(ctx context.Context, network string, addr string, cfg *tls.Config) (net.Conn, error) { //验证tls 是否可以直接用
 	if cfg.ServerName != "" {
