@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/tools"
 )
 
 type pwdConn struct {

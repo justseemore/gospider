@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"gitee.com/baixudong/gospider/chanx"
+	"github.com/justseemore/gospider/chanx"
 )
 
 type Client[T any] struct {

@@ -30,7 +30,7 @@ import (
     "log"
     "time"
 
-    "gitee.com/baixudong/gospider/thread"
+    "github.com/justseemore/gospider/thread"
 )
 
 func test(ctx context.Context, num int) {

@@ -13,10 +13,10 @@ import (
 	"strconv"
 	"strings"
 
-	"gitee.com/baixudong/gospider/bar"
-	"gitee.com/baixudong/gospider/bs4"
-	"gitee.com/baixudong/gospider/tools"
-	"gitee.com/baixudong/gospider/websocket"
+	"github.com/justseemore/gospider/bar"
+	"github.com/justseemore/gospider/bs4"
+	"github.com/justseemore/gospider/tools"
+	"github.com/justseemore/gospider/websocket"
 	"github.com/tidwall/gjson"
 )
 

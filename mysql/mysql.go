@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/baixudong/gospider/tools"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/justseemore/gospider/tools"
 )
 
 type ClientOption struct {

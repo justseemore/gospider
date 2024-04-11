@@ -6,7 +6,7 @@
 package main
 import (
 	"log"
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/tools"
 )
 func main() {
 	key, err := tools.CreateCertKey()

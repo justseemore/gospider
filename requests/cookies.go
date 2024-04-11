@@ -5,7 +5,7 @@ import (
 	"net/http"
 	_ "unsafe"
 
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/tools"
 	"github.com/tidwall/gjson"
 )
 

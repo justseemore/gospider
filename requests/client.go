@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"time"
 
-	"gitee.com/baixudong/gospider/http2"
-	"gitee.com/baixudong/gospider/ja3"
+	"github.com/justseemore/gospider/http2"
+	"github.com/justseemore/gospider/ja3"
 )
 
 type ClientOption struct {

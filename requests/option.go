@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/baixudong/gospider/websocket"
+	"github.com/justseemore/gospider/websocket"
 )
 
 // 请求参数选项

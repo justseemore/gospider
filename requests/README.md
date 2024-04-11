@@ -19,7 +19,7 @@ package main
 import (
     "log"
 
-    "gitee.com/baixudong/gospider/requests"
+    "github.com/justseemore/gospider/requests"
 )
 
 func main() {
@@ -47,7 +47,7 @@ package main
 import (
     "log"
 
-    "gitee.com/baixudong/gospider/requests"
+    "github.com/justseemore/gospider/requests"
 )
 
 func main() {
@@ -75,7 +75,7 @@ package main
 import (
     "log"
 
-    "gitee.com/baixudong/gospider/requests"
+    "github.com/justseemore/gospider/requests"
 )
 
 func main() {
@@ -99,7 +99,7 @@ package main
 import (
     "log"
 
-    "gitee.com/baixudong/gospider/requests"
+    "github.com/justseemore/gospider/requests"
 )
 
 func main() {
@@ -125,7 +125,7 @@ package main
 import (
     "log"
 
-    "gitee.com/baixudong/gospider/requests"
+    "github.com/justseemore/gospider/requests"
 )
 
 func main() {
@@ -155,8 +155,8 @@ import (
 	"context"
 	"log"
 
-	"gitee.com/baixudong/gospider/requests"
-	"gitee.com/baixudong/gospider/websocket"
+	"github.com/justseemore/gospider/requests"
+	"github.com/justseemore/gospider/websocket"
 )
 
 func main() {
@@ -313,7 +313,7 @@ func main() {
 package main
 import (
 	"log"
-	"gitee.com/baixudong/gospider/requests"
+	"github.com/justseemore/gospider/requests"
 )
 func main() {
 	reqCli, err := requests.NewClient(nil)

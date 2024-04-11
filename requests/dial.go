@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/baixudong/gospider/ja3"
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/ja3"
+	"github.com/justseemore/gospider/tools"
 	utls "github.com/refraction-networking/utls"
 )
 

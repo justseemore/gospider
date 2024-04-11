@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/baixudong/gospider/bar"
-	"gitee.com/baixudong/gospider/kinds"
-	"gitee.com/baixudong/gospider/requests"
-	"gitee.com/baixudong/gospider/thread"
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/bar"
+	"github.com/justseemore/gospider/kinds"
+	"github.com/justseemore/gospider/requests"
+	"github.com/justseemore/gospider/thread"
+	"github.com/justseemore/gospider/tools"
 
 	"github.com/tidwall/gjson"
 	"go.mongodb.org/mongo-driver/bson/primitive"

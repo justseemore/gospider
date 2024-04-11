@@ -13,7 +13,7 @@ import (
 
 	_ "unsafe"
 
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/tools"
 	"golang.org/x/exp/slices"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"

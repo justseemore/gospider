@@ -3,7 +3,7 @@ package conf
 import (
 	"os"
 
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/tools"
 )
 
 // 脚本文件存放目录

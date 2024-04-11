@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"gitee.com/baixudong/gospider/cmd"
+	"github.com/justseemore/gospider/cmd"
 )
 
 func TestJs(t *testing.T) {

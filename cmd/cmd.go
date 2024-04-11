@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/baixudong/gospider/conf"
-	"gitee.com/baixudong/gospider/re"
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/conf"
+	"github.com/justseemore/gospider/re"
+	"github.com/justseemore/gospider/tools"
 	"github.com/tidwall/gjson"
 )
 

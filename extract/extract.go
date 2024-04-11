@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"gitee.com/baixudong/gospider/bs4"
-	"gitee.com/baixudong/gospider/kinds"
-	"gitee.com/baixudong/gospider/re"
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/bs4"
+	"github.com/justseemore/gospider/kinds"
+	"github.com/justseemore/gospider/re"
+	"github.com/justseemore/gospider/tools"
 
 	"github.com/tidwall/gjson"
 )

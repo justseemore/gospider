@@ -14,9 +14,9 @@ import (
 	"strings"
 	_ "unsafe"
 
-	"gitee.com/baixudong/gospider/re"
-	"gitee.com/baixudong/gospider/tools"
-	"gitee.com/baixudong/gospider/websocket"
+	"github.com/justseemore/gospider/re"
+	"github.com/justseemore/gospider/tools"
+	"github.com/justseemore/gospider/websocket"
 )
 
 //go:linkname ReadRequest net/http.readRequest

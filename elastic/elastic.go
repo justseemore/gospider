@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"strconv"
 
-	"gitee.com/baixudong/gospider/requests"
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/requests"
+	"github.com/justseemore/gospider/tools"
 	"github.com/tidwall/gjson"
 )
 

@@ -11,7 +11,7 @@ package main
 import (
 	"log"
 
-	"gitee.com/baixudong/gospider/cmd"
+	"github.com/justseemore/gospider/cmd"
 )
 
 func TestJs() {

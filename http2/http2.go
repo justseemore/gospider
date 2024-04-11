@@ -30,8 +30,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gitee.com/baixudong/gospider/ja3"
-	"gitee.com/baixudong/gospider/kinds"
+	"github.com/justseemore/gospider/ja3"
+	"github.com/justseemore/gospider/kinds"
 	"golang.org/x/net/http/httpguts"
 	"golang.org/x/net/http2/hpack"
 	"golang.org/x/net/idna"

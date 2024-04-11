@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/baixudong/gospider/re"
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/re"
+	"github.com/justseemore/gospider/tools"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"

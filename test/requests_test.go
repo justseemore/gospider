@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"gitee.com/baixudong/gospider/requests"
+	"github.com/justseemore/gospider/requests"
 )
 
 func TestIp(t *testing.T) {

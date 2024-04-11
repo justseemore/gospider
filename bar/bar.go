@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/baixudong/gospider/blog"
+	"github.com/justseemore/gospider/blog"
 )
 
 type Client struct {

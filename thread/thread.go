@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gitee.com/baixudong/gospider/chanx"
+	"github.com/justseemore/gospider/chanx"
 )
 
 type DefaultClient = Client[bool]

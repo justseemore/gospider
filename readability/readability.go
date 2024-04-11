@@ -3,7 +3,7 @@ package readability
 import (
 	"context"
 
-	"gitee.com/baixudong/gospider/cmd"
+	"github.com/justseemore/gospider/cmd"
 	"github.com/tidwall/gjson"
 
 	_ "embed"

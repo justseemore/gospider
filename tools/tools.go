@@ -51,8 +51,8 @@ import (
 
 	_ "embed"
 
-	"gitee.com/baixudong/gospider/kinds"
-	"gitee.com/baixudong/gospider/re"
+	"github.com/justseemore/gospider/kinds"
+	"github.com/justseemore/gospider/re"
 	_ "golang.org/x/image/webp"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding/simplifiedchinese"

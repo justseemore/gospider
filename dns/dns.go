@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/tools"
 	"golang.org/x/net/dns/dnsmessage"
 )
 

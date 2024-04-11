@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"gitee.com/baixudong/gospider/tools"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/justseemore/gospider/tools"
 	"github.com/tidwall/gjson"
 )
 

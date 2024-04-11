@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"sync"
 
-	"gitee.com/baixudong/gospider/tools"
 	"github.com/go-redis/redis"
+	"github.com/justseemore/gospider/tools"
 	"golang.org/x/exp/slices"
 )
 

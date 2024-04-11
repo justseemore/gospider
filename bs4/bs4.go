@@ -5,9 +5,9 @@ import (
 	"net/url"
 	"strings"
 
-	"gitee.com/baixudong/gospider/re"
-	"gitee.com/baixudong/gospider/tools"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/justseemore/gospider/re"
+	"github.com/justseemore/gospider/tools"
 )
 
 // 文档树操作========================================================================= start

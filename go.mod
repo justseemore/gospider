@@ -1,4 +1,4 @@
-module gitee.com/baixudong/gospider
+module github.com/justseemore/gospider
 
 go 1.21.0
 
