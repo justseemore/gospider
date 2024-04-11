@@ -13,7 +13,7 @@ import (
 
 	"net/http"
 
-	"gitee.com/baixudong/gospider/tools"
+	"github.com/justseemore/gospider/tools"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/exp/slices"
 )
